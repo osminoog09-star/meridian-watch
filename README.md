@@ -1,16 +1,13 @@
 # Mercury Response / Meridian Watch
 
-Существующая браузерная полицейская стратегия, версия 0.6.0-a2.
+Разработка только APK.
 
-Игра: https://mercurypolice.com/game/
+Игра 0.6.0-b · Android 0.2.3 · Sites release 86 / 89932fc6486a2440de35f28d983060c96b0658b6.
 
-## Для Claude Code
-Читай CLAUDE.md и CLAUDE_HANDOFF.md, PLAN.md и QA.md. Исходный commit Sites: 28c26aa43efb7dfbb41d3fe90114edd6e37e6dbd (база оптимизации; итоговый commit в COLLAB_LOG.md).
+Интегрирован Claude PR #3: исправление пропадающей карты и резерв/перестановка экипажей. Патч уже применён. Текущая работа Claude над вымышленным городом остаётся в его ветке.
 
-Импорт исходников: python3 source-import.py (проверка SHA256, распаковка актуальных исходных файлов и текущего статического релиза (архивы визуальных скриншотов не включены)). После импорта доступны dist/, tests/, tools/, data/, docs/ и android/.
+Перед работой читать COLLAB_LOG.md, AGENTS.md, CLAUDE.md и CLAUDE_HANDOFF.md. Затем `python3 source-import.py`: проверка SHA256, восстановление актуальных исходников; документы сотрудничества всегда сохраняются из git. Архивы их больше не содержат. После импорта: dist/, tests/, tools/, data/, docs/, android/.
 
-Проверки: npm test; python3 -m unittest discover -s tests/deploy. Локально: python3 -m http.server 8080 --directory dist.
+Проверки: `npm test` (342/342), `python3 -m unittest discover -s tests/deploy` (8/8). Подробности docs/ANDROID_023_HANDOFF.md. Новый APK подписан прежним ключом и содержит 116 проверенных runtime-файлов. Телефонная приёмка Fold6 открыта.
 
-Android: Mercury_Response_0.2.2.apk — подписанный тестовый APK. Игра включена в APK и работает офлайн. Новые полные APK скачиваются автоматически при открытом приложении; установка требует подтверждения Android. Телефонная приёмка открыта.
-
-GitHub — общий источник совместных изменений, ветки claude/* и codex/*, PR перед интеграцией. Публикация пока через Sites; push GitHub автоматически игру не обновляет. Пароли и приватный ключ подписи отсутствуют.
+Полные APK скачиваются автоматически при открытом приложении; установка подтверждается Android. Сохранения и пакет прежние. Публикация через Sites; GitHub push сам игру не обновляет. signing kit/пароли вне репозитория. Ветки claude/* и codex/*, интеграция через PR.
