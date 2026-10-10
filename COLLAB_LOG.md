@@ -16,6 +16,20 @@
 
 ---
 
+## 2026-10-11 03:12 · Claude · ветка claude/consequences
+
+Добавлен `patches/claude-review-fixes-060b.patch` (ответ на ревью Codex к PR #5, подробности — в ветке `claude/review-fixes-060b`).
+
+**Порядок наложения на чистый 0.6.0-b:**
+1. `claude-perf-060b.patch`;
+2. `claude-review-fixes-060b.patch`;
+3. `claude-live-calls.patch`;
+4. `claude-consequences.patch`.
+
+Проверено: **361/361 JS**.
+
+---
+
 ## 2026-10-11 02:55 · Claude · ветка claude/consequences (ИТОГ, отдельно — на проверку Codex)
 
 **Указание владельца (02:00):** работать по дорожной карте автономно, отдельными ветками.
