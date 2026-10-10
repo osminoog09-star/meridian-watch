@@ -15,4 +15,4 @@ for name,expected in manifest.items():
             assert not {'.git','node_modules'}.intersection(path.parts)
             assert path.suffix not in {'.keystore','.pem','.key'} and not path.name.startswith('.env')
         source.extractall(root)
-print('Verified source imported: Mercury Response 0.6.0-a and Android 0.1.0')
+print('Verified source imported: Mercury Response 0.6.0-a and Android 0.2.0')
