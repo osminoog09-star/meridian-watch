@@ -1,0 +1,202 @@
+--- a/dist/render.js
++++ b/dist/render.js
+@@ -33,8 +33,11 @@
+ import {groundInverse} from './city-projection.js';
+ const now=()=>globalThis.performance?.now?.()??Date.now();
+ export function createRenderer(canvas,onPick,{maxSurfacePixels=Infinity}={}){
+- const rendererStart=now(),main=canvas.getContext('2d',{alpha:false});let cache=document.createElement('canvas');let lightCache=document.createElement('canvas');let staging=document.createElement('canvas');const camera=createCamera({...byId('centre'),zoom:5},CITY_VIEW);let ctx=main,width=800,height=500,zoom=5,scale=80,hits=[],dpr=1,baseView=null,lightBlend=null,drawingBase=false,resizePending=true;let occluders=[],depthOffset={x:0,y:0};const margin=160,visuals=new Map(),headings=new Map();let buildingIndex,roadIndex,areaIndex,wallIndex;let resolutionCap=2,modelDetail=true,lightEffects=true,darkness=0,actorLight=null;const sprites=createModelSprites(),peopleSprites=createModelSprites({maxEntries:192,maxBytes:3*1024*1024}),occlusionMetrics={occlusionQueries:0,occlusionFaces:0,occlusionSkippedFaces:0},occlusionOptions={bounded:true,metrics:occlusionMetrics};let backgroundBuilds=0,backgroundSlices=0,backgroundSliceMs=0,backgroundPeakMs=0,backgroundJob=null,backgroundPhase=0,gestureUntil=0,adaptiveCap=2,cosmeticTime=0,renderedState=null;let walking=false,walkStart=null,walkEnd=null,walkPath=[];
+- function resize(){const r=canvas.getBoundingClientRect();if(!r.width||!r.height)return;const w=Math.round(r.width),h=Math.round(r.height),ratio=rasterRatio(w+margin*2,h+margin*2,devicePixelRatio||1,resolutionCap,adaptiveCap,maxSurfacePixels),pixelW=Math.round(w*ratio),pixelH=Math.round(h*ratio);if(width===w&&height===h&&dpr===ratio&&canvas.width===pixelW&&canvas.height===pixelH)return;width=w;height=h;dpr=ratio;camera.viewport(width,height);canvas.width=pixelW;canvas.height=pixelH;cache.width=Math.round((width+margin*2)*dpr);cache.height=Math.round((height+margin*2)*dpr);main.setTransform(dpr,0,0,dpr,0,0);baseView=null;occluders=[];releaseBlend();cancelBackground();}
++ const rendererStart=now(),main=canvas.getContext('2d',{alpha:false});let cache=document.createElement('canvas');let lightCache=document.createElement('canvas');let staging=document.createElement('canvas');const camera=createCamera({...byId('centre'),zoom:5},CITY_VIEW);let ctx=main,width=800,height=500,zoom=5,scale=80,hits=[],dpr=1,baseView=null,baseStale=false,lightBlend=null,drawingBase=false,resizePending=true;let occluders=[],depthOffset={x:0,y:0};const margin=160,visuals=new Map(),headings=new Map();let buildingIndex,roadIndex,areaIndex,wallIndex;let resolutionCap=2,modelDetail=true,lightEffects=true,darkness=0,actorLight=null;const sprites=createModelSprites(),peopleSprites=createModelSprites({maxEntries:192,maxBytes:3*1024*1024}),occlusionMetrics={occlusionQueries:0,occlusionFaces:0,occlusionSkippedFaces:0},occlusionOptions={bounded:true,metrics:occlusionMetrics};let backgroundBuilds=0,backgroundSlices=0,backgroundSliceMs=0,backgroundPeakMs=0,backgroundJob=null,backgroundPhase=0,gestureUntil=0,adaptiveCap=2,cosmeticTime=0,renderedState=null;let walking=false,walkStart=null,walkEnd=null,walkPath=[];
++ function resize(){const r=canvas.getBoundingClientRect();if(!r.width||!r.height)return;const w=Math.round(r.width),h=Math.round(r.height),ratio=rasterRatio(w+margin*2,h+margin*2,devicePixelRatio||1,resolutionCap,adaptiveCap,maxSurfacePixels),pixelW=Math.round(w*ratio),pixelH=Math.round(h*ratio);if(width===w&&height===h&&dpr===ratio&&canvas.width===pixelW&&canvas.height===pixelH)return;width=w;height=h;dpr=ratio;camera.viewport(width,height);canvas.width=pixelW;canvas.height=pixelH;main.setTransform(dpr,0,0,dpr,0,0);
++  // Keep the previous city snapshot (drawn with its own size/density) until the rebuilt one
++  // is complete; dropping it showed an empty map for the whole time-sliced rebuild.
++  baseStale=true;releaseBlend();cancelBackground();}
+  new ResizeObserver(()=>{resizePending=true;}).observe(canvas);
+  const delta=(a,b)=>groundVector((a.x-b.x)*scale,(a.y-b.y)*scale,CITY_VIEW);const p=a=>{if(!drawingBase)return camera.screen(a);const v=delta(a,baseView);return {x:width/2+margin+v.x,y:height/2+margin+v.y};};
+ 
+@@ -61,10 +64,10 @@
+  }
+  function releaseBlend(){lightBlend=null;lightCache.width=0;lightCache.height=0;}
+  function cancelBackground(){backgroundJob=null;staging.width=0;staging.height=0;}
+- function beginBackground(view,night,lightKey){const target={...view,night,lightKey,light:lightEffects?viewLight(lightKey*30):null},jobScale=scale,jobZoom=zoom;const world=q=>{const v=groundInverse((q.x-width/2)/jobScale,(q.y-height/2)/jobScale,CITY_VIEW);return {x:target.x+v.x,y:target.y+v.y};};const bounds=featureViewBounds(world,width,height,margin,buildingRise(80,jobScale,jobZoom));staging.width=cache.width;staging.height=cache.height;backgroundJob={target,scale:jobScale,zoom:jobZoom,occluders:[],job:createFrameJob(base(bounds),{budgetMs:4,maxItems:4096})};}
+- function pumpBackground(){const task=backgroundJob;if(!task)return;const saved={ctx,baseView,scale,zoom,occluders};ctx=staging.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);baseView=task.target;scale=task.scale;zoom=task.zoom;occluders=task.occluders;drawingBase=true;let result;try{result=task.job.step();}finally{task.occluders=occluders;({ctx,baseView,scale,zoom,occluders}=saved);drawingBase=false;}backgroundSlices++;backgroundSliceMs=result.ms;backgroundPeakMs=Math.max(backgroundPeakMs,result.ms);if(!result.done)return;
++ function beginBackground(view,night,lightKey){const target={...view,night,lightKey,light:lightEffects?viewLight(lightKey*30):null,w:width,h:height,px:dpr},jobScale=scale,jobZoom=zoom;const world=q=>{const v=groundInverse((q.x-width/2)/jobScale,(q.y-height/2)/jobScale,CITY_VIEW);return {x:target.x+v.x,y:target.y+v.y};};const bounds=featureViewBounds(world,width,height,margin,buildingRise(80,jobScale,jobZoom));staging.width=Math.round((width+margin*2)*dpr);staging.height=Math.round((height+margin*2)*dpr);backgroundJob={target,scale:jobScale,zoom:jobZoom,occluders:[],job:createFrameJob(base(bounds),{budgetMs:4,maxItems:4096})};}
++ function pumpBackground(budget){const task=backgroundJob;if(!task)return;const saved={ctx,baseView,scale,zoom,occluders};ctx=staging.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);baseView=task.target;scale=task.scale;zoom=task.zoom;occluders=task.occluders;drawingBase=true;let result;try{result=task.job.step(false,budget);}finally{task.occluders=occluders;({ctx,baseView,scale,zoom,occluders}=saved);drawingBase=false;}backgroundSlices++;backgroundSliceMs=result.ms;backgroundPeakMs=Math.max(backgroundPeakMs,result.ms);if(!result.done)return;
+   const previous=baseView,old=cache,blend=previous&&previous.lightKey!==task.target.lightKey&&previous.zoom===task.zoom&&Math.hypot(previous.x-task.target.x,previous.y-task.target.y)*scale<margin-40;releaseBlend();cache=staging;if(blend){staging=lightCache;lightCache=old;lightBlend={view:{...previous},left:1};}else staging=old;
+-  baseView=task.target;occluders=task.occluders;backgroundBuilds++;backgroundJob=null;staging.width=0;staging.height=0;
++  baseView=task.target;occluders=task.occluders;baseStale=false;backgroundBuilds++;backgroundJob=null;staging.width=0;staging.height=0;
+  }
+  const onScreen=q=>{const pad=Math.max(100,actorScale(scale,zoom)*6);return q.x>=-pad&&q.y>=-pad&&q.x<=width+pad&&q.y<=height+pad;};
+  const behind=q=>foregroundBuildings(occluders,{x:(q.x-depthOffset.x)/(depthOffset.scale??1),y:(q.y-depthOffset.y)/(depthOffset.scale??1)},0).length>0;
+@@ -113,16 +116,18 @@
+  camera.track(units,dt,timeScale);const view=camera.getView();zoom=view.zoom;scale=camera.scale();
+  const light=cityLighting(cityMinute(s.population?.elapsed??s.time));darkness=lightEffects?light.darkness:0;const night=darkness>=.25,atmosphere=cityAtmosphere(cityMinute(s.population?.elapsed??s.time)),lightKey=lightEffects?atmosphere.key:-1;actorLight=lightEffects?viewLight(Math.floor(cityMinute(s.population?.elapsed??s.time)/2)*2):null;
+  const drift=baseView?Math.hypot(baseView.x-view.x,baseView.y-view.y)*scale:Infinity,interactive=camera.interacting()||cosmeticTime<gestureUntil||view.tracking!==null;
+- const needsBase=!baseView||baseView.night!==night||baseView.lightKey!==lightKey||baseView.zoom!==zoom||drift>margin-40;
++ const needsBase=!baseView||baseStale||baseView.night!==night||baseView.lightKey!==lightKey||baseView.zoom!==zoom||drift>margin-40;
+  // Start ahead of the margin during continuous panning. Do not restart a running job
+  // on every pointer event: each complete snapshot must have a chance to finish.
+  if(!backgroundJob&&(needsBase||(interactive&&drift>60)))beginBackground(view,night,lightKey);
+- if(backgroundJob)pumpBackground();
+- ctx=main;const ratio=baseView?zoom/baseView.zoom:1,offset=baseView?delta(baseView,view):{x:0,y:0},dx=width/2-(width/2+margin)*ratio+offset.x,dy=height/2-(height/2+margin)*ratio+offset.y;depthOffset={x:dx,y:dy,scale:ratio};
++ // Without a usable snapshot the player sees only ground, so build faster; otherwise keep
++ // the 4 ms budget that protects animation smoothness.
++ if(backgroundJob)pumpBackground(!baseView?30:baseStale?12:4);
++ ctx=main;const ratio=baseView?zoom/baseView.zoom:1,offset=baseView?delta(baseView,view):{x:0,y:0},bw=baseView?.w??width,bh=baseView?.h??height,bpx=baseView?.px??dpr,dx=width/2-(bw/2+margin)*ratio+offset.x,dy=height/2-(bh/2+margin)*ratio+offset.y;depthOffset={x:dx,y:dy,scale:ratio};
+  // Fast gestures can expose beyond the previous snapshot; use opaque ground,
+  // never a black/cleared canvas, until the next complete city image is ready.
+- if(!baseView||dx>0||dy>0||dx+cache.width/dpr*ratio<width||dy+cache.height/dpr*ratio<height){ctx.fillStyle=shadeMaterial('#536957',[0,1,0],baseView?.light??actorLight);ctx.fillRect(0,0,width,height);}
+- if(baseView)ctx.drawImage(cache,0,0,cache.width,cache.height,dx,dy,cache.width/dpr*ratio,cache.height/dpr*ratio);if(lightBlend){lightBlend.left=Math.max(0,lightBlend.left-Math.max(0,dt));const v=lightBlend.view;if(v.zoom===zoom&&Math.hypot(v.x-view.x,v.y-view.y)*scale<margin-40){ctx.globalAlpha=lightBlend.left;ctx.drawImage(lightCache,0,0,lightCache.width,lightCache.height,delta(v,view).x-margin,delta(v,view).y-margin,lightCache.width/dpr,lightCache.height/dpr);ctx.globalAlpha=1;}else releaseBlend();if(lightBlend?.left===0)releaseBlend();}hits=[];
++ if(!baseView||dx>0||dy>0||dx+cache.width/bpx*ratio<width||dy+cache.height/bpx*ratio<height){ctx.fillStyle=shadeMaterial('#536957',[0,1,0],baseView?.light??actorLight);ctx.fillRect(0,0,width,height);}
++ if(baseView)ctx.drawImage(cache,0,0,cache.width,cache.height,dx,dy,cache.width/bpx*ratio,cache.height/bpx*ratio);if(lightBlend){lightBlend.left=Math.max(0,lightBlend.left-Math.max(0,dt));const v=lightBlend.view;if(v.zoom===zoom&&Math.hypot(v.x-view.x,v.y-view.y)*scale<margin-40){ctx.globalAlpha=lightBlend.left;const lw=v.w??width,lh=v.h??height,lpx=v.px??dpr;ctx.drawImage(lightCache,0,0,lightCache.width,lightCache.height,width/2-(lw/2+margin)+delta(v,view).x,height/2-(lh/2+margin)+delta(v,view).y,lightCache.width/lpx,lightCache.height/lpx);ctx.globalAlpha=1;}else releaseBlend();if(lightBlend?.left===0)releaseBlend();}hits=[];
+  if(darkness){ctx.fillStyle=`rgba(9,20,40,${darkness*.25})`;ctx.fillRect(0,0,width,height);}
+  for(const u of units){const q=p(u);if(q.x<-80||q.y<-80||q.x>width+80||q.y>height+80)continue;const angle=u.renderHeading;
+   headlights(q,angle,vehicles.get(u.vehicleId)?.type==='suv');
+@@ -156,5 +161,6 @@
+  canvas.addEventListener('wheel',e=>{e.preventDefault();camera.zoomAt(Math.exp(-e.deltaY*.002),local(e));gestureUntil=cosmeticTime+.2;},{passive:false});
+  const startupMs=now()-rendererStart;
+  const gridStats=()=>{const g=occluders.stats?.();return {occlusionGridCell:g?.cellSize??0,occlusionGridCells:g?.cells??0,occlusionGridReferences:g?.references??0,occlusionGridLarge:g?.large??0,occlusionCacheCandidates:g?.candidates??0,occlusionCacheLimit:g?.maxCandidates??0,occlusionCacheEntries:g?.entries??0};};
+- return {draw,stats:()=>({...sprites.stats(),...Object.fromEntries(Object.entries(peopleSprites.stats()).map(([key,value])=>["people"+key[0].toUpperCase()+key.slice(1),value])),...gridStats(),...occlusionMetrics,backgroundBuilds,backgroundSlices,backgroundSliceMs,backgroundPeakMs,backgroundPending:backgroundJob?1:0,backgroundPhase:backgroundJob?backgroundPhase:0,backgroundBytes:(cache.width*cache.height+staging.width*staging.height+lightCache.width*lightCache.height)*4,startupMs,...cityPreparation.stats(),renderDpr:dpr,pixelWidth:canvas.width,pixelHeight:canvas.height}),resolution:cap=>{const next=[1,1.5,2].includes(cap)?cap:2;if(next!==adaptiveCap){adaptiveCap=next;resizePending=true;}},scene:()=>camera.getView(),quarter:()=>{cancelBackground();camera.focus(QUARTER_CENTRE,22);},lighting:enabled=>{lightEffects=enabled;},quality:value=>{modelDetail=value!=='simple';resolutionCap=value==='models'?2:1;resizePending=true;baseView=null;occluders=[];cancelBackground();releaseBlend();},walking:enabled=>{walking=enabled;walkStart=null;walkEnd=null;walkPath=[];if(enabled){cancelBackground();camera.focus(walkingCentre,10);}},zoom:delta=>{camera.zoomAt(delta>0?1.4:1/1.4);gestureUntil=cosmeticTime+.2;},reset:()=>{cancelBackground();camera.focus({x:2.36,y:2.27},1);},city:()=>{cancelBackground();camera.focus(byId('centre'));},follow:u=>{if(u){cancelBackground();camera.focus(u,5,u.id);}},locate:i=>{if(i){cancelBackground();camera.focus(i,6);}},suspend:()=>{if(backgroundJob)cancelBackground();if(lightBlend)releaseBlend();},cancel:()=>camera.cancel(),isFollowing:()=>camera.getView().tracking!==null};
++ return {draw,stats:()=>({...sprites.stats(),...Object.fromEntries(Object.entries(peopleSprites.stats()).map(([key,value])=>["people"+key[0].toUpperCase()+key.slice(1),value])),...gridStats(),...occlusionMetrics,backgroundBuilds,backgroundSlices,backgroundSliceMs,backgroundPeakMs,backgroundPending:backgroundJob?1:0,backgroundPhase:backgroundJob?backgroundPhase:0,backgroundBytes:(cache.width*cache.height+staging.width*staging.height+lightCache.width*lightCache.height)*4,startupMs,...cityPreparation.stats(),renderDpr:dpr,pixelWidth:canvas.width,pixelHeight:canvas.height}),resolution:cap=>{const next=[1,1.5,2].includes(cap)?cap:2;if(next!==adaptiveCap){adaptiveCap=next;resizePending=true;}},scene:()=>camera.getView(),quarter:()=>{cancelBackground();camera.focus(QUARTER_CENTRE,22);},lighting:enabled=>{lightEffects=enabled;},quality:value=>{modelDetail=value!=='simple';resolutionCap=value==='models'?2:1;resizePending=true;baseStale=true;occluders=[];cancelBackground();releaseBlend();},walking:enabled=>{walking=enabled;walkStart=null;walkEnd=null;walkPath=[];if(enabled){cancelBackground();camera.focus(walkingCentre,10);}},zoom:delta=>{camera.zoomAt(delta>0?1.4:1/1.4);gestureUntil=cosmeticTime+.2;},reset:()=>{cancelBackground();camera.focus({x:2.36,y:2.27},1);},city:()=>{cancelBackground();camera.focus(byId('centre'));},follow:u=>{if(u){cancelBackground();camera.focus(u,5,u.id);}},locate:i=>{if(i){cancelBackground();camera.focus(i,6);}},// Frames skipped by the frame pacer are otherwise idle: advance a pending city snapshot there.
++ idle:()=>{if(backgroundJob)pumpBackground(!baseView?30:baseStale?12:6);},suspend:()=>{if(backgroundJob)cancelBackground();if(lightBlend)releaseBlend();},cancel:()=>camera.cancel(),isFollowing:()=>camera.getView().tracking!==null};
+ }
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -14,7 +14,7 @@
+ import {residentProfile,residentPosition,PLACES,RESIDENT_STATUS,populationSummary,cityMinute,formatMinute} from './population.js';
+ import {PHASES,sceneAnchor} from './scenes.js';
+ import {nearest,nearestRoad} from './geography.js';
+-import {createGame,tick,assign,decide,rest,nextShift,serialize,deserialize,TYPES,RANKS,canControl,controlReason,setUnitAutomation,configurePatrolArea,log,zone,hireOfficer,buyVehicle,createPatrol,disbandPatrol,shiftCost,configureVehicle,PAINTS,financialSummary,unitReason} from './sim.js';
++import {createGame,tick,assign,decide,rest,nextShift,serialize,deserialize,TYPES,RANKS,canControl,controlReason,setUnitAutomation,configurePatrolArea,log,zone,hireOfficer,buyVehicle,createPatrol,disbandPatrol,changeCrew,crewChangeReason,reserveOfficers,shiftCost,configureVehicle,PAINTS,financialSummary,unitReason} from './sim.js';
+ import {serviceSummary,CAREER_PERMISSIONS} from './career.js';
+ import {loadGame,saveGame} from './storage.js';
+ import {createRenderer} from './render.js';
+@@ -60,7 +60,8 @@
+ function renderSettings(u,control){
+  if(!u){$('unitSettings').innerHTML='<p class="panel-caption">Откройте «Отделение»: найм → экипаж → машина. До первого патруля игровое время не идёт.</p>';return;}
+  const zoneControl=canControl(state,u,'zone'),crossControl=canControl(state,u,'cross');
+- $('unitSettings').innerHTML=`<div class="staff-condition"><b>Личный состав</b><p id="crewCondition"></p><small>Отдых при усталости любого сотрудника более 78%. Шкала патруля показывает среднюю усталость.</small></div><label>Автоматический режим <input id="autoSetting" type="checkbox" ${u.auto?'checked':''} ${!control?'disabled':''}></label><label>Зона патруля<select id="zoneSetting" ${!zoneControl?'disabled':''}><option value="all">Весь Пярну</option><option value="west">Запад Пярну</option><option value="east">Восток Пярну</option></select></label><label>Выезжать за границы <input id="crossSetting" type="checkbox" ${u.cross?'checked':''} ${!crossControl?'disabled':''}></label><button id="restBtn" ${!control||!['patrol','idle'].includes(u?.status)?'disabled':''}>Вернуть в участок · отдых</button>${state.mode==='chief'?'<button id="disbandBtn">Расформировать патруль</button>':''}${!control||!zoneControl||!crossControl?`<small style="color:var(--muted)">${escapeHtml(controlReason(state,u,!control?'command':!zoneControl?'zone':'cross'))}</small>`:''}`;
++ $('unitSettings').innerHTML=`<div class="staff-condition"><b>Личный состав</b><p id="crewCondition"></p><small>Отдых при усталости любого сотрудника более 78%. Шкала патруля показывает среднюю усталость.</small></div><label>Автоматический режим <input id="autoSetting" type="checkbox" ${u.auto?'checked':''} ${!control?'disabled':''}></label><label>Зона патруля<select id="zoneSetting" ${!zoneControl?'disabled':''}><option value="all">Весь Пярну</option><option value="west">Запад Пярну</option><option value="east">Восток Пярну</option></select></label><label>Выезжать за границы <input id="crossSetting" type="checkbox" ${u.cross?'checked':''} ${!crossControl?'disabled':''}></label><button id="restBtn" ${!control||!['patrol','idle'].includes(u?.status)?'disabled':''}>Вернуть в участок · отдых</button>${state.mode==='chief'?'<button id="crewChangeBtn">Перестановка экипажа · резерв</button><button id="disbandBtn">Расформировать патруль</button>':''}${!control||!zoneControl||!crossControl?`<small style="color:var(--muted)">${escapeHtml(controlReason(state,u,!control?'command':!zoneControl?'zone':'cross'))}</small>`:''}`;
++ if($('crewChangeBtn'))$('crewChangeBtn').onclick=()=>crewChangePanel(u.id);
+  if($('disbandBtn'))$('disbandBtn').onclick=()=>{const r=disbandPatrol(state,u.id);toast(r.message);if(r.ok){save();refresh(true);}};
+  $('zoneSetting').value=u.zone;
+  $('autoSetting').onchange=e=>{if(!setUnitAutomation(state,u.id,e.target.checked))toast(controlReason(state,u));refresh(true);};
+@@ -109,6 +110,15 @@
+  $('wizardNext').onclick=()=>{read();if(step===0&&(!choices.people.some(p=>p.key===draft.first)||draft.first===draft.second)){patrolWizard(draft,step,'Выберите ведущего и другого напарника либо одиночный состав.');return;}if(step<3){patrolWizard(draft,step+1);return;}const r=confirmPatrol(state,draft,quote?.token);if(!r.ok){patrolWizard(draft,3,r.message);return;}selectedUnit=r.unitId;save();close();setTab('map');refresh(true);toast(r.message);};
+ }
+ 
++function crewChangePanel(uid){const u=state.units.find(x=>x.id===uid);if(!u)return;const reason=crewChangeReason(state,u),reserve=reserveOfficers(state),byId=new Map(state.officers.map(o=>[o.id,o]));
++ const options=reserve.map(o=>`<option value="${o.id}" ${o.fatigue>78?'disabled':''}>${escapeHtml(o.name)} · навык ${Math.round(o.skill*100)}% · усталость ${Math.round(o.fatigue)}%${o.fatigue>78?' · отдыхает':''}</option>`).join('');
++ const rows=u.officerIds.map((id,k)=>{const o=byId.get(id);return `<div class="person-row"><strong>${escapeHtml(o?.name??'—')}</strong><small>${u.officerIds.length===1?'Одиночный сотрудник':k===0?'Ведущий / водитель':'Напарник'} · навык ${Math.round((o?.skill??0)*100)}% · усталость ${Math.round(o?.fatigue??0)}%</small>${reason?'':`<label>Заменить на<select id="swapIn-${id}">${options||'<option value="">Резерв пуст</option>'}</select></label><button id="swap-${id}" ${options?'':'disabled'}>Заменить</button>${u.officerIds.length>1?`<button id="drop-${id}">В резерв · одиночный патруль</button>`:''}`}</div>`;}).join('');
++ const add=!reason&&u.officerIds.length<2?`<label>Добавить напарника<select id="addIn">${options||'<option value="">Резерв пуст</option>'}</select></label><button id="addBtn" ${options?'':'disabled'}>Добавить в экипаж</button>`:'';
++ modal(`<span class="eyebrow">НАЧАЛЬНИК / ПЕРЕСТАНОВКА</span><h2>${escapeHtml(u.name)}</h2>${reason?`<p class="notice">${escapeHtml(reason)}</p>`:'<p>Сотрудник из резерва сохраняет свою усталость и навык. Уставших более 78% нельзя выпускать.</p>'}${rows}${add}<div class="dept-section"><h3>Резерв · ${reserve.length}</h3>${reserve.map(o=>`<div class="person-row"><strong>${escapeHtml(o.name)}</strong><small>${escapeHtml(o.specialty??'')} · навык ${Math.round(o.skill*100)}% · усталость ${Math.round(o.fatigue)}%</small></div>`).join('')||'<p>Все сотрудники в экипажах. Наймите людей в «Отделении».</p>'}</div>`);
++ const done=r=>{toast(r.message);if(r.ok){save();refresh(true);crewChangePanel(uid);}};
++ for(const id of u.officerIds){if($('swap-'+id))$('swap-'+id).onclick=()=>done(changeCrew(state,uid,id,$('swapIn-'+id).value));if($('drop-'+id))$('drop-'+id).onclick=()=>done(changeCrew(state,uid,id,null));}
++ if($('addBtn'))$('addBtn').onclick=()=>done(changeCrew(state,uid,null,$('addIn').value));
++}
+ function department(){if(state.mode!=='chief')return;
+  const free=state.officers.filter(o=>!state.units.some(u=>u.officerIds.includes(o.id))),cars=state.vehicles.filter(v=>!state.units.some(u=>u.vehicleId===v.id));
+  const opts=free.map(o=>`<option value="${o.id}">${escapeHtml(o.name)} · ${Math.round(o.skill*100)}%</option>`).join('');
+@@ -131,7 +141,7 @@
+ setTab('map');document.addEventListener('visibilitychange',()=>{diagnostics.event('visibility',document.hidden?'hidden':'visible');diagnostics.resetFrames();if(document.hidden){audio.pause();renderer.cancel();activePointers.clear();interactionActive=false;if(started){save();paused=true;}}last=performance.now();simulationClock.reset();});window.addEventListener('pagehide',()=>{audio.pause();if(started)save();});document.addEventListener('keydown',e=>{if(e.code==='Escape'&&fullscreen.active&&!$('modal').open)fullscreen.exit();if(e.code==='Space'&&!['INPUT','SELECT','BUTTON'].includes(document.activeElement.tagName)&&!$('modal').open){e.preventDefault();paused=!paused;if(!paused)audio.unlock();else audio.pause();refresh();}});
+ function frame(now){let frameSaveMs=0;const measuring=diagnostics.enabled(),frameStart=measuring?performance.now():0,frameInterval=now-last;const dt=Math.min((now-last)/1000,.1);last=now;if(document.hidden){framePacer.reset();requestAnimationFrame(frame);return;}const simulationStart=measuring?performance.now():0;if(started&&!paused&&!document.hidden&&!$('modal').open&&!state.ended){const advanced=simulationClock.advance(Math.max(0,frameInterval)/1000,speed,step=>tick(state,step));if(advanced.dropped)diagnostics.event('time-gap-dropped',advanced.dropped.toFixed(3)+' real seconds');saveTime+=dt;if(saveTime>10){frameSaveMs=save();saveTime=0;}}
+  const uiStart=measuring?performance.now():0;if(measuring){pendingSimulation+=Math.max(0,uiStart-simulationStart-frameSaveMs);pendingSave+=frameSaveMs;}uiTime+=dt;if(uiTime>.5){refresh();uiTime=0;const u=state.units.find(x=>x.id===selectedUnit);const restButton=$('restBtn');if(restButton)restButton.disabled=!canControl(state,u)||!['patrol','idle'].includes(u?.status);}
+- const audioStart=measuring?performance.now():0;if(measuring)pendingUI+=audioStart-uiStart;const drawingAllowed=!$('modal').open&&mapVisible(),drawInterval=drawingAllowed?framePacer.take(now):null;if(!drawingAllowed){renderer.suspend();framePacer.reset();pendingWork=0;pendingSimulation=0;pendingUI=0;pendingAudio=0;pendingSave=0;}audio.update(state,selectedUnit,started&&!paused&&!document.hidden&&!$('modal').open&&!state.ended&&!state.setupPending,renderer.scene());const renderStart=performance.now();if(measuring)pendingAudio+=renderStart-audioStart;if(drawInterval!==null)renderer.draw(state,selectedUnit,selectedCall,selectedResident,Math.min(.5,drawInterval/1000),simulationClock.visualScale(paused?0:speed));const renderMs=performance.now()-renderStart;if(adaptiveResolution&&drawInterval!==null){const cap=resolutionGovernor.sample(now,drawInterval,renderMs,frameRate);if(cap!==null){renderer.resolution(cap);diagnostics.event('resolution-adapted',String(cap));}}if(measuring)pendingWork+=performance.now()-frameStart;if(diagnostics.enabled()&&drawInterval!==null){const end=performance.now();diagnostics.frame(drawInterval,pendingWork,renderMs,{speed,zoom:renderer.scene().zoom,units:state.units.length,residents:state.population?.residents.length??0,calls:state.incidents.length,width:$('map').width,height:$('map').height,dpr:devicePixelRatio,quality:graphicsQuality,frameRate,worldRate,coverageId:coverage.id,coverageRegion:coverage.region,coverageWidth:coverage.world.maxX-coverage.world.minX,coverageHeight:coverage.world.maxY-coverage.world.minY,simulationMs:pendingSimulation,uiMs:pendingUI,audioMs:pendingAudio,saveMs:pendingSave,...renderer.stats()});pendingWork=0;pendingSimulation=0;pendingUI=0;pendingAudio=0;pendingSave=0;if(now-diagnosticUpdate>500){diagnosticUpdate=now;const m=diagnostics.summary();fpsHud.textContent=`${m.fps} FPS · P95 ${m.frameP95Ms} мс · время ×${worldRate*speed}`;}}if(state.ended&&started&&!reportShown){reportShown=true;save();report();}requestAnimationFrame(frame);}
++ const audioStart=measuring?performance.now():0;if(measuring)pendingUI+=audioStart-uiStart;const drawingAllowed=!$('modal').open&&mapVisible(),drawInterval=drawingAllowed?framePacer.take(now):null;if(!drawingAllowed){renderer.suspend();framePacer.reset();pendingWork=0;pendingSimulation=0;pendingUI=0;pendingAudio=0;pendingSave=0;}audio.update(state,selectedUnit,started&&!paused&&!document.hidden&&!$('modal').open&&!state.ended&&!state.setupPending,renderer.scene());const renderStart=performance.now();if(measuring)pendingAudio+=renderStart-audioStart;if(drawInterval!==null)renderer.draw(state,selectedUnit,selectedCall,selectedResident,Math.min(.5,drawInterval/1000),simulationClock.visualScale(paused?0:speed));else if(drawingAllowed)renderer.idle?.();const renderMs=performance.now()-renderStart;if(adaptiveResolution&&drawInterval!==null){const cap=resolutionGovernor.sample(now,drawInterval,renderMs,frameRate);if(cap!==null){renderer.resolution(cap);diagnostics.event('resolution-adapted',String(cap));}}if(measuring)pendingWork+=performance.now()-frameStart;if(diagnostics.enabled()&&drawInterval!==null){const end=performance.now();diagnostics.frame(drawInterval,pendingWork,renderMs,{speed,zoom:renderer.scene().zoom,units:state.units.length,residents:state.population?.residents.length??0,calls:state.incidents.length,width:$('map').width,height:$('map').height,dpr:devicePixelRatio,quality:graphicsQuality,frameRate,worldRate,coverageId:coverage.id,coverageRegion:coverage.region,coverageWidth:coverage.world.maxX-coverage.world.minX,coverageHeight:coverage.world.maxY-coverage.world.minY,simulationMs:pendingSimulation,uiMs:pendingUI,audioMs:pendingAudio,saveMs:pendingSave,...renderer.stats()});pendingWork=0;pendingSimulation=0;pendingUI=0;pendingAudio=0;pendingSave=0;if(now-diagnosticUpdate>500){diagnosticUpdate=now;const m=diagnostics.summary();fpsHud.textContent=`${m.fps} FPS · P95 ${m.frameP95Ms} мс · время ×${worldRate*speed}`;}}if(state.ended&&started&&!reportShown){reportShown=true;save();report();}requestAnimationFrame(frame);}
+ refresh(true);welcome();requestAnimationFrame(frame);
+ 
+ function trainingMarkup(){const t=trainingSummary(state);if(!t)return '<p>Учебная смена доступна в режиме карьеры.</p>';return `<section class="training-card"><span class="eyebrow">ПАТРУЛЬ 01 · МОРОЗОВ И СТАЖЁР</span><h3>${t.completed?'Первый цикл пройден':'Учебная смена'} · ${t.done}/4</h3><p>${escapeHtml(t.hint)}</p>${t.lessons.map(l=>`<div class="training-step ${l.event?'done':''}"><b>${l.event?'✓':'○'} ${l.title}</b><small>${l.event?'Вызов №'+l.event.incident+' · смена '+l.event.shift+(l.kind==='decision'?(l.event.manual?' · ваше решение':' · решение автомата'):''):l.hint}</small></div>`).join('')}<details><summary>Журнал учебных действий</summary>${t.events.map(e=>`<p>Смена ${e.shift} · ${clock(e.time)} · вызов №${e.incident}: ${escapeHtml(({accepted:"Вызов принят",arrived:"Прибыли",decision:"Выбрано действие",resolved:"Помощь завершена",failed:"Помощь не завершена"})[e.kind])}${e.detail?" — "+escapeHtml(({talk:"разговор и деэскалация",check:"проверка обстоятельств",secure:"безопасность места",backup:"подкрепление",chase:"преследование",observe:"наблюдение"})[e.detail]??e.detail):""}${e.kind==="decision"?(e.manual?" (вручную)":" (автомат)"):""}</p>`).join("")||"<p>Событий пока нет.</p>"}</details><p>Решений вручную: ${t.manual}. В автомате: ${t.automatic}. Неудачных исходов: ${t.failed}.</p><p class="fine-print">${t.legacy?'Учёт начат после обновления; прежние действия не оценивались. ':''}Это разбор первого учебного цикла экипажа. Автоматический режим засчитывается отдельно; обучение не требует обязательных нажатий и не даёт дополнительной награды.</p></section>`;}
+--- a/dist/frame-job.js
++++ b/dist/frame-job.js
+@@ -1,7 +1,7 @@
+ // Cooperative Canvas work. A yield is one atomic feature, not a guaranteed GPU budget.
+ export function createFrameJob(iterator,{budgetMs=4,maxItems=64,clock=()=>globalThis.performance?.now?.()??Date.now()}={}){
+  let done=false,items=0;
+- return {step(synchronous=false){const start=clock();let count=0;while(!done&&(synchronous||count<maxItems&&(count===0||clock()-start<budgetMs))){const result=iterator.next();done=!!result.done;if(!done){count++;items++;}}return {done,items,count,ms:Math.max(0,clock()-start)};},done:()=>done};
++ return {step(synchronous=false,budget=budgetMs){const start=clock();let count=0;while(!done&&(synchronous||count<maxItems&&(count===0||clock()-start<budget))){const result=iterator.next();done=!!result.done;if(!done){count++;items++;}}return {done,items,count,ms:Math.max(0,clock()-start)};},done:()=>done};
+ }
+ 
+ // Stable bottom-up merge sort. Source is read-only; equal depths keep source order.
+--- a/dist/sim.js
++++ b/dist/sim.js
+@@ -121,3 +121,35 @@
+ }
+ import {departmentIndex,ensureStaff,syncCrew,tickStaff,crewNeedsRest,crewReady,prepareStaffShift,validStaff} from './staff.js';
+ import {walkAccess,beginPoliceWalk,crewAtScene,returnPoliceWalk,tickPoliceWalk,policeWalkReason,validPoliceWalk} from './police-walk.js';
++
++// 0.6b: reserve management and crew changes. A crew is changed only while it patrols, waits or
++// rests in the station: never during a call, on foot or while driving to rest, so a scene keeps
++// the people who started it. Personal fatigue/skill stay with each officer (staff.js).
++export const CREW_CHANGE_STATUSES=Object.freeze(['patrol','idle','resting']);
++export const CREW_CHANGE_FATIGUE_LIMIT=78;
++export function reserveOfficers(s){const busy=new Set(s.units.flatMap(u=>u.officerIds));return s.officers.filter(o=>!busy.has(o.id));}
++export function crewChangeReason(s,u){
++ if(s.mode!=='chief')return 'Перестановку экипажей выполняет начальник смены.';
++ if(s.ended)return 'Смена завершена.';
++ if(!u)return 'Выберите экипаж.';
++ if(u.foot)return 'Сотрудники вне машины. Перестановка — после посадки.';
++ if(!CREW_CHANGE_STATUSES.includes(u.status))return u.incident!=null?`Экипаж занят вызовом №${u.incident}. Перестановка — после завершения.`:'Экипаж едет в участок. Перестановка — в участке или на патрулировании.';
++ return '';
++}
++export function changeCrew(s,uid,outId=null,inId=null){
++ const u=s.units.find(u=>u.id===uid),reason=crewChangeReason(s,u);if(reason)return {ok:false,message:reason};
++ const out=outId==null||outId===''?null:Number(outId),incoming=inId==null||inId===''?null:Number(inId);
++ if(out===null&&incoming===null)return {ok:false,message:'Выберите сотрудника для перестановки.'};
++ if(out!==null&&!u.officerIds.includes(out))return {ok:false,message:'Этот сотрудник не входит в экипаж.'};
++ const c=departmentIndex(s);let person=null;
++ if(incoming!==null){person=c.byOfficer.get(incoming);if(!person||s.units.some(x=>x.officerIds.includes(incoming)))return {ok:false,message:'Выберите свободного сотрудника из резерва.'};if(person.fatigue>CREW_CHANGE_FATIGUE_LIMIT)return {ok:false,message:`${person.name}: усталость ${Math.round(person.fatigue)}%. Сначала отдых.`};}
++ let next;
++ if(out!==null&&incoming!==null)next=u.officerIds.map(id=>id===out?incoming:id);
++ else if(out!==null){if(u.officerIds.length<2)return {ok:false,message:'Единственного сотрудника нельзя убрать: замените его или расформируйте патруль.'};next=u.officerIds.filter(id=>id!==out);}
++ else{if(u.officerIds.length>=2)return {ok:false,message:'В экипаже уже два сотрудника.'};next=[...u.officerIds,incoming];}
++ const left=out===null?null:c.byOfficer.get(out);
++ u.officerIds=next;u.people=next.map(id=>c.byOfficer.get(id).name);syncCrew(s,u);
++ const text=left&&person?`${left.name} → резерв, ${person.name} в экипаже`:left?`${left.name} → резерв, одиночный патруль`:`${person.name} — напарник`;
++ log(s,`${u.name}: ${text}.`);
++ return {ok:true,message:`${u.name}: ${text}`};
++}
+--- a/dist/style.css
++++ b/dist/style.css
+@@ -26,7 +26,8 @@
+ 
+ .live-3d .map-credit{z-index:3}.live-3d #view3dBtn{font-size:12px}
+ 
+-.fps-hud{position:fixed;right:10px;top:calc(80px + env(safe-area-inset-top));z-index:40;pointer-events:none;background:#102731e8;color:#bbf4dd;border:1px solid #4b756a;border-radius:6px;padding:6px 9px;font:12px monospace;max-width:calc(100vw - 20px)}.fps-hud[hidden]{display:none}#diagSummary{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
++/* Centred so it never covers the map control column (it hid «Квартал» on Fold6). */
++.fps-hud{position:fixed;left:50%;transform:translateX(-50%);white-space:nowrap;top:calc(80px + env(safe-area-inset-top));z-index:40;pointer-events:none;background:#102731e8;color:#bbf4dd;border:1px solid #4b756a;border-radius:6px;padding:6px 9px;font:12px monospace;max-width:calc(100vw - 20px)}.fps-hud[hidden]{display:none}#diagSummary{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+ :root .training-card{padding:16px;border:1px solid #49766d;border-radius:12px;background:#142a30;margin:16px 0}.training-step{padding:12px;margin:8px 0;background:#1a3038;border-left:3px solid #647b88;border-radius:6px}.training-step.done{border-color:#83f2d0}.training-step small{display:block;line-height:1.5;margin-top:6px;color:#c3d2d6}#trainingBtn{min-height:44px;width:100%;margin-top:10px}
+ :root .training-card{padding:16px;border:1px solid #49766d;border-radius:12px;background:#142a30;margin:16px 0}.training-step{padding:12px;margin:8px 0;background:#1a3038;border-left:3px solid #647b88;border-radius:6px}.training-step.done{border-color:#83f2d0}.training-step small{display:block;line-height:1.5;margin-top:6px;color:#c3d2d6}#trainingBtn{min-height:44px;width:100%;margin-top:10px}#serviceBtn{width:100%;margin:-12px 0 18px;border-color:#49766d;color:var(--cyan)}.permission-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.permission-grid .training-step{margin:0}@media(max-width:520px){.permission-grid{grid-template-columns:1fr}}
+ /* Illustrative career insignia: game progression, not official police ranks. */
+--- /dev/null
++++ b/tests/crew-change.test.mjs
+@@ -0,0 +1,30 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,hireOfficer,createPatrol,changeCrew,crewChangeReason,reserveOfficers,assign,spawnIncident,serialize,deserialize} from '../dist/sim.js';
++// 0.6b reserve management: crew changes only while patrolling or in the station.
++function hire(s,id){assert.equal(hireOfficer(s,id).ok,true);return s.officers.at(-1).id;}
++function ready(){const s=createGame('chief');const a=hire(s,1),b=hire(s,2);assert.equal(createPatrol(s,a,b,1).ok,true);const c=hire(s,3);return {s,a,b,c,u:s.units[0]};}
++
++test('reserve lists only officers outside crews',()=>{const {s,c}=ready();assert.deepEqual(reserveOfficers(s).map(o=>o.id),[c]);});
++
++test('swap a crew member with a reserve officer; names, skill and fatigue follow the people',()=>{const {s,a,b,c,u}=ready();const fresh=s.officers.find(o=>o.id===c);fresh.fatigue=20;
++ const r=changeCrew(s,u.id,b,c);assert.equal(r.ok,true);assert.deepEqual(u.officerIds,[a,c]);assert.equal(u.people[1],fresh.name);
++ const left=s.officers.find(o=>o.id===a);assert.equal(u.skill,(left.skill+fresh.skill)/2);assert.equal(u.fatigue,(left.fatigue+20)/2);
++ assert.deepEqual(reserveOfficers(s).map(o=>o.id),[b]);assert.match(s.logs[0].text,/резерв/);});
++
++test('pair can drop to solo and solo can take a partner; solo cannot drop its only officer',()=>{const {s,a,b,c,u}=ready();
++ assert.equal(changeCrew(s,u.id,b,null).ok,true);assert.deepEqual(u.officerIds,[a]);
++ assert.equal(changeCrew(s,u.id,a,null).ok,false);assert.deepEqual(u.officerIds,[a]);
++ assert.equal(changeCrew(s,u.id,null,c).ok,true);assert.deepEqual(u.officerIds,[a,c]);
++ assert.equal(changeCrew(s,u.id,null,b).ok,false);});
++
++test('busy, on-foot and returning crews are blocked with a clear reason and stay unchanged',()=>{const {s,b,c,u}=ready();const i=spawnIncident(s,0);s.nextIncident=999;assert.equal(assign(s,u.id,i.id),true);
++ const before=[...u.officerIds],r=changeCrew(s,u.id,b,c);assert.equal(r.ok,false);assert.match(r.message,new RegExp('вызовом №'+i.id));assert.deepEqual(u.officerIds,before);
++ u.status='returning';u.incident=null;assert.match(crewChangeReason(s,u),/участок/);
++ u.status='patrol';u.foot={phase:'approach',actors:[]};assert.match(crewChangeReason(s,u),/вне машины/);
++ u.foot=null;assert.equal(crewChangeReason(s,u),'');});
++
++test('tired reserve, foreign or crewed officers and career mode are refused',()=>{const {s,a,b,c,u}=ready();s.officers.find(o=>o.id===c).fatigue=90;
++ assert.equal(changeCrew(s,u.id,b,c).ok,false);assert.equal(changeCrew(s,u.id,b,a).ok,false);assert.equal(changeCrew(s,u.id,999,c).ok,false);assert.equal(changeCrew(s,u.id,null,null).ok,false);
++ const career=createGame();assert.equal(changeCrew(career,career.units[0].id,career.units[0].officerIds?.[0]??1,null).ok,false);});
++
++test('crew change survives save and load',()=>{const {s,a,c,u}=ready();assert.equal(changeCrew(s,u.id,u.officerIds[1],c).ok,true);const n=deserialize(serialize(s));assert.deepEqual(n.units[0].officerIds,[a,c]);assert.equal(n.units[0].people.length,2);});
