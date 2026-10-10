@@ -1,0 +1,140 @@
+--- a/dist/calls.js
++++ b/dist/calls.js
+@@ -91,3 +91,14 @@
+ const WEATHER_ORDER=['clear','clear','rain','clear','fog','rain','wind','clear'];
+ export function weatherFor(seed,shift){const h=Math.abs(Math.imul((seed>>>0)^0x9e3779b9,31)+Math.imul(shift|0,7919))>>>0,kind=WEATHER_ORDER[h%WEATHER_ORDER.length],[lo,hi]=WEATHER[kind].temps;return {kind,temp:lo+(h>>>8)%(hi-lo+1)};}
+ export const weatherFactor=(weather,variantId)=>WEATHER[weather?.kind]?.mods?.[variantId]??1;
++
++// «Задержание и доставка» — 0.7.0 v1 (Claude, 11.10.2026). A successful call whose decision
++// leads to an arrest keeps one crew busy: drive the detainee to the station, hand over, report.
++export const CUSTODY=Object.freeze({
++ 'street-fight':['talk','backup'],'noise-venue':['backup'],'domestic':['talk','backup'],
++ 'drunk-driver':['check','chase'],'dangerous-driving':['check','chase'],'no-licence':['check','chase'],
++ 'shoplift':['check','talk'],'car-break':['check'],'bike-theft':['check']
++});
++export const custodyFor=(variantId,decision)=>!!CUSTODY[variantId]?.includes(decision);
++export const HANDOVER_TIME=6;
++export const CUSTODY_REWARD=Object.freeze({trust:1,district:2,xp:10});
+--- a/dist/sim.js
++++ b/dist/sim.js
+@@ -8,7 +8,7 @@
+ import {MAP_ID,NODES,byId,nearest,point,roadRoute,atNode,migrateMap} from './geography.js';
+ import {containsWorldPoint} from './city-coverage.js';
+ import {planTraffic} from './traffic.js';
+-import {pickVariant,placeNodes,defaultVariant,variantOf,validVariant,crewFits,FIT_BONUS,variantById,DISTRICT_IDS,FOLLOW_UPS,followUpChance,FOLLOW_UP_DELAY,DISTRICT_TRUST_STEP,weatherFor,WEATHER} from './calls.js';
++import {pickVariant,placeNodes,defaultVariant,variantOf,validVariant,crewFits,FIT_BONUS,variantById,DISTRICT_IDS,FOLLOW_UPS,followUpChance,FOLLOW_UP_DELAY,DISTRICT_TRUST_STEP,weatherFor,WEATHER,custodyFor,HANDOVER_TIME,CUSTODY_REWARD} from './calls.js';
+ import {cityMinute} from './population.js';
+ export const SIZE=6;
+ export const HQ=point(byId('centre')); 
+@@ -43,7 +43,7 @@
+ export function ensureFinance(s){if(!s.finance)s.finance={opening:s.budget,entries:[],legacy:s.time>0||s.shift>1};return s;}
+ export function transact(s,amount,category,label){ensureFinance(s);if(!Number.isFinite(amount)||s.budget+amount<0)throw Error('Некорректная операция');s.budget+=amount;s.finance.entries.push({time:s.time,amount,category,label});}
+ export function financialSummary(s){ensureFinance(s);const income=s.finance.entries.filter(e=>e.amount>0).reduce((n,e)=>n+e.amount,0),expenses=-s.finance.entries.filter(e=>e.amount<0).reduce((n,e)=>n+e.amount,0);return {opening:s.finance.opening,income,expenses,balance:s.budget,pending:shiftCost(s),support:Math.max(0,shiftCost(s)-s.budget),legacy:s.finance.legacy,entries:s.finance.entries.map(e=>({...e}))};}
+-export function unitReason(s,u){if(!u)return 'Выберите экипаж.';const foot=policeWalkReason(u);if(foot)return foot;const incident=s.incidents.find(i=>i.id===u.incident);if(u.status==='resting')return 'Восстанавливаем силы в участке. Вернёмся к патрулю после отдыха.';if(u.status==='returning')return 'Едем в участок на отдых.';if(u.status==='responding')return `Едем на вызов №${u.incident}. Приоритет: ${TYPES[incident?.type??0].severity}.`;if(u.status==='decision')return 'Ручной режим: ждём вашу команду в карточке вызова.';if(u.status==='working'&&incident?.scene)return incident.scene.reason;if(u.status==='working')return incident?.backupRequested&&incident.units.length<2?'Работаем осторожно, пока второй экипаж в пути или недоступен.':'На месте: выполняем выбранное действие. Навык, усталость и оснащение влияют на скорость.';return u.auto?`Патрулируем ${u.zone==='west'?'западную часть города':u.zone==='east'?'восточную часть города':'город'}. Принимаем доступные вызовы, сначала наиболее срочные.`:'Ручной режим: назначьте вызов или включите автомат.';}
++export function unitReason(s,u){if(!u)return 'Выберите экипаж.';const foot=policeWalkReason(u);if(foot)return foot;const incident=s.incidents.find(i=>i.id===u.incident);if(u.status==='resting')return 'Восстанавливаем силы в участке. Вернёмся к патрулю после отдыха.';if(u.status==='returning')return 'Едем в участок на отдых.';if(u.status==='transporting')return `Везём задержанного в участок (вызов №${u.transport?.from}).`;if(u.status==='handover')return 'Передаём задержанного дежурному и пишем рапорт.';if(u.status==='responding')return `Едем на вызов №${u.incident}. Приоритет: ${TYPES[incident?.type??0].severity}.`;if(u.status==='decision')return 'Ручной режим: ждём вашу команду в карточке вызова.';if(u.status==='working'&&incident?.scene)return incident.scene.reason;if(u.status==='working')return incident?.backupRequested&&incident.units.length<2?'Работаем осторожно, пока второй экипаж в пути или недоступен.':'На месте: выполняем выбранное действие. Навык, усталость и оснащение влияют на скорость.';return u.auto?`Патрулируем ${u.zone==='west'?'западную часть города':u.zone==='east'?'восточную часть города':'город'}. Принимаем доступные вызовы, сначала наиболее срочные.`:'Ручной режим: назначьте вызов или включите автомат.';}
+ export function hireOfficer(s,cid){if(s.mode!=='chief'||s.ended)return {ok:false,message:'Найм доступен начальнику во время смены.'};const c=s.candidates.find(c=>c.id===cid);if(!c)return {ok:false,message:'Кандидат уже нанят.'};if(s.budget<c.fee)return {ok:false,message:'Недостаточно бюджета для найма.'};transact(s,-c.fee,'hire','Найм: '+c.name);const {fee,...person}=c;s.officers.push({...person,id:s.nextOfficerId++,staffVersion:1,fatigue:0});s.candidates=s.candidates.filter(c=>c.id!==cid);log(s,`В отделение принят сотрудник: ${c.name}. Расходы: ${fee}.`);return {ok:true,message:'Сотрудник принят в отделение'};}
+ function hiringReserve(s){return s.setupPending?s.candidates.map(c=>c.fee).sort((a,b)=>a-b).slice(0,Math.max(0,1-s.officers.length)).reduce((n,v)=>n+v,0):0;}
+ export function buyVehicle(s,type='sedan'){const price=type==='suv'?1200:800;if(!['sedan','suv'].includes(type))return {ok:false,message:'Неизвестная модель.'};if(s.mode!=='chief'||s.ended)return {ok:false,message:'Покупка недоступна.'};if(s.budget<price)return {ok:false,message:'Недостаточно бюджета: нужно '+price+'.'};if(s.budget-price<hiringReserve(s))return {ok:false,message:'Сначала наймите хотя бы одного сотрудника: оставьте бюджет на первый патруль.'};if(s.vehicles.length>=6)return {ok:false,message:'В гараже максимум 6 машин.'};const id=s.nextVehicleId++;s.vehicles.push({id,name:(type==='suv'?'Внедорожник ':'Седан ')+String(id).padStart(2,'0'),type,paint:'white',lights:'redblue',kit:'base'});transact(s,-price,'vehicle','Покупка: '+(type==='suv'?'внедорожник':'седан'));return {ok:true,message:'Машина доставлена в гараж'};}
+@@ -78,7 +78,7 @@
+ export function rest(s,uid){const u=s.units.find(u=>u.id===uid);if(!u||s.ended||!canControl(s,u)||!['patrol','idle'].includes(u.status))return false;u.status='returning';routeTo(u,HQ);log(s,`${u.name}: возвращаемся на отдых.`);return true;}
+ function move(u,dt,s){advanceVehicle(u,dt,Math.min(patrolSpeed(u),u.trafficTargetKmh??Infinity),{obeyLimits:!urgentMovement(s,u)});}
+ function trafficItems(s){const items=[];for(const r of s.population?.residents??[])if(!['walkVisit','walkBack','visiting'].includes(r.status))items.push({entity:r,id:'resident-'+r.id,desired:30,emergency:false});for(const u of s.units)items.push({entity:u,id:'unit-'+u.id,desired:patrolSpeed(u),emergency:urgentMovement(s,u),blocking:!u.route.length&&['decision','working'].includes(u.status)});for(const i of s.incidents)if(i.type===5&&i.scene)for(const a of i.scene.participants)items.push({entity:a,id:'actor-'+a.id,desired:a.status==='fleeing'?40:15,emergency:false});return items;}
+-function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));recordConsequences(s,i,success);const rankBefore=s.rank;if(success){transact(s,110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=30;}s.rank=Math.min(RANKS.length-1,Math.floor(s.xp/150));if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
++function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));recordConsequences(s,i,success);if(success)assignCustody(s,i);const rankBefore=s.rank;if(success){transact(s,110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=30;}s.rank=Math.min(RANKS.length-1,Math.floor(s.xp/150));if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
+  for(const id of i.units){const u=s.units.find(u=>u.id===id);if(returnPoliceWalk(u))continue;u.incident=null;u.status='patrol';u.pursuing=false;u.route=u.route.length?[u.route[0]]:[];}
+  const text=success?`Вызов №${i.id} завершён. ${outcome}.`:`Вызов №${i.id}: ${outcome}. Доверие снизилось.`;log(s,text);s.history.unshift({id:i.id,name:callName(i),success,time:s.time,outcome});s.history=s.history.slice(0,50);}
+ export function tick(s,dt){if(s.ended||s.setupPending)return;s.time+=dt;s.nextIncident-=dt;
+@@ -86,6 +86,7 @@
+  releaseFollowUps(s);
+  tickStaff(s,dt);planTraffic(trafficItems(s));tickPopulation(s,dt);prepareScenes(s,dt);
+  for(const u of s.units){const vehicle=departmentIndex(s).byVehicle.get(u.vehicleId);u.kit=vehicle?.kit??'base';move(u,dt,s);const footBefore=u.foot?.phase;tickPoliceWalk(u,dt);if(footBefore==='approach'&&u.foot?.phase==='onScene'){const i=s.incidents.find(i=>i.id===u.incident);if(i){if(!u.auto&&!i.decision)u.status='decision';if(s.mode==='career'&&u.id===1)trainingEvent(s,'arrived',i);log(s,`${u.name}: сотрудники у участников вызова №${i.id}.`);}}
++ if(tickCustody(s,u,dt))continue;
+  if(u.status==='returning'&&!u.route.length)u.status='resting';
+  if(u.status==='resting'){if(crewReady(s,u)){u.status='patrol';log(s,`${u.name}: снова готовы к работе.`);}continue;}
+  if(u.status==='responding'&&!u.route.length){const i=s.incidents.find(i=>i.id===u.incident);if(i){i.state='onscene';u.status=u.auto?'working':'decision';const walking=beginPoliceWalk(u,i);if(walking)u.status='working';else if(s.mode==='career'&&u.id===1)trainingEvent(s,'arrived',i);log(s,`${u.name}: ${walking?'припарковались, идём к участникам':'на месте вызова'} №${i.id}.`);}}
+@@ -116,6 +117,8 @@
+  const activeIds=new Set(n.incidents.map(i=>i.id));
+  n.units=s.units.map(u=>activeIds.has(u.incident)||u.foot?{...u,people:[...u.people],officerIds:[...u.officerIds],route:u.route.map(p=>({...p})),...(u.foot?{foot:JSON.parse(JSON.stringify(u.foot))}:{})}:{...u,people:[...u.people],officerIds:[...u.officerIds],x:HQ.x,y:HQ.y,route:[],incident:null,status:'patrol',fatigue:8});
+  for(const k of ['officers','vehicles','candidates'])n[k]=s[k].map(x=>({...x}));for(const k of ['nextUnitId','nextOfficerId','nextVehicleId','setupPending','nextId'])n[k]=s[k];
++ // A custody still in progress at shift end is completed off-screen and credited.
++ for(const u of n.units)if(!activeIds.has(u.incident)&&!u.foot&&(u.transport||u.handover!==undefined)){if(u.transport){n.trust=Math.min(100,n.trust+CUSTODY_REWARD.trust);if(n.districts?.[u.transport.district]!==undefined)n.districts[u.transport.district]=Math.min(100,n.districts[u.transport.district]+CUSTODY_REWARD.district);if(u.id===1||n.mode==='chief'){n.xp+=CUSTODY_REWARD.xp;n.rank=Math.min(RANKS.length-1,Math.floor(n.xp/150));}}delete u.transport;delete u.handover;}
+  prepareStaffShift(n,activeIds);
+  n.population=JSON.parse(JSON.stringify(ensurePopulation(s)));n.training=JSON.parse(JSON.stringify(ensureTraining(s)));n.service=JSON.parse(JSON.stringify(ensureService(s)));
+  n.finance={opening:n.budget,entries:[],legacy:false};n.previousReport={shift:s.shift,resolved:s.resolved,missed:s.missed,carried:n.incidents.length,finance:financialSummary(closed)};
+@@ -124,7 +127,7 @@
+ export function serialize(s){return JSON.stringify(s);}
+ export function deserialize(raw){
+  const s=JSON.parse(raw),num=(x,min=0,max=1e9)=>Number.isFinite(x)&&x>=min&&x<=max,str=x=>typeof x==='string'&&x.length<500,pointInMap=p=>s.mapId===MAP_ID?containsWorldPoint(p):p&&num(p.x,0,5)&&num(p.y,0,5);
+- const valid=s&&[1,2].includes(s.version)&&['career','chief'].includes(s.mode)&&num(s.seed,0,4294967295)&&num(s.time,0,480)&&s.shiftLength===480&&Number.isInteger(s.shift)&&s.shift>0&&Number.isInteger(s.rank)&&s.rank>=0&&s.rank<RANKS.length&&num(s.xp)&&num(s.budget)&&num(s.trust,0,100)&&num(s.resolved)&&num(s.missed)&&num(s.nextIncident,-1000,10000)&&Number.isInteger(s.nextId)&&typeof s.ended==='boolean'&&Array.isArray(s.units)&&s.units.length<=6&&new Set(s.units.map(u=>u.id)).size===s.units.length&&s.units.every((u,k)=>Number.isInteger(u.id)&&u.id>0&&str(u.name)&&Array.isArray(u.people)&&u.people.length>=1&&u.people.length<=2&&u.people.every(str)&&pointInMap(u)&&num(u.fatigue,0,100)&&(u.pursuing===undefined||typeof u.pursuing==='boolean')&&typeof u.auto==='boolean'&&typeof u.cross==='boolean'&&['all','west','east'].includes(u.zone)&&['patrol','idle','responding','decision','working','returning','resting'].includes(u.status)&&(u.incident===null||Number.isInteger(u.incident))&&Array.isArray(u.route)&&u.route.length<3000&&u.route.every(pointInMap))&&Array.isArray(s.incidents)&&s.incidents.length<30&&s.incidents.every(i=>Number.isInteger(i.id)&&Number.isInteger(i.type)&&TYPES[i.type]&&validVariant(i)&&(s.mapId===MAP_ID?atNode(i):s.mapId==='parnumaa-1'?Number.isFinite(i.x)&&Number.isFinite(i.y):Number.isInteger(i.x)&&Number.isInteger(i.y))&&pointInMap(i)&&num(i.age)&&num(i.progress)&&['waiting','assigned','onscene','resolved','missed'].includes(i.state)&&Array.isArray(i.units)&&i.units.every(id=>Number.isInteger(id)&&id>0))&&Array.isArray(s.logs)&&s.logs.length<=45&&s.logs.every(l=>num(l.time)&&str(l.text))&&Array.isArray(s.history)&&s.history.length<=50&&s.history.every(h=>num(h.id)&&str(h.name)&&num(h.time)&&typeof h.success==='boolean');
++ const valid=s&&[1,2].includes(s.version)&&['career','chief'].includes(s.mode)&&num(s.seed,0,4294967295)&&num(s.time,0,480)&&s.shiftLength===480&&Number.isInteger(s.shift)&&s.shift>0&&Number.isInteger(s.rank)&&s.rank>=0&&s.rank<RANKS.length&&num(s.xp)&&num(s.budget)&&num(s.trust,0,100)&&num(s.resolved)&&num(s.missed)&&num(s.nextIncident,-1000,10000)&&Number.isInteger(s.nextId)&&typeof s.ended==='boolean'&&Array.isArray(s.units)&&s.units.length<=6&&new Set(s.units.map(u=>u.id)).size===s.units.length&&s.units.every((u,k)=>Number.isInteger(u.id)&&u.id>0&&str(u.name)&&Array.isArray(u.people)&&u.people.length>=1&&u.people.length<=2&&u.people.every(str)&&pointInMap(u)&&num(u.fatigue,0,100)&&(u.pursuing===undefined||typeof u.pursuing==='boolean')&&typeof u.auto==='boolean'&&typeof u.cross==='boolean'&&['all','west','east'].includes(u.zone)&&['patrol','idle','responding','decision','working','returning','resting','transporting','handover'].includes(u.status)&&(u.transport===undefined||u.transport===null||Number.isInteger(u.transport.from)&&typeof u.transport.label==='string'&&u.transport.label.length<120&&typeof u.transport.district==='string')&&(u.handover===undefined||num(u.handover,0,100))&&(u.incident===null||Number.isInteger(u.incident))&&Array.isArray(u.route)&&u.route.length<3000&&u.route.every(pointInMap))&&Array.isArray(s.incidents)&&s.incidents.length<30&&s.incidents.every(i=>Number.isInteger(i.id)&&Number.isInteger(i.type)&&TYPES[i.type]&&validVariant(i)&&(s.mapId===MAP_ID?atNode(i):s.mapId==='parnumaa-1'?Number.isFinite(i.x)&&Number.isFinite(i.y):Number.isInteger(i.x)&&Number.isInteger(i.y))&&pointInMap(i)&&num(i.age)&&num(i.progress)&&['waiting','assigned','onscene','resolved','missed'].includes(i.state)&&Array.isArray(i.units)&&i.units.every(id=>Number.isInteger(id)&&id>0))&&Array.isArray(s.logs)&&s.logs.length<=45&&s.logs.every(l=>num(l.time)&&str(l.text))&&Array.isArray(s.history)&&s.history.length<=50&&s.history.every(h=>num(h.id)&&str(h.name)&&num(h.time)&&typeof h.success==='boolean');
+  if(!valid||s.mapId&&!['parnumaa-1',MAP_ID].includes(s.mapId))throw Error('Несовместимое сохранение');ensureDepartment(s);for(const u of s.units)if(u.currentSpeedKmh!==undefined&&(!Number.isFinite(u.currentSpeedKmh)||u.currentSpeedKmh<0||u.currentSpeedKmh>200))u.currentSpeedKmh=0;
+  const usedOfficers=s.units.flatMap(u=>u.officerIds??[]),usedVehicles=s.units.map(u=>u.vehicleId);
+  if(!Array.isArray(s.officers)||!s.officers.every(o=>Number.isInteger(o.id)&&str(o.name)&&str(o.specialty)&&num(o.skill,0,1)&&num(o.salary))||!Array.isArray(s.vehicles)||s.vehicles.length>6||!s.vehicles.every(v=>Number.isInteger(v.id)&&str(v.name))||!Array.isArray(s.candidates)||!s.candidates.every(c=>Number.isInteger(c.id)&&str(c.name)&&str(c.specialty)&&num(c.skill,0,1)&&num(c.fee)&&num(c.salary))||!['nextOfficerId','nextVehicleId','nextUnitId'].every(k=>Number.isInteger(s[k])&&s[k]>0)||typeof s.setupPending!=='boolean'||new Set(usedOfficers).size!==usedOfficers.length||new Set(usedVehicles).size!==usedVehicles.length||!s.units.every(u=>Array.isArray(u.officerIds)&&u.officerIds.length>=1&&u.officerIds.length<=2&&u.officerIds.length===u.people.length&&u.officerIds.every(id=>s.officers.some(o=>o.id===id))&&s.vehicles.some(v=>v.id===u.vehicleId)&&num(u.skill,0,1)))throw Error('Повреждены данные отделения');
+@@ -186,3 +189,13 @@
+ 
+ // Weather of the current shift: derived (not stored), so old saves and the random stream are unchanged.
+ export const shiftWeather=s=>weatherFor(7182,s.shift);
++
++// 0.7.0 v1 custody cycle: patrol -> transporting (to HQ) -> handover (timer) -> patrol with report.
++function assignCustody(s,i){if(!custodyFor(i.variant,i.decision))return;const u=s.units.find(x=>i.units.includes(x.id));if(!u||u.transport)return;u.transport={from:i.id,label:callName(i),district:districtOf(i)};}
++function tickCustody(s,u,dt){
++ if(u.status==='patrol'&&u.transport&&!u.foot&&u.incident===null){u.status='transporting';routeTo(u,HQ);log(s,`${u.name}: задержанный в машине, везём в участок (вызов №${u.transport.from}).`);return true;}
++ if(u.status==='transporting'){if(!u.route.length){u.status='handover';u.handover=HANDOVER_TIME;log(s,`${u.name}: в участке, передаём задержанного дежурному.`);}return true;}
++ if(u.status==='handover'){u.handover-=dt;if(u.handover>0)return true;const t=u.transport;u.status='patrol';u.transport=null;delete u.handover;
++  s.trust=Math.min(100,s.trust+CUSTODY_REWARD.trust);const d=ensureDistricts(s);if(t&&d[t.district]!==undefined)d[t.district]=Math.min(100,d[t.district]+CUSTODY_REWARD.district);if(u.id===1||s.mode==='chief')s.xp+=CUSTODY_REWARD.xp;s.rank=Math.min(RANKS.length-1,Math.floor(s.xp/150));
++  log(s,`${u.name}: рапорт по вызову №${t?.from} составлен, дело передано. Возвращаемся к патрулю.`);return true;}
++ return false;}
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -29,7 +29,7 @@
+ function diagnosticPanel(){const report=diagnostics.report();modal(`<h2>Диагностика</h2><label><input id="diagEnabled" type="checkbox"> Показывать FPS и вести журнал</label><p>FPS — частота кадров. P95 — длительность, в которую укладываются 95% последних кадров. Журнал локальный: ошибки, задержки, скорость и настройки. Данные автоматически никуда не отправляются; после перезагрузки журнал очищается.</p><pre id="diagSummary"></pre><button id="diagExport">Скачать отчёт JSON</button><button id="diagClear">Очистить журнал диагностики</button><p>Для замера закройте меню и поиграйте. Отчёт содержит до 240 кадров статистики и 120 событий, без копии кампании. Дополнительно — до 60 задержек браузера, если браузер поддерживает такой замер. Это не время GPU.</p>`);$('diagEnabled').checked=diagnostics.enabled();$('diagSummary').textContent=JSON.stringify(report.metrics,null,2)+'\nПокрытие: '+coverage.region+' / '+coverage.place+' · '+coverage.world.maxX+' × '+coverage.world.maxY+'\nКарта и перекрытия: '+JSON.stringify(Object.fromEntries(Object.entries(report.context).filter(([key])=>key.startsWith('occlusion')||key.startsWith('background'))),null,2)+'\nЗадержки браузера: '+report.browser.mode+' · '+report.browser.samples.length+'\nСобытий: '+report.events.length;$('diagEnabled').onchange=()=>{diagnostics.setEnabled($('diagEnabled').checked);fpsHud.hidden=!diagnostics.enabled();fpsHud.textContent='FPS · сбор данных…';try{localStorage.setItem('mercury-diagnostics',diagnostics.enabled()?'on':'off');}catch{}};$('diagExport').onclick=()=>{const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(diagnostics.report(),null,2)],{type:'application/json'}));a.href=url;a.download='mercury-diagnostics-0.6.0-b.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};$('diagClear').onclick=()=>{diagnostics.clear();$('diagSummary').textContent='Журнал очищен';};}
+ let loading={state:null};try{loading=loadGame(localStorage);if(loading.state){state=loading.state;hadSave=true;}}catch{loading.unavailable=true;}
+ let savedAudio=null;try{savedAudio=localStorage.getItem(AUDIO_KEY);}catch{}const audio=createAudio({preferences:audioPreferences(savedAudio)});
+-const status={patrol:'Патрулирование',idle:'Свободен',responding:'На вызов',decision:'Нужно решение',working:'На месте',returning:'В участок',resting:'Отдых'};
++const status={patrol:'Патрулирование',idle:'Свободен',responding:'На вызов',decision:'Нужно решение',working:'На месте',returning:'В участок',resting:'Отдых',transporting:'Доставка',handover:'Передача'};
+ $('loadingScreen').hidden=true;
+ const renderer=createRenderer($('map'),hit=>{if(hit.kind==='resident'){selectedResident=hit.id;residentsPanel(hit.id);return;}if(hit.kind==='unit'){selectedUnit=hit.id;setTab('units');}else{selectedCall=hit.id;setTab('calls');}refresh(true);},{maxSurfacePixels:/Android|MercuryResponseAndroid/i.test(navigator.userAgent)?2000000:Infinity});
+ const locationCache=new WeakMap();function locationLabel(p){const cached=locationCache.get(p);if(cached&&cached.x===p.x&&cached.y===p.y)return cached.label;const road=nearestRoad(p),label=road.name==='Местная улица'?nearest(p).name:road.name;locationCache.set(p,{x:p.x,y:p.y,label});return label;}
+--- /dev/null
++++ b/tests/custody.test.mjs
+@@ -0,0 +1,40 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,spawnIncident,tick,serialize,deserialize,nextShift,unitReason,assign,HQ,districtTrust} from '../dist/sim.js';
++import {custodyFor,CUSTODY,variantById,HANDOVER_TIME} from '../dist/calls.js';
++import {NODES} from '../dist/geography.js';
++// 0.7.0 v1: detention -> transport to station -> handover -> report.
++
++test('custody rules reference real variants and only arrest-type decisions',()=>{
++ for(const [id,decisions] of Object.entries(CUSTODY)){assert.ok(variantById(id),id);for(const d of decisions)assert.ok(variantById(id).type!==undefined&&typeof d==='string');}
++ assert.equal(custodyFor('domestic','talk'),true);assert.equal(custodyFor('noise-flat','talk'),false);assert.equal(custodyFor('drunk-driver','observe'),false);
++});
++
++function solve(seedVariant){
++ // Let an automatic crew resolve one call of the given variant; return state and incident.
++ for(let seed=1;seed<60;seed++){const s=createGame();s.seed=seed;s.nextIncident=9000;const anchor=NODES[(seed*7)%NODES.length];
++  const i=spawnIncident(s,null,{variant:seedVariant,point:{x:anchor.x,y:anchor.y}});
++  for(let k=0;k<6000&&!['resolved','missed'].includes(i.state);k++)tick(s,.1);
++  if(i.state==='resolved'&&custodyFor(i.variant,i.decision))return {s,i};}
++ return null;
++}
++
++test('a resolved arrest call sends one crew to the station, hands over and returns with a report',()=>{
++ const r=solve('street-fight');assert.ok(r,'some seed resolves the fight with an arrest decision');const {s,i}=r;
++ const u=s.units.find(x=>x.transport?.from===i.id||x.status==='transporting'||x.status==='handover');assert.ok(u,'a crew took the detainee');
++ for(let k=0;k<4000&&u.status!=='transporting';k++)tick(s,.1);assert.equal(u.status,'transporting');assert.match(unitReason(s,u),/Везём задержанного/);
++ const trust=s.trust,districtId=u.transport.district,district=districtTrust(s,districtId),xp=s.xp;
++ for(let k=0;k<8000&&u.status==='transporting';k++)tick(s,.1);assert.equal(u.status,'handover');assert.ok(Math.hypot(u.x-HQ.x,u.y-HQ.y)<.02);
++ // A crew in custody duty is not dispatched elsewhere.
++ const other=spawnIncident(s,4);assert.equal(assign(s,u.id,other.id,true),false);
++ for(let k=0;k<HANDOVER_TIME*10+20&&u.status==='handover';k++)tick(s,.1);
++ assert.equal(u.status,'patrol');assert.equal(u.transport,null);assert.ok(s.trust>=trust);assert.ok(districtTrust(s,districtId)>district||district>=100);assert.ok(s.xp>xp);
++ assert.match(s.logs.map(l=>l.text).join('\n'),/рапорт по вызову №/);
++});
++
++test('custody state survives save/load and is closed at shift change',()=>{
++ const r=solve('domestic');assert.ok(r);const {s}=r;const u=s.units.find(x=>x.transport);if(!u)return;
++ for(let k=0;k<4000&&u.status!=='transporting';k++)tick(s,.1);
++ const n=deserialize(serialize(s));const nu=n.units.find(x=>x.id===u.id);assert.equal(nu.status,u.status);assert.deepEqual(nu.transport,u.transport);
++ s.ended=true;const next=nextShift(s);const after=next.units.find(x=>x.id===u.id);assert.equal(after.status,'patrol');assert.equal(after.transport,undefined);assert.ok(next.trust>=Math.min(100,s.trust+1)||s.trust>=100);
++ const bad=JSON.parse(serialize(s));bad.units.find(x=>x.id===u.id).transport={from:'x'};assert.throws(()=>deserialize(JSON.stringify(bad)));
++});
