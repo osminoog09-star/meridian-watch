@@ -1,0 +1,209 @@
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -1,3 +1,4 @@
++import {POLICIES,POLICY_IDS,PRIORITY_RULES,policyCost} from './policy.js';
+ import {callSpecialty,DISTRICT_IDS,WEATHER,CUSTODY_CHOICES,canChooseCustody,custodyDecision} from './calls.js';
+ import {shiftDebrief} from './debrief.js';
+ import {createDeviceTest,formatDeviceReport} from './device-test.js';
+@@ -19,7 +20,7 @@
+ import {residentProfile,residentPosition,PLACES,RESIDENT_STATUS,populationSummary,cityMinute,formatMinute} from './population.js';
+ import {PHASES,sceneAnchor} from './scenes.js';
+ import {nearest,nearestRoad} from './geography.js';
+-import {createGame,tick,assign,decide,rest,nextShift,serialize,deserialize,TYPES,RANKS,canControl,controlReason,setUnitAutomation,configurePatrolArea,log,zone,hireOfficer,buyVehicle,createPatrol,disbandPatrol,callName,callBrief,districtOf,districtTrust,shiftWeather,setCustodyChoice,serviceStatus,canRedirect,unitFitsCall,changeCrew,crewChangeReason,reserveOfficers,shiftCost,configureVehicle,PAINTS,financialSummary,unitReason} from './sim.js';
++import {setPolicy,setPriorityDistrict,createGame,tick,assign,decide,rest,nextShift,serialize,deserialize,TYPES,RANKS,canControl,controlReason,setUnitAutomation,configurePatrolArea,log,zone,hireOfficer,buyVehicle,createPatrol,disbandPatrol,callName,callBrief,districtOf,districtTrust,shiftWeather,setCustodyChoice,serviceStatus,canRedirect,unitFitsCall,changeCrew,crewChangeReason,reserveOfficers,shiftCost,configureVehicle,PAINTS,financialSummary,unitReason} from './sim.js';
+ import {serviceSummary,CAREER_PERMISSIONS} from './career.js';
+ import {loadGame,saveGame} from './storage.js';
+ import {createRenderer} from './render.js';
+@@ -124,11 +125,16 @@
+  for(const id of u.officerIds){if($('swap-'+id))$('swap-'+id).onclick=()=>done(changeCrew(state,uid,id,$('swapIn-'+id).value));if($('drop-'+id))$('drop-'+id).onclick=()=>done(changeCrew(state,uid,id,null));}
+  if($('addBtn'))$('addBtn').onclick=()=>done(changeCrew(state,uid,null,$('addIn').value));
+ }
++// 0.6.2 department rules: one standing order + optional priority district (policy.js explains each).
++function rulesSection(){const cur=state.policy??'balanced',pri=state.priorityDistrict??'';
++ return `<section class="dept-section dept-rules"><h3>Правила отделения</h3><div class="rule-list">${POLICY_IDS.map(id=>`<button class="rule${cur===id?' active':''}" data-policy="${id}" aria-pressed="${cur===id}"><b>${escapeHtml(POLICIES[id].label)}</b><small>${escapeHtml(POLICIES[id].about)}</small></button>`).join('')}</div><label>Приоритетный район · +${PRIORITY_RULES.cost} за смену<select id="priorityDistrict"><option value="">Без приоритета</option>${DISTRICT_IDS.map(id=>`<option value="${id}"${pri===id?' selected':''}>${escapeHtml(districtName(id))} · доверие ${Math.round(districtTrust(state,id))}%</option>`).join('')}</select></label><p class="rule-hint">При равной срочности автоматические экипажи сначала берут вызовы в этом районе; успешный вызов там даёт +${PRIORITY_RULES.districtBonus} доверия района.</p></section>`;}
+ function department(){if(state.mode!=='chief')return;
+  const free=state.officers.filter(o=>!state.units.some(u=>u.officerIds.includes(o.id))),cars=state.vehicles.filter(v=>!state.units.some(u=>u.vehicleId===v.id));
+  const opts=free.map(o=>`<option value="${o.id}">${escapeHtml(o.name)} · ${Math.round(o.skill*100)}%</option>`).join('');
+- modal(`<span class="eyebrow">НАЧАЛЬНИК / ОТДЕЛЕНИЕ</span><h2>Ваша команда. Ваши решения.</h2><p>Бюджет: <b>${state.budget}</b> · Зарплаты и содержание за смену: <b>${shiftCost(state)}</b>.</p>${state.setupPending?'<p class="notice">Время остановлено до создания первого патруля. В гараже уже есть две базовые машины.</p>':''}<button id="patrolWizardBtn" class="primary">Сформировать патруль · пошагово</button><details class="dept-section"><summary>Быстрое назначение уже нанятых сотрудников</summary><p>Один сотрудник или пара + свободная машина. После создания экипаж работает самостоятельно.</p><label>Первый сотрудник<select id="officerA">${opts||'<option value="">Сначала наймите сотрудников</option>'}</select></label><label>Напарник (необязательно)<select id="officerB"><option value="0">Без напарника — одиночный патруль</option>${opts}</select></label><label>Машина<select id="patrolCar">${cars.map(v=>`<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('')||'<option value="">Нет свободных машин</option>'}</select></label><label>Зона<select id="patrolZone"><option value="all">Весь город</option><option value="west">Западная часть</option><option value="east">Восточная часть</option></select></label><button id="createPatrolBtn" class="primary" ${free.length<1||!cars.length||state.ended?'disabled':''}>Создать автономный патруль</button></details><div class="dept-section"><h3>Сотрудники · ${state.officers.length}</h3>${state.officers.map(o=>`<div class="person-row"><canvas id="officer-art-${o.id}" class="officer-art" width="90" height="136" aria-label="Модель сотрудника"></canvas><strong>${escapeHtml(o.name)}</strong><small>${escapeHtml(o.specialty)} · навык ${Math.round(o.skill*100)}% · усталость ${Math.round(o.fatigue)}% · зарплата ${o.salary}/смена</small><span>${escapeHtml(state.units.find(u=>u.officerIds.includes(o.id))?.name??'Свободен · резерв')}</span></div>`).join('')||'<p>Вы ещё никого не наняли.</p>'}</div><div class="dept-section"><h3>Кандидаты</h3><p>Оплата найма разовая. Зарплата списывается при переходе к новой смене. Навык влияет на скорость работы.</p>${state.candidates.map(c=>`<div class="person-row"><strong>${escapeHtml(c.name)}</strong><small>${escapeHtml(c.specialty)} · навык ${Math.round(c.skill*100)}% · зарплата ${c.salary}/смена</small><button id="hire-${c.id}" ${state.budget<c.fee||state.ended?'disabled':''}>Нанять · ${c.fee}</button></div>`).join('')||'<p>Все кандидаты рассмотрены.</p>'}</div><div class="dept-section"><h3>Автопарк · ${state.vehicles.length}/6</h3><div id="fleetRows"></div><label>Модель<select id="buyCarType"><option value="sedan">Седан · 800 · быстрее в городе</option><option value="suv">Внедорожник · 1200 · крупнее, медленнее</option></select></label><button id="buyCarBtn" ${state.budget<800||state.vehicles.length>=6||state.ended?'disabled':''}>Купить выбранную машину</button></div><div class="modal-actions"><button id="backToCity" class="primary">Вернуться в город</button></div>`);
++ modal(`<span class="eyebrow">НАЧАЛЬНИК / ОТДЕЛЕНИЕ</span><h2>Ваша команда. Ваши решения.</h2><p>Бюджет: <b>${state.budget}</b> · Зарплаты и содержание за смену: <b>${shiftCost(state)}</b>${policyCost(state)?` (в т.ч. правила отделения: ${policyCost(state)})`:''}.</p>${rulesSection()}${state.setupPending?'<p class="notice">Время остановлено до создания первого патруля. В гараже уже есть две базовые машины.</p>':''}<button id="patrolWizardBtn" class="primary">Сформировать патруль · пошагово</button><details class="dept-section"><summary>Быстрое назначение уже нанятых сотрудников</summary><p>Один сотрудник или пара + свободная машина. После создания экипаж работает самостоятельно.</p><label>Первый сотрудник<select id="officerA">${opts||'<option value="">Сначала наймите сотрудников</option>'}</select></label><label>Напарник (необязательно)<select id="officerB"><option value="0">Без напарника — одиночный патруль</option>${opts}</select></label><label>Машина<select id="patrolCar">${cars.map(v=>`<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('')||'<option value="">Нет свободных машин</option>'}</select></label><label>Зона<select id="patrolZone"><option value="all">Весь город</option><option value="west">Западная часть</option><option value="east">Восточная часть</option></select></label><button id="createPatrolBtn" class="primary" ${free.length<1||!cars.length||state.ended?'disabled':''}>Создать автономный патруль</button></details><div class="dept-section"><h3>Сотрудники · ${state.officers.length}</h3>${state.officers.map(o=>`<div class="person-row"><canvas id="officer-art-${o.id}" class="officer-art" width="90" height="136" aria-label="Модель сотрудника"></canvas><strong>${escapeHtml(o.name)}</strong><small>${escapeHtml(o.specialty)} · навык ${Math.round(o.skill*100)}% · усталость ${Math.round(o.fatigue)}% · зарплата ${o.salary}/смена</small><span>${escapeHtml(state.units.find(u=>u.officerIds.includes(o.id))?.name??'Свободен · резерв')}</span></div>`).join('')||'<p>Вы ещё никого не наняли.</p>'}</div><div class="dept-section"><h3>Кандидаты</h3><p>Оплата найма разовая. Зарплата списывается при переходе к новой смене. Навык влияет на скорость работы.</p>${state.candidates.map(c=>`<div class="person-row"><strong>${escapeHtml(c.name)}</strong><small>${escapeHtml(c.specialty)} · навык ${Math.round(c.skill*100)}% · зарплата ${c.salary}/смена</small><button id="hire-${c.id}" ${state.budget<c.fee||state.ended?'disabled':''}>Нанять · ${c.fee}</button></div>`).join('')||'<p>Все кандидаты рассмотрены.</p>'}</div><div class="dept-section"><h3>Автопарк · ${state.vehicles.length}/6</h3><div id="fleetRows"></div><label>Модель<select id="buyCarType"><option value="sedan">Седан · 800 · быстрее в городе</option><option value="suv">Внедорожник · 1200 · крупнее, медленнее</option></select></label><button id="buyCarBtn" ${state.budget<800||state.vehicles.length>=6||state.ended?'disabled':''}>Купить выбранную машину</button></div><div class="modal-actions"><button id="backToCity" class="primary">Вернуться в город</button></div>`);
+  $('patrolWizardBtn').onclick=()=>patrolWizard();
++ for(const b of document.querySelectorAll('[data-policy]'))b.onclick=()=>{if(setPolicy(state,b.dataset.policy)){toast(`Режим «${POLICIES[b.dataset.policy].label}»`);save();refresh(true);department();}};
++ $('priorityDistrict').onchange=e=>{if(setPriorityDistrict(state,e.target.value||null)){save();refresh(true);department();}};
+  $('officerA').value=String(free[0]?.id??'');$('officerB').value='0';$('patrolCar').value=String(cars[0]?.id??'');$('patrolZone').value='all';
+  for(const c of state.candidates)$('hire-'+c.id).onclick=()=>{const r=hireOfficer(state,c.id);toast(r.message);if(r.ok){save();refresh(true);department();}};
+  $('createPatrolBtn').onclick=()=>{const r=createPatrol(state,+$('officerA').value,+$('officerB').value,+$('patrolCar').value,$('patrolZone').value);toast(r.message);if(r.ok){selectedUnit=r.unitId;save();refresh(true);department();}};
+--- /dev/null
++++ b/dist/policy.js
+@@ -0,0 +1,17 @@
++// 0.6.2 «Правила отделения» (Claude, 11.10.2026). The chief picks one standing order and one priority
++// district. Each rule changes real behaviour (who is detained, how often trouble returns, which call
++// automatic crews take first, what the shift costs) and is explained in the department panel.
++// Career mode has no chief: rules stay at the default and nothing changes.
++import {DISTRICT_IDS} from './calls.js';
++export const POLICIES=Object.freeze({
++ balanced:Object.freeze({label:'Обычный порядок',about:'Экипажи решают по обстановке: задерживают при серьёзном нарушении, иначе отпускают с предупреждением. Без бонусов и доплат.',custody:null,followUp:1,cost:0,warnDistrict:0}),
++ strict:Object.freeze({label:'Нулевая терпимость',about:'Участников всех подходящих вызовов задерживают. Повторных вызовов меньше (×0.7), но экипажи дольше заняты перевозкой, а оформление стоит 120 за смену.',custody:'arrest',followUp:.7,cost:120,warnDistrict:0}),
++ prevention:Object.freeze({label:'Профилактика',about:'Участников отпускают с предупреждением: экипажи быстрее свободны, доверие района растёт (+1 за каждое предупреждение), но повторных вызовов больше (×1.3).',custody:'warn',followUp:1.3,cost:0,warnDistrict:1})
++});
++export const POLICY_IDS=Object.freeze(Object.keys(POLICIES));
++export const PRIORITY_RULES=Object.freeze({cost:60,districtBonus:1});
++const chief=s=>s?.mode==='chief';
++export const policyOf=s=>POLICIES[chief(s)&&Object.hasOwn(POLICIES,s.policy)?s.policy:'balanced'];
++export const priorityOf=s=>chief(s)&&DISTRICT_IDS.includes(s.priorityDistrict)?s.priorityDistrict:null;
++export function policyCost(s){if(!chief(s))return 0;return policyOf(s).cost+(priorityOf(s)?PRIORITY_RULES.cost:0);}
++export function validPolicy(s){return (s.policy===undefined||Object.hasOwn(POLICIES,s.policy))&&(s.priorityDistrict===undefined||s.priorityDistrict===null||DISTRICT_IDS.includes(s.priorityDistrict));}
+--- a/dist/sim.js
++++ b/dist/sim.js
+@@ -13,6 +13,7 @@
+ import {cityGrant} from './economy.js';
+ import {DISPATCH,callsign,serviceCallsign,radioText,pushRadio,validRadio} from './radio.js';
+ import {districtName} from './fiction.js';
++import {POLICIES,policyOf,priorityOf,policyCost,validPolicy,PRIORITY_RULES} from './policy.js';
+ export const SIZE=6;
+ export const HQ=point(byId('centre')); 
+ export const RANKS=['Стажёр','Патрульный','Старший сотрудник','Сержант','Руководитель смены'];
+@@ -54,7 +55,7 @@
+ export function configureVehicle(s,id,config){const v=s.vehicles.find(v=>v.id===id);if(s.mode!=='chief'||!v||s.ended)return {ok:false,message:'Настройка недоступна.'};const u=s.units.find(u=>u.vehicleId===id);if(u&&!['patrol','idle','resting'].includes(u.status))return {ok:false,message:'Дождитесь завершения вызова.'};if(typeof config.name!=='string'||config.name.trim().length<1||config.name.length>30||!Object.hasOwn(PAINTS,config.paint)||!['redblue','blue'].includes(config.lights)||!['base','aid','search'].includes(config.kit))return {ok:false,message:'Проверьте настройки машины.'};const price=config.kit!==(v.kit??'base')&&config.kit!=='base'?150:0;if(s.budget<price)return {ok:false,message:'Комплект стоит 150. Недостаточно бюджета.'};if(s.budget-price<hiringReserve(s))return {ok:false,message:'Сначала наймите хотя бы одного сотрудника.'};if(price)transact(s,-price,'equipment','Оснащение: '+v.name);Object.assign(v,{name:config.name.trim(),paint:config.paint,lights:config.lights,kit:config.kit});return {ok:true,message:price?'Машина настроена. Комплект: 150.':'Машина настроена'};}
+ export function createPatrol(s,first,second,vehicleId,area='all'){if(s.mode!=='chief'||s.ended)return {ok:false,message:'Создание патруля недоступно.'};const ids=second==null||second===0?[first]:[first,second];const people=ids.map(id=>s.officers.find(o=>o.id===id));if(new Set(ids).size!==ids.length||people.some(p=>!p))return {ok:false,message:'Выберите сотрудника и, при желании, другого напарника.'};if(s.units.some(u=>u.officerIds.some(id=>id===first||id===second)))return {ok:false,message:'Один из сотрудников уже в экипаже.'};if(!s.vehicles.some(v=>v.id===vehicleId)||s.units.some(u=>u.vehicleId===vehicleId))return {ok:false,message:'Выберите свободную машину.'};if(!['all','west','east'].includes(area))return {ok:false,message:'Выберите зону патруля.'};const id=s.nextUnitId++;s.units.push({id,name:'Патруль '+String(id).padStart(2,'0'),people:people.map(o=>o.name),officerIds:ids,vehicleId,role:'Создан начальником',x:HQ.x,y:HQ.y,route:[],status:'patrol',auto:true,zone:area,cross:area==='all',fatigue:0,skill:people.reduce((sum,o)=>sum+o.skill,0)/people.length,incident:null,work:0});syncCrew(s,s.units.at(-1));s.setupPending=false;log(s,`Патруль ${id} сформирован и приступает к службе.`);return {ok:true,message:'Патруль создан. Автомат включён.',unitId:id};}
+ export function disbandPatrol(s,id){const u=s.units.find(u=>u.id===id);if(s.mode!=='chief'||!u||!['patrol','idle','resting'].includes(u.status)||s.ended)return {ok:false,message:'Дождитесь завершения вызова или возвращения экипажа.'};s.units=s.units.filter(u=>u.id!==id);log(s,`Патруль ${id} расформирован. Сотрудники и машина свободны.`);return {ok:true,message:'Сотрудники и машина возвращены в резерв'};}
+-export function shiftCost(s){return s.mode==='chief'?s.officers.reduce((n,o)=>n+o.salary,0)+s.vehicles.length*30:240;}
++export function shiftCost(s){return s.mode==='chief'?s.officers.reduce((n,o)=>n+o.salary,0)+s.vehicles.length*30+policyCost(s):240;}
+ export function log(s,text){s.logs.unshift({time:s.time,text});s.logs=s.logs.slice(0,45);}
+ export function routeTo(u,p){u.route=roadRoute(u,p);}
+ // «Живые вызовы»: a random call picks a realistic variant by hour and kind of place (calls.js).
+@@ -81,7 +82,7 @@
+ export function rest(s,uid){const u=s.units.find(u=>u.id===uid);if(!u||s.ended||!canControl(s,u)||!['patrol','idle'].includes(u.status))return false;u.status='returning';routeTo(u,HQ);log(s,`${u.name}: возвращаемся на отдых.`);return true;}
+ function move(u,dt,s){advanceVehicle(u,dt,Math.min(patrolSpeed(u),u.trafficTargetKmh??Infinity),{obeyLimits:!urgentMovement(s,u)});}
+ function trafficItems(s){const items=[];for(const r of s.population?.residents??[])if(!['walkVisit','walkBack','visiting'].includes(r.status))items.push({entity:r,id:'resident-'+r.id,desired:30,emergency:false});for(const u of s.units)items.push({entity:u,id:'unit-'+u.id,desired:patrolSpeed(u),emergency:urgentMovement(s,u),blocking:!u.route.length&&['decision','working'].includes(u.status)});for(const i of s.incidents)if(i.type===5&&i.scene)for(const a of i.scene.participants)items.push({entity:a,id:'actor-'+a.id,desired:a.status==='fleeing'?40:15,emergency:false});return items;}
+-function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));if(success&&i.medical==='treated')s.trust=Math.min(100,s.trust+AMBULANCE.trustBonus);if(success&&i.rescue==='done')s.trust=Math.min(100,s.trust+RESCUE_TEAM.trustBonus);recordConsequences(s,i,success);recordCase(s,i,success,outcome);if(success)assignCustody(s,i);const rankBefore=s.rank;if(success){transact(s,110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=30;}s.rank=Math.min(RANKS.length-1,Math.floor(s.xp/150));if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
++function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));if(success&&i.medical==='treated')s.trust=Math.min(100,s.trust+AMBULANCE.trustBonus);if(success&&i.rescue==='done')s.trust=Math.min(100,s.trust+RESCUE_TEAM.trustBonus);if(success)applyPolicyCustody(s,i);recordConsequences(s,i,success);recordCase(s,i,success,outcome);if(success)assignCustody(s,i);const rankBefore=s.rank;if(success){transact(s,110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=30;}s.rank=Math.min(RANKS.length-1,Math.floor(s.xp/150));if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
+  for(const id of i.units){const u=s.units.find(u=>u.id===id);if(u&&!u.transport)radio(s,success?'clear':'failed',u,i);if(returnPoliceWalk(u))continue;u.incident=null;u.status='patrol';u.pursuing=false;u.route=u.route.length?[u.route[0]]:[];}
+  const text=success?`Вызов №${i.id} завершён. ${outcome}.`:`Вызов №${i.id}: ${outcome}. Доверие снизилось.`;log(s,text);s.history.unshift({id:i.id,name:callName(i),success,time:s.time,outcome});s.history=s.history.slice(0,50);}
+ export function tick(s,dt){if(s.ended||s.setupPending)return;s.time+=dt;s.nextIncident-=dt;
+@@ -98,7 +99,7 @@
+  if(u.status==='working'&&u.auto&&crewAtScene(u)){const i=s.incidents.find(i=>i.id===u.incident);if(i&&!i.decision){i.decision=autoChoice(i);explainChoice(i);recordAssessment(s,i,false);if(s.mode==='career'&&u.id===1)trainingEvent(s,'decision',i,false,i.decision);if(TYPES[i.type].severity===3){i.backupRequested=true;i.backupAt=s.time;radio(s,'backup',u,i);log(s,`${u.name}: держим дистанцию, запрашиваем второй экипаж.`);}else log(s,`${u.name}: ${i.scene.reason}`);}}
+ 
+  if(['patrol','idle'].includes(u.status)&&u.auto){if(crewNeedsRest(s,u)){u.status='returning';routeTo(u,HQ);continue;}
+- const candidates=s.incidents.filter(i=>i.state==='waiting'||(i.backupRequested&&i.units.length<2&&!i.units.includes(u.id))).filter(i=>u.cross||u.zone==='all'||zone(i)===u.zone).sort((a,b)=>TYPES[b.type].severity-TYPES[a.type].severity||Math.hypot(a.x-u.x,a.y-u.y)-Math.hypot(b.x-u.x,b.y-u.y));
++ const candidates=s.incidents.filter(i=>i.state==='waiting'||(i.backupRequested&&i.units.length<2&&!i.units.includes(u.id))).filter(i=>u.cross||u.zone==='all'||zone(i)===u.zone).sort((a,b)=>TYPES[b.type].severity-TYPES[a.type].severity||priorityRank(s,a)-priorityRank(s,b)||Math.hypot(a.x-u.x,a.y-u.y)-Math.hypot(b.x-u.x,b.y-u.y));
+  if(candidates.length)assign(s,u.id,candidates[0].id,true);
+  else if(!u.route.length){const places=NODES.filter(p=>u.zone==='all'||p.sector===u.zone);routeTo(u,places[Math.floor(rng(s)*places.length)]);}}
+  }
+@@ -116,7 +117,7 @@
+  if(support)transact(closed,support,'support','Антикризисная субсидия (упрощённая экономика)');
+  if(closed.mode==='chief'){const wages=closed.officers.reduce((n,o)=>n+o.salary,0);if(wages)transact(closed,-wages,'salary','Зарплаты за смену');if(closed.vehicles.length)transact(closed,-closed.vehicles.length*30,'maintenance','Содержание автопарка');}
+  else transact(closed,-cost,'maintenance','Содержание смены');
+- const n=createGame(s.mode,s.seed);n.shift=s.shift+1;n.xp=s.xp;n.rank=s.rank;n.budget=closed.budget;n.trust=s.trust;if(s.districts)n.districts={...s.districts};
++ const n=createGame(s.mode,s.seed);n.shift=s.shift+1;n.xp=s.xp;n.rank=s.rank;n.budget=closed.budget;n.trust=s.trust;if(s.districts)n.districts={...s.districts};if(s.policy)n.policy=s.policy;if(s.priorityDistrict)n.priorityDistrict=s.priorityDistrict;
+  n.incidents=s.incidents.filter(i=>!['resolved','missed'].includes(i.state)).map(i=>({...JSON.parse(JSON.stringify(i)),units:[...i.units],carriedFrom:i.carriedFrom??s.shift,...(i.backupAt!==undefined?{backupAt:i.backupAt-s.time}:{})}));
+  const activeIds=new Set(n.incidents.map(i=>i.id));
+  n.units=s.units.map(u=>activeIds.has(u.incident)||u.foot?{...u,people:[...u.people],officerIds:[...u.officerIds],route:u.route.map(p=>({...p})),...(u.foot?{foot:JSON.parse(JSON.stringify(u.foot))}:{})}:{...u,people:[...u.people],officerIds:[...u.officerIds],x:HQ.x,y:HQ.y,route:[],incident:null,status:'patrol',fatigue:8});
+@@ -182,8 +183,8 @@
+ // Read-only view for UI: never mutates the campaign.
+ export const districtTrust=(s,id)=>s.districts?.[id]??s.trust;
+ export function ensureDistricts(s){if(!s.districts)s.districts=Object.fromEntries(DISTRICT_IDS.map(id=>[id,s.trust]));if(!Array.isArray(s.followUps))s.followUps=[];return s.districts;}
+-function recordConsequences(s,i,success){const districts=ensureDistricts(s),d=districtOf(i);districts[d]=Math.max(0,Math.min(100,districts[d]+(success?DISTRICT_TRUST_STEP.success:DISTRICT_TRUST_STEP.failure)));
+- const rule=FOLLOW_UPS[i.variant];if(!rule||s.followUps.length>=12)return;const choice=success?custodyDecision(i):null,chance=Math.min(.9,followUpChance(i.variant,success,i.decision,districts[d])*(choice?CUSTODY_FOLLOW_UP[choice]:1));if(rng(s)>=chance)return;
++function recordConsequences(s,i,success){const districts=ensureDistricts(s),d=districtOf(i);districts[d]=Math.max(0,Math.min(100,districts[d]+(success?DISTRICT_TRUST_STEP.success+(priorityOf(s)===d?PRIORITY_RULES.districtBonus:0):DISTRICT_TRUST_STEP.failure)));
++ const rule=FOLLOW_UPS[i.variant];if(!rule||s.followUps.length>=12)return;const choice=success?custodyDecision(i):null,chance=Math.min(.9,followUpChance(i.variant,success,i.decision,districts[d])*(choice?CUSTODY_FOLLOW_UP[choice]:1)*policyOf(s).followUp);if(rng(s)>=chance)return;
+  const [a,b]=FOLLOW_UP_DELAY;s.followUps.push({at:s.time+a+rng(s)*(b-a),variant:rule.next,x:i.x,y:i.y,from:i.id,reason:rule.reason});}
+ function releaseFollowUps(s){if(!s.followUps?.length)return;const active=()=>s.incidents.filter(i=>!['resolved','missed'].includes(i.state)).length;for(const f of [...s.followUps]){if(s.time<f.at||active()>=6)continue;s.followUps=s.followUps.filter(x=>x!==f);const i=spawnIncident(s,null,{variant:f.variant,point:{x:f.x,y:f.y},followUp:{from:f.from,reason:f.reason}});log(s,`Диспетчер: повторный вызов №${i.id} — ${f.reason}`);}}
+ function validConsequences(s){const num=(x,min,max)=>Number.isFinite(x)&&x>=min&&x<=max;
+@@ -191,14 +192,14 @@
+  if(s.followUps!==undefined&&!(Array.isArray(s.followUps)&&s.followUps.length<=12&&s.followUps.every(f=>num(f.at,0,2000)&&variantById(f.variant)&&containsWorldPoint(f)&&Number.isInteger(f.from)&&typeof f.reason==='string'&&f.reason.length<200)))return false;
+  if(s.custodyDone!==undefined&&!(Number.isInteger(s.custodyDone)&&s.custodyDone>=0&&s.custodyDone<10000))return false;
+  if(!s.incidents.every(i=>(i.custodyChoice===undefined||Object.hasOwn(CUSTODY_CHOICES,i.custodyChoice))&&(i.medical===undefined||['called','treated'].includes(i.medical))&&(i.rescue===undefined||['called','working','done'].includes(i.rescue))))return false;
+- if(!validServices(s)||!validCases(s)||!validRadio(s))return false;
++ if(!validServices(s)||!validCases(s)||!validRadio(s)||!validPolicy(s))return false;
+  return s.incidents.every(i=>i.followUp===undefined||Number.isInteger(i.followUp.from)&&typeof i.followUp.reason==='string'&&i.followUp.reason.length<200);}
+ 
+ // Weather of the current shift: derived (not stored), so old saves and the random stream are unchanged.
+ export const shiftWeather=s=>weatherFor(7182,s.shift);
+ 
+ // 0.7.0 v1 custody cycle: patrol -> transporting (to HQ) -> handover (timer) -> patrol with report.
+-function assignCustody(s,i){const choice=custodyDecision(i);if(choice==='warn'){log(s,`Вызов №${i.id}: участников отпустили с предупреждением.`);return;}if(choice!=='arrest')return;const u=s.units.find(x=>i.units.includes(x.id));if(!u||u.transport)return;u.transport={from:i.id,label:callName(i),district:districtOf(i)};}
++function assignCustody(s,i){const choice=custodyDecision(i);if(choice==='warn'){const bonus=policyOf(s).warnDistrict;if(bonus){const d=ensureDistricts(s),id=districtOf(i);d[id]=Math.min(100,d[id]+bonus);}log(s,`Вызов №${i.id}: участников отпустили с предупреждением.`);return;}if(choice!=='arrest')return;const u=s.units.find(x=>i.units.includes(x.id));if(!u||u.transport)return;u.transport={from:i.id,label:callName(i),district:districtOf(i)};}
+ function tickCustody(s,u,dt){
+  if(u.status==='patrol'&&u.transport&&!u.foot&&u.incident===null){u.status='transporting';routeTo(u,HQ);radio(s,'transport',u,null);log(s,`${u.name}: задержанный в машине, везём в участок (вызов №${u.transport.from}).`);return true;}
+  if(u.status==='transporting'){if(!u.route.length){u.status='handover';u.handover=HANDOVER_TIME;log(s,`${u.name}: в участке, передаём задержанного дежурному.`);}return true;}
+@@ -243,6 +244,12 @@
+ function validServices(s){if(s.services===undefined)return true;const num=(x,min,max)=>Number.isFinite(x)&&x>=min&&x<=max;
+  return Array.isArray(s.services)&&s.services.length<=SERVICE_LIMIT&&(s.nextServiceId===undefined||Number.isInteger(s.nextServiceId))&&s.services.every(a=>Number.isInteger(a.id)&&(a.kind==='ambulance'?['responding','treating','transporting','handover']:a.kind==='rescue'?['responding','securing','working','returning']:[]).includes(a.status)&&Number.isInteger(a.incident)&&num(a.timer,-1000,1000)&&containsWorldPoint(a)&&Array.isArray(a.route)&&a.route.length<3000&&a.route.every(p=>containsWorldPoint(p)));}
+ 
++// 0.6.2 department rules (policy.js): standing order and priority district, chief mode only.
++const priorityRank=(s,i)=>{const p=priorityOf(s);return p&&districtOf(i)===p?0:1;};
++function applyPolicyCustody(s,i){const rule=policyOf(s).custody;if(rule&&canChooseCustody(i.variant)&&i.custodyChoice===undefined)i.custodyChoice=rule;}
++export function setPolicy(s,id){if(s.mode!=='chief'||s.ended||!Object.hasOwn(POLICIES,id)||(s.policy??'balanced')===id)return false;s.policy=id;log(s,`Начальник: введён режим «${POLICIES[id].label}».`);return true;}
++export function setPriorityDistrict(s,id){if(s.mode!=='chief'||s.ended)return false;const next=DISTRICT_IDS.includes(id)?id:null;if((s.priorityDistrict??null)===next)return false;s.priorityDistrict=next;log(s,next?`Начальник: приоритет патрулирования — район ${districtName(next)}.`:'Начальник: приоритет районов снят.');return true;}
++
+ // Radio exchange (templates, deterministic wording).
+ const lower=x=>x?x[0].toLocaleLowerCase('ru')+x.slice(1):x;
+ function radio(s,kind,u,i,from=callsign(u)){pushRadio(s,from,radioText(kind,i?.id??0,u?.id??0,callsign(u),i?{call:lower(callName(i)),place:districtName(districtOf(i),'город')}:{}));}
+--- a/dist/style.css
++++ b/dist/style.css
+@@ -46,3 +46,4 @@
+ .cases{display:grid;gap:8px;margin-bottom:12px}.case{border:1px solid #2f4b52;border-left:3px solid #6fd3b4;border-radius:8px;padding:8px 10px;background:#12262c}.case.bad{border-left-color:#e7907c}.case-top{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}.case-top small{color:var(--muted)}.case p{margin:4px 0;font-size:13px}.case .chip{display:inline-block;font-size:11px;padding:2px 7px;margin:2px 4px 0 0;border-radius:10px;background:#1d3a42;color:#cfe8e0}
+ .call-ambulance{color:#ffd5d0}.call-rescue{color:#ffcf9e}
+ .radio-log{margin-bottom:12px}.radio-log b{color:var(--cyan);font-weight:600}
++.rule-list{display:grid;gap:8px}.rule{display:block;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#12262c}.rule b{display:block;font-size:13px}.rule small{display:block;color:#b8c8d2;margin-top:4px;font-size:11px;line-height:1.4}.rule.active{border-color:var(--cyan);box-shadow:inset 3px 0 0 var(--cyan)}.rule-hint{font-size:11px;color:var(--muted);margin:4px 0 0}
+--- /dev/null
++++ b/tests/policy.test.mjs
+@@ -0,0 +1,58 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,hireOfficer,createPatrol,tick,nextShift,shiftCost,serialize,deserialize,spawnIncident,setPolicy,setPriorityDistrict,districtOf,districtTrust} from '../dist/sim.js';
++import {POLICIES,POLICY_IDS,PRIORITY_RULES,policyOf,priorityOf,policyCost} from '../dist/policy.js';
++import {custodyDecision,DISTRICT_IDS} from '../dist/calls.js';
++import {NODES} from '../dist/geography.js';
++// 0.6.2 «Правила отделения»: standing order + priority district change real behaviour (chief only).
++
++function hire(s,id){assert.equal(hireOfficer(s,id).ok,true);return s.officers.at(-1).id;}
++function ready(){const s=createGame('chief');const a=hire(s,1),b=hire(s,2);assert.equal(createPatrol(s,a,b,1).ok,true);s.nextIncident=9000;return s;}
++
++test('rules exist, are described and only the chief can change them',()=>{
++ for(const id of POLICY_IDS){assert.ok(POLICIES[id].label&&POLICIES[id].about.length>40);}
++ const career=createGame();assert.equal(setPolicy(career,'strict'),false);assert.equal(setPriorityDistrict(career,DISTRICT_IDS[0]),false);
++ career.policy='strict';assert.equal(policyOf(career),POLICIES.balanced,'career ignores a stray policy');assert.equal(policyCost(career),0);
++ const s=ready();assert.equal(setPolicy(s,'nope'),false);assert.equal(setPolicy(s,'balanced'),false,'already active');
++ assert.equal(setPolicy(s,'strict'),true);assert.equal(s.policy,'strict');assert.match(s.logs[0].text,/Нулевая терпимость/);
++});
++
++test('rules change the shift cost and carry into the next shift',()=>{
++ const s=ready(),base=shiftCost(s);setPolicy(s,'strict');assert.equal(shiftCost(s),base+POLICIES.strict.cost);
++ setPriorityDistrict(s,DISTRICT_IDS[1]);assert.equal(shiftCost(s),base+POLICIES.strict.cost+PRIORITY_RULES.cost);
++ setPriorityDistrict(s,'');assert.equal(priorityOf(s),null);assert.equal(shiftCost(s),base+POLICIES.strict.cost);
++ setPriorityDistrict(s,DISTRICT_IDS[2]);s.ended=true;const n=nextShift(s);assert.equal(n.policy,'strict');assert.equal(n.priorityDistrict,DISTRICT_IDS[2]);
++});
++
++function resolve(policy,variant='noise-flat'){
++ for(let seed=1;seed<60;seed++){const s=ready();s.seed=seed;if(policy)setPolicy(s,policy);const n=NODES[(seed*13)%NODES.length];
++  const i=spawnIncident(s,null,{variant,point:{x:n.x,y:n.y}});for(let k=0;k<8000&&!['resolved','missed'].includes(i.state);k++)tick(s,.1);
++  if(i.state==='resolved')return {s,i};}
++ return null;
++}
++
++test('standing order decides detention when no explicit choice was made',()=>{
++ const strict=resolve('strict','noise-venue');assert.ok(strict);assert.equal(custodyDecision(strict.i),'arrest');
++ const soft=resolve('prevention','street-fight');assert.ok(soft);assert.equal(custodyDecision(soft.i),'warn');
++ assert.ok(!soft.s.units.some(u=>u.transport),'warned participants are not transported');
++});
++
++test('prevention raises district trust on warnings; priority district gets crews first and extra trust',()=>{
++ const run=(seed,policy)=>{const s=ready();s.seed=seed;setPolicy(s,policy);const n=NODES[(seed*13)%NODES.length];const i=spawnIncident(s,null,{variant:'shoplift',point:{x:n.x,y:n.y}});i.custodyChoice='warn';
++  for(let k=0;k<8000&&!['resolved','missed'].includes(i.state);k++)tick(s,.1);return {s,i};};
++ let checked=false;for(let seed=1;seed<40&&!checked;seed++){const a=run(seed,'balanced'),b=run(seed,'prevention');if(a.i.state!=='resolved'||b.i.state!=='resolved')continue;const d=districtOf(b.i);
++  if(districtTrust(b.s,d)>=100)continue;assert.equal(districtTrust(b.s,d),Math.min(100,districtTrust(a.s,d)+POLICIES.prevention.warnDistrict));checked=true;}
++ assert.ok(checked,'found a resolved warning to compare');
++ // Dispatch preference: two equal calls, the one in the priority district is taken first.
++ const s=ready();const u=s.units[0];const byDist=[...NODES].sort((x,y)=>Math.hypot(x.x-u.x,x.y-u.y)-Math.hypot(y.x-u.x,y.y-u.y));
++ const i1=spawnIncident(s,null,{variant:'blocked-exit',point:byDist[0]}),i2=spawnIncident(s,null,{variant:'blocked-exit',point:byDist.at(-1)});
++ assert.notEqual(districtOf(i1),districtOf(i2));setPriorityDistrict(s,districtOf(i2));
++ for(let k=0;k<50&&u.incident==null;k++)tick(s,.1);assert.equal(u.incident,i2.id,'priority district first at equal severity');assert.notEqual(u.incident,i1.id);
++});
++
++test('rules survive save/load and broken values are rejected',()=>{
++ const s=ready();setPolicy(s,'prevention');setPriorityDistrict(s,DISTRICT_IDS[0]);
++ const n=deserialize(serialize(s));assert.equal(n.policy,'prevention');assert.equal(n.priorityDistrict,DISTRICT_IDS[0]);
++ const bad=JSON.parse(serialize(s));bad.policy='martial';assert.throws(()=>deserialize(JSON.stringify(bad)));
++ const bad2=JSON.parse(serialize(s));bad2.priorityDistrict='moon';assert.throws(()=>deserialize(JSON.stringify(bad2)));
++ const old=JSON.parse(serialize(s));delete old.policy;delete old.priorityDistrict;assert.doesNotThrow(()=>deserialize(JSON.stringify(old)));
++});

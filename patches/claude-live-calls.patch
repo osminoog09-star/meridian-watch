@@ -1,0 +1,227 @@
+--- /dev/null
++++ b/dist/calls.js
+@@ -0,0 +1,59 @@
++// «Живые вызовы» v1 (Claude, 11.10.2026). Realistic call variants on top of the six existing
++// call mechanics: TYPES indices, scenes, decisions, assessment and saves keep working unchanged;
++// an incident only gains a `variant` id that changes its shown name, brief, timing and place.
++// Mix roughly follows Estonian police call categories (public order ~31%, traffic ~19%,
++// violence ~14%; ERR/PPA) and typical night calls: alcohol, noise, traffic, family disputes.
++import {SPECIALTIES,specialtyFor} from './professional.js';
++
++// hours: when the call is most likely; place: preferred kind of location.
++export const VARIANTS=Object.freeze([
++ // 0 — public order (talk / check)
++ {id:'noise-venue',type:0,name:'Шум у заведения',brief:'Посетители спорят у входа. Заявитель просит восстановить порядок.',hours:'night',place:'centre',w:3},
++ {id:'noise-flat',type:0,name:'Громкая музыка в квартире',brief:'Соседи жалуются на музыку после 23:00. Хозяин квартиры открывает не сразу.',hours:'night',place:'residential',w:4},
++ {id:'drunk-person',type:0,name:'Человек в опьянении на остановке',brief:'Прохожий сообщает: мужчина в сильном опьянении сидит на остановке и не может уйти сам. Нужно убедиться, что ему не требуется помощь.',hours:'night',place:'road',w:4},
++ {id:'yard-company',type:0,name:'Шумная компания во дворе',brief:'Компания распивает алкоголь во дворе жилого дома. Жильцы просят приехать.',hours:'evening',place:'residential',w:2},
++ // 1 — traffic scene (secure / backup)
++ {id:'crash',type:1,name:'Дорожное происшествие',brief:'На перекрёстке столкнулись две машины. Нужно обезопасить место и проверить участников.',hours:'evening',place:'road',w:4},
++ {id:'animal-road',type:1,name:'Животное на дороге',brief:'Водитель сообщает о сбитой косуле на проезжей части. Нужно обезопасить место и предупредить других водителей.',hours:'night',place:'road',w:1},
++ {id:'blocked-exit',type:1,name:'Машина перекрыла проезд',brief:'Автомобиль брошен поперёк выезда, жильцы не могут уехать. Нужно обезопасить проезд и найти владельца.',hours:'day',place:'residential',w:1},
++ // 2 — search (talk / check)
++ {id:'missing-elder',type:2,name:'Пропал человек',brief:'Родственник потерял связь с пожилым человеком. Последний раз его видели у парка.',hours:'any',place:'any',w:2},
++ {id:'missing-child',type:2,name:'Ребёнок не вернулся домой',brief:'Мать сообщает: сын десяти лет не вернулся после тренировки, телефон не отвечает.',hours:'evening',place:'residential',w:1},
++ // 3 — theft (check / talk)
++ {id:'shoplift',type:3,name:'Кража в магазине',brief:'Охрана сообщает о краже. Участники находятся рядом с магазином.',hours:'day',place:'centre',w:3},
++ {id:'bike-theft',type:3,name:'Кража велосипеда',brief:'Владелец нашёл срезанный замок у подъезда. Свидетель видел, куда ушёл подозреваемый.',hours:'day',place:'residential',w:2},
++ {id:'car-break',type:3,name:'Взлом автомобиля',brief:'Сработала сигнализация, у машины разбито стекло. Свидетель ждёт рядом.',hours:'night',place:'residential',w:1},
++ // 4 — violence (talk / backup)
++ {id:'street-fight',type:4,name:'Конфликт на улице',brief:'Несколько человек конфликтуют. Обстановка напряжённая — рекомендуется подкрепление.',hours:'night',place:'centre',w:3},
++ {id:'domestic',type:4,name:'Семейный конфликт',brief:'Соседка слышит крики и звук разбитой посуды за стеной. Обстановка может быть опасной — рекомендуется второй экипаж.',hours:'night',place:'residential',w:3},
++ // 5 — vehicle (check / chase / observe)
++ {id:'vehicle-alert',type:5,name:'Проверка автомобиля',brief:'Поступила ориентировка на автомобиль. Проверьте водителя. Он может сотрудничать или попытаться уехать.',hours:'any',place:'road',w:2},
++ {id:'drunk-driver',type:5,name:'Возможно нетрезвый водитель',brief:'Водитель сообщает: машина впереди виляет по полосам. Номер известен.',hours:'night',place:'road',w:3},
++ {id:'dangerous-driving',type:5,name:'Опасная езда',brief:'Несколько звонков: машина сильно превышает скорость и обгоняет по встречной.',hours:'evening',place:'road',w:2},
++ {id:'no-licence',type:5,name:'Водитель без прав',brief:'Соседи сообщают: мужчина давно ездит без водительских прав, машина сейчас на ходу.',hours:'day',place:'residential',w:1}
++]);
++const byId=new Map(VARIANTS.map(v=>[v.id,v]));
++export const variantOf=i=>byId.get(i?.variant)??null;
++export const validVariant=i=>i.variant===undefined||byId.get(i.variant)?.type===i.type;
++// The first variant of each type is the original wording of that type.
++export const defaultVariant=type=>VARIANTS.find(v=>v.type===type)??null;
++
++export function hourBucket(minuteOfDay){const h=Math.floor(((minuteOfDay%1440)+1440)%1440/60);return h>=22||h<6?'night':h>=17?'evening':'day';}
++const ORDER=['day','evening','night'];
++function hourFactor(variant,bucket){if(variant.hours==='any')return 1;const d=Math.abs(ORDER.indexOf(variant.hours)-ORDER.indexOf(bucket));return d===0?2:d===1?1:.5;}
++export function variantWeights(minuteOfDay){const bucket=hourBucket(minuteOfDay);return VARIANTS.map(v=>v.w*hourFactor(v,bucket));}
++export function pickVariant(random,minuteOfDay){const weights=variantWeights(minuteOfDay),total=weights.reduce((a,b)=>a+b,0);let r=random*total;for(let k=0;k<VARIANTS.length;k++){r-=weights[k];if(r<0)return VARIANTS[k];}return VARIANTS.at(-1);}
++
++// Place preference among patrol targets. Falls back to every node when nothing matches.
++const ROAD_KINDS=new Set(['primary','secondary','tertiary','trunk','primary_link','secondary_link','tertiary_link']),HOME_KINDS=new Set(['residential','living_street','unclassified','service']);
++export function placeNodes(nodes,place,centre,centreRadius=.18){
++ const match=place==='centre'?n=>Math.hypot(n.x-centre.x,n.y-centre.y)<centreRadius:place==='road'?n=>ROAD_KINDS.has(n.kind):place==='residential'?n=>HOME_KINDS.has(n.kind):()=>true;
++ const list=nodes.filter(match);return list.length?list:nodes;
++}
++
++// Crew fit: an officer whose specialty matches the call works faster.
++export const FIT_BONUS=1.15;
++const SPECIALTY_KEYS=Object.freeze({'Переговоры':'negotiation','Поиск':'search','Дорожная полиция':'traffic','Вождение':'traffic','Проверка обстоятельств':'investigation'});
++export const officerSpecialtyKey=specialty=>SPECIALTY_KEYS[specialty]??null;
++export const callSpecialty=type=>({key:specialtyFor(type),label:SPECIALTIES[specialtyFor(type)]});
++export function crewFits(officers,type){const key=specialtyFor(type);return officers.some(o=>officerSpecialtyKey(o?.specialty)===key);}
+--- a/dist/sim.js
++++ b/dist/sim.js
+@@ -8,6 +8,8 @@
+ import {MAP_ID,NODES,byId,nearest,point,roadRoute,atNode,migrateMap} from './geography.js';
+ import {containsWorldPoint} from './city-coverage.js';
+ import {planTraffic} from './traffic.js';
++import {pickVariant,placeNodes,defaultVariant,variantOf,validVariant,crewFits,FIT_BONUS} from './calls.js';
++import {cityMinute} from './population.js';
+ export const SIZE=6;
+ export const HQ=point(byId('centre')); 
+ export const RANKS=['Стажёр','Патрульный','Старший сотрудник','Сержант','Руководитель смены'];
+@@ -52,22 +54,33 @@
+ export function shiftCost(s){return s.mode==='chief'?s.officers.reduce((n,o)=>n+o.salary,0)+s.vehicles.length*30:240;}
+ export function log(s,text){s.logs.unshift({time:s.time,text});s.logs=s.logs.slice(0,45);}
+ export function routeTo(u,p){u.route=roadRoute(u,p);}
+-export function spawnIncident(s,type){const t=type??Math.floor(rng(s)*TYPES.length);const i={id:s.nextId++,type:t,...point(NODES[Math.floor(rng(s)*NODES.length)]),age:0,state:'waiting',units:[],progress:0,decision:null,backupRequested:false};ensureScene(i);linkResident(s,i);s.incidents.push(i);log(s,`Диспетчер: ${TYPES[t].name}. Новый вызов №${i.id}.`);return i;}
++// «Живые вызовы»: a random call picks a realistic variant by hour and kind of place (calls.js).
++// An explicit type keeps the original wording and uniform location (tests, scripted calls).
++export function spawnIncident(s,type){let t=type,variant,node;if(t==null){variant=pickVariant(rng(s),cityMinute(s.population?.elapsed??s.time));t=variant.type;const nodes=placeNodes(NODES,variant.place,byId('centre'));node=nodes[Math.floor(rng(s)*nodes.length)];}else{variant=defaultVariant(t);node=NODES[Math.floor(rng(s)*NODES.length)];}const i={id:s.nextId++,type:t,variant:variant?.id,...point(node),age:0,state:'waiting',units:[],progress:0,decision:null,backupRequested:false};ensureScene(i);linkResident(s,i);s.incidents.push(i);log(s,`Диспетчер: ${callName(i)}. Новый вызов №${i.id}.`);return i;}
++export const callName=i=>variantOf(i)?.name??TYPES[i.type].name;
++export const callBrief=i=>variantOf(i)?.brief??TYPES[i.type].brief;
++// Redirect: a crew still driving to a call may be taken to a strictly more urgent one.
++export function canRedirect(s,u,i){if(!u||!i||u.status!=='responding'||u.incident===i.id||u.foot)return false;const current=s.incidents.find(x=>x.id===u.incident);return !current||TYPES[i.type].severity>TYPES[current.type].severity;}
++function detach(s,u){const old=s.incidents.find(x=>x.id===u.incident);if(old){old.units=old.units.filter(id=>id!==u.id);if(!old.units.length&&old.state==='assigned')old.state='waiting';log(s,`${u.name}: снят с вызова №${old.id} ради более срочного.`);}u.incident=null;u.status='patrol';u.route=u.route.length?[u.route[0]]:[];}
++function autoRedirect(s){for(const i of s.incidents){if(i.state!=='waiting'||TYPES[i.type].severity<3||i.age<1.5)continue;const options=s.units.filter(u=>u.auto&&canRedirect(s,u,i)&&(u.cross||u.zone==='all'||zone(i)===u.zone)).sort((a,b)=>Math.hypot(a.x-i.x,a.y-i.y)-Math.hypot(b.x-i.x,b.y-i.y));if(options.length)assign(s,options[0].id,i.id,true);}}
++function crewFit(s,u,type){const c=departmentIndex(s);return crewFits((u.officerIds??[]).map(id=>c.byOfficer.get(id)),type)?FIT_BONUS:1;}
++export function unitFitsCall(s,u,i){return !!u&&!!i&&crewFit(s,u,i.type)>1;}
+ export function canControl(s,u,action='command'){return careerPermission(s,u,action).ok;}
+ export function controlReason(s,u,action='command'){return careerPermission(s,u,action).reason;}
+ export function setUnitAutomation(s,uid,value){const u=s.units.find(u=>u.id===uid);if(!careerPermission(s,u,'command').ok||typeof value!=='boolean'||s.ended)return false;u.auto=value;log(s,`${u.name}: ${u.auto?'автономное патрулирование':'ручное управление'}.`);return true;}
+ export function configurePatrolArea(s,uid,zoneValue,crossValue){const u=s.units.find(u=>u.id===uid);if(!u||s.ended||!['all','west','east'].includes(zoneValue)||typeof crossValue!=='boolean')return false;if(!careerPermission(s,u,'zone').ok||crossValue!==u.cross&&!careerPermission(s,u,'cross').ok)return false;u.zone=zoneValue;u.cross=crossValue;if(u.status==='patrol')u.route=u.route.slice(0,1);log(s,`${u.name}: зона патруля изменена.`);return true;}
+-export function assign(s,uid,iid,system=false){const u=s.units.find(u=>u.id===uid),i=s.incidents.find(i=>i.id===iid);if(!u||!i||(!system&&!canControl(s,u))||s.ended||!['waiting','assigned','onscene'].includes(i.state)||!['patrol','idle'].includes(u.status))return false;
++export function assign(s,uid,iid,system=false){const u=s.units.find(u=>u.id===uid),i=s.incidents.find(i=>i.id===iid);if(!u||!i||(!system&&!canControl(s,u))||s.ended||!['waiting','assigned','onscene'].includes(i.state))return false;const redirect=canRedirect(s,u,i);if(!['patrol','idle'].includes(u.status)&&!redirect)return false;
+  if(i.units.length&&!i.backupRequested)return false;
++ if(redirect)detach(s,u);
+  u.incident=i.id;u.status='responding';i.units.push(uid);i.state=i.state==='waiting'?'assigned':i.state;routeTo(u,Math.hypot(u.x-i.x,u.y-i.y)<1e-7&&!u.route.length?i:walkAccess(i));if(s.mode==='career'&&u.id===1)trainingEvent(s,'accepted',i,!system);log(s,`${u.name}: принят вызов №${i.id}.`);return true;}
+ export function decide(s,uid,choice){const u=s.units.find(x=>x.id===uid),i=s.incidents.find(x=>x.id===u?.incident);if(!u||!i||!crewAtScene(u)||!['decision','working'].includes(u.status)||s.ended||!canControl(s,u)||!TYPES[i.type].options.some(o=>o[1]===choice))return false;
+  i.decision=choice;explainChoice(i);recordAssessment(s,i,true);if(s.mode==='career'&&u.id===1)trainingEvent(s,'decision',i,true,choice);if(choice==='backup'){i.backupRequested=true;i.backupAt=s.time;log(s,`${u.name}: запрашиваем подкрепление.`);}u.status='working';return true;}
+ export function rest(s,uid){const u=s.units.find(u=>u.id===uid);if(!u||s.ended||!canControl(s,u)||!['patrol','idle'].includes(u.status))return false;u.status='returning';routeTo(u,HQ);log(s,`${u.name}: возвращаемся на отдых.`);return true;}
+ function move(u,dt,s){advanceVehicle(u,dt,Math.min(patrolSpeed(u),u.trafficTargetKmh??Infinity),{obeyLimits:!urgentMovement(s,u)});}
+ function trafficItems(s){const items=[];for(const r of s.population?.residents??[])if(!['walkVisit','walkBack','visiting'].includes(r.status))items.push({entity:r,id:'resident-'+r.id,desired:30,emergency:false});for(const u of s.units)items.push({entity:u,id:'unit-'+u.id,desired:patrolSpeed(u),emergency:urgentMovement(s,u),blocking:!u.route.length&&['decision','working'].includes(u.status)});for(const i of s.incidents)if(i.type===5&&i.scene)for(const a of i.scene.participants)items.push({entity:a,id:'actor-'+a.id,desired:a.status==='fleeing'?40:15,emergency:false});return items;}
+-function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));const rankBefore=s.rank;if(success){transact(s,110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=30;}s.rank=Math.min(RANKS.length-1,Math.floor(s.xp/150));if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,TYPES[i.type].name,success,rankBefore);
++function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));const rankBefore=s.rank;if(success){transact(s,110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=30;}s.rank=Math.min(RANKS.length-1,Math.floor(s.xp/150));if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
+  for(const id of i.units){const u=s.units.find(u=>u.id===id);if(returnPoliceWalk(u))continue;u.incident=null;u.status='patrol';u.pursuing=false;u.route=u.route.length?[u.route[0]]:[];}
+- const text=success?`Вызов №${i.id} завершён. ${outcome}.`:`Вызов №${i.id}: ${outcome}. Доверие снизилось.`;log(s,text);s.history.unshift({id:i.id,name:TYPES[i.type].name,success,time:s.time,outcome});s.history=s.history.slice(0,50);}
++ const text=success?`Вызов №${i.id} завершён. ${outcome}.`:`Вызов №${i.id}: ${outcome}. Доверие снизилось.`;log(s,text);s.history.unshift({id:i.id,name:callName(i),success,time:s.time,outcome});s.history=s.history.slice(0,50);}
+ export function tick(s,dt){if(s.ended||s.setupPending)return;s.time+=dt;s.nextIncident-=dt;
+  if(s.nextIncident<=0&&s.incidents.filter(i=>!['resolved','missed'].includes(i.state)).length<6){spawnIncident(s);s.nextIncident=38+rng(s)*25;}
+  tickStaff(s,dt);planTraffic(trafficItems(s));tickPopulation(s,dt);prepareScenes(s,dt);
+@@ -83,9 +96,10 @@
+  if(candidates.length)assign(s,u.id,candidates[0].id,true);
+  else if(!u.route.length){const places=NODES.filter(p=>u.zone==='all'||p.sector===u.zone);routeTo(u,places[Math.floor(rng(s)*places.length)]);}}
+  }
++ autoRedirect(s);
+  for(const i of s.incidents){if(['resolved','missed'].includes(i.state))continue;i.age+=dt;const working=s.units.filter(u=>u.incident===i.id&&u.status==='working'&&crewAtScene(u));
+  const sceneResult=sceneStep(i,working,dt);if(sceneResult.failure){finish(s,i,false,sceneResult.failure);continue;}
+- if(working.length){if(!i.decision)i.decision='check';const multi=working.length>1?1.45:1;const caution=i.backupRequested&&working.length<2&&(s.time-(i.backupAt??s.time)<25)?.15:1;i.progress+=dt*sceneResult.rate*multi*caution*(1-working[0].fatigue*.004)*(.7+working[0].skill*.4+developmentBonus(s,i,working[0]))*((i.type===1&&working[0].kit==='aid')||(i.type===2&&working[0].kit==='search')?1.2:1);if(i.progress>=TYPES[i.type].duration){finish(s,i,true);continue;}}
++ if(working.length){if(!i.decision)i.decision='check';const multi=working.length>1?1.45:1;const caution=i.backupRequested&&working.length<2&&(s.time-(i.backupAt??s.time)<25)?.15:1;i.progress+=dt*sceneResult.rate*multi*caution*crewFit(s,working[0],i.type)*(1-working[0].fatigue*.004)*(.7+working[0].skill*.4+developmentBonus(s,i,working[0]))*((i.type===1&&working[0].kit==='aid')||(i.type===2&&working[0].kit==='search')?1.2:1);if(i.progress>=TYPES[i.type].duration){finish(s,i,true);continue;}}
+  if(i.age>TYPES[i.type].limit)finish(s,i,false);
+  }
+  s.incidents=s.incidents.filter(i=>!i.finished||s.time-i.finished<18);
+@@ -109,7 +123,7 @@
+ export function serialize(s){return JSON.stringify(s);}
+ export function deserialize(raw){
+  const s=JSON.parse(raw),num=(x,min=0,max=1e9)=>Number.isFinite(x)&&x>=min&&x<=max,str=x=>typeof x==='string'&&x.length<500,pointInMap=p=>s.mapId===MAP_ID?containsWorldPoint(p):p&&num(p.x,0,5)&&num(p.y,0,5);
+- const valid=s&&[1,2].includes(s.version)&&['career','chief'].includes(s.mode)&&num(s.seed,0,4294967295)&&num(s.time,0,480)&&s.shiftLength===480&&Number.isInteger(s.shift)&&s.shift>0&&Number.isInteger(s.rank)&&s.rank>=0&&s.rank<RANKS.length&&num(s.xp)&&num(s.budget)&&num(s.trust,0,100)&&num(s.resolved)&&num(s.missed)&&num(s.nextIncident,-1000,10000)&&Number.isInteger(s.nextId)&&typeof s.ended==='boolean'&&Array.isArray(s.units)&&s.units.length<=6&&new Set(s.units.map(u=>u.id)).size===s.units.length&&s.units.every((u,k)=>Number.isInteger(u.id)&&u.id>0&&str(u.name)&&Array.isArray(u.people)&&u.people.length>=1&&u.people.length<=2&&u.people.every(str)&&pointInMap(u)&&num(u.fatigue,0,100)&&(u.pursuing===undefined||typeof u.pursuing==='boolean')&&typeof u.auto==='boolean'&&typeof u.cross==='boolean'&&['all','west','east'].includes(u.zone)&&['patrol','idle','responding','decision','working','returning','resting'].includes(u.status)&&(u.incident===null||Number.isInteger(u.incident))&&Array.isArray(u.route)&&u.route.length<3000&&u.route.every(pointInMap))&&Array.isArray(s.incidents)&&s.incidents.length<30&&s.incidents.every(i=>Number.isInteger(i.id)&&Number.isInteger(i.type)&&TYPES[i.type]&&(s.mapId===MAP_ID?atNode(i):s.mapId==='parnumaa-1'?Number.isFinite(i.x)&&Number.isFinite(i.y):Number.isInteger(i.x)&&Number.isInteger(i.y))&&pointInMap(i)&&num(i.age)&&num(i.progress)&&['waiting','assigned','onscene','resolved','missed'].includes(i.state)&&Array.isArray(i.units)&&i.units.every(id=>Number.isInteger(id)&&id>0))&&Array.isArray(s.logs)&&s.logs.length<=45&&s.logs.every(l=>num(l.time)&&str(l.text))&&Array.isArray(s.history)&&s.history.length<=50&&s.history.every(h=>num(h.id)&&str(h.name)&&num(h.time)&&typeof h.success==='boolean');
++ const valid=s&&[1,2].includes(s.version)&&['career','chief'].includes(s.mode)&&num(s.seed,0,4294967295)&&num(s.time,0,480)&&s.shiftLength===480&&Number.isInteger(s.shift)&&s.shift>0&&Number.isInteger(s.rank)&&s.rank>=0&&s.rank<RANKS.length&&num(s.xp)&&num(s.budget)&&num(s.trust,0,100)&&num(s.resolved)&&num(s.missed)&&num(s.nextIncident,-1000,10000)&&Number.isInteger(s.nextId)&&typeof s.ended==='boolean'&&Array.isArray(s.units)&&s.units.length<=6&&new Set(s.units.map(u=>u.id)).size===s.units.length&&s.units.every((u,k)=>Number.isInteger(u.id)&&u.id>0&&str(u.name)&&Array.isArray(u.people)&&u.people.length>=1&&u.people.length<=2&&u.people.every(str)&&pointInMap(u)&&num(u.fatigue,0,100)&&(u.pursuing===undefined||typeof u.pursuing==='boolean')&&typeof u.auto==='boolean'&&typeof u.cross==='boolean'&&['all','west','east'].includes(u.zone)&&['patrol','idle','responding','decision','working','returning','resting'].includes(u.status)&&(u.incident===null||Number.isInteger(u.incident))&&Array.isArray(u.route)&&u.route.length<3000&&u.route.every(pointInMap))&&Array.isArray(s.incidents)&&s.incidents.length<30&&s.incidents.every(i=>Number.isInteger(i.id)&&Number.isInteger(i.type)&&TYPES[i.type]&&validVariant(i)&&(s.mapId===MAP_ID?atNode(i):s.mapId==='parnumaa-1'?Number.isFinite(i.x)&&Number.isFinite(i.y):Number.isInteger(i.x)&&Number.isInteger(i.y))&&pointInMap(i)&&num(i.age)&&num(i.progress)&&['waiting','assigned','onscene','resolved','missed'].includes(i.state)&&Array.isArray(i.units)&&i.units.every(id=>Number.isInteger(id)&&id>0))&&Array.isArray(s.logs)&&s.logs.length<=45&&s.logs.every(l=>num(l.time)&&str(l.text))&&Array.isArray(s.history)&&s.history.length<=50&&s.history.every(h=>num(h.id)&&str(h.name)&&num(h.time)&&typeof h.success==='boolean');
+  if(!valid||s.mapId&&!['parnumaa-1',MAP_ID].includes(s.mapId))throw Error('Несовместимое сохранение');ensureDepartment(s);for(const u of s.units)if(u.currentSpeedKmh!==undefined&&(!Number.isFinite(u.currentSpeedKmh)||u.currentSpeedKmh<0||u.currentSpeedKmh>200))u.currentSpeedKmh=0;
+  const usedOfficers=s.units.flatMap(u=>u.officerIds??[]),usedVehicles=s.units.map(u=>u.vehicleId);
+  if(!Array.isArray(s.officers)||!s.officers.every(o=>Number.isInteger(o.id)&&str(o.name)&&str(o.specialty)&&num(o.skill,0,1)&&num(o.salary))||!Array.isArray(s.vehicles)||s.vehicles.length>6||!s.vehicles.every(v=>Number.isInteger(v.id)&&str(v.name))||!Array.isArray(s.candidates)||!s.candidates.every(c=>Number.isInteger(c.id)&&str(c.name)&&str(c.specialty)&&num(c.skill,0,1)&&num(c.fee)&&num(c.salary))||!['nextOfficerId','nextVehicleId','nextUnitId'].every(k=>Number.isInteger(s[k])&&s[k]>0)||typeof s.setupPending!=='boolean'||new Set(usedOfficers).size!==usedOfficers.length||new Set(usedVehicles).size!==usedVehicles.length||!s.units.every(u=>Array.isArray(u.officerIds)&&u.officerIds.length>=1&&u.officerIds.length<=2&&u.officerIds.length===u.people.length&&u.officerIds.every(id=>s.officers.some(o=>o.id===id))&&s.vehicles.some(v=>v.id===u.vehicleId)&&num(u.skill,0,1)))throw Error('Повреждены данные отделения');
+--- a/dist/geography.js
++++ b/dist/geography.js
+@@ -24,7 +24,7 @@
+ 
+ const anchors=[['centre','Kesklinn',24.499,58.384],['ulejoe','Ülejõe',24.490,58.393],['raama','Rääma',24.526,58.407],['beach','Rannarajoon',24.500,58.375],['mai','Mai',24.538,58.374],['papiniidu','Papiniidu',24.552,58.383],['vana','Vana-Pärnu',24.468,58.391],['raekula','Raeküla',24.564,58.367]];
+ export const NODES=anchors.map(([id,name,lon,lat])=>({...point(nearestRoad(project(lon,lat))),id,name:districtName(id,name),sector:lon<24.5?'west':'east'}));
+-const names=new Set();for(const r of data.roads){if(!r.drive||!r.name||names.has(r.name))continue;const candidates=r.nodes.map(id=>graph.get(id)).filter(Boolean);if(!candidates.length)continue;names.add(r.name);const n=candidates[Math.floor(candidates.length/2)];NODES.push({...point(n),id:'street-'+r.id,name:streetName(r.name),sector:n.x<1.575?'west':'east'});}
++const names=new Set();for(const r of data.roads){if(!r.drive||!r.name||names.has(r.name))continue;const candidates=r.nodes.map(id=>graph.get(id)).filter(Boolean);if(!candidates.length)continue;names.add(r.name);const n=candidates[Math.floor(candidates.length/2)];NODES.push({...point(n),id:'street-'+r.id,name:streetName(r.name),kind:r.kind,sector:n.x<1.575?'west':'east'});}
+ export const byId=id=>NODES.find(n=>n.id===id);
+ export const nearest=p=>closest(p,NODES);
+ export const atNode=p=>ROAD_NODES.some(n=>Math.hypot(n.x-p.x,n.y-p.y)<1e-7);
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -1,3 +1,4 @@
++import {callSpecialty} from './calls.js';
+ import {patrolChoices,quotePatrol,confirmPatrol,PATROL_ZONES} from './patrol-planner.js';
+ import {createResolutionGovernor} from './resolution-governor.js';
+ import {createFramePacer} from './frame-pacer.js';
+@@ -14,7 +15,7 @@
+ import {residentProfile,residentPosition,PLACES,RESIDENT_STATUS,populationSummary,cityMinute,formatMinute} from './population.js';
+ import {PHASES,sceneAnchor} from './scenes.js';
+ import {nearest,nearestRoad} from './geography.js';
+-import {createGame,tick,assign,decide,rest,nextShift,serialize,deserialize,TYPES,RANKS,canControl,controlReason,setUnitAutomation,configurePatrolArea,log,zone,hireOfficer,buyVehicle,createPatrol,disbandPatrol,changeCrew,crewChangeReason,reserveOfficers,shiftCost,configureVehicle,PAINTS,financialSummary,unitReason} from './sim.js';
++import {createGame,tick,assign,decide,rest,nextShift,serialize,deserialize,TYPES,RANKS,canControl,controlReason,setUnitAutomation,configurePatrolArea,log,zone,hireOfficer,buyVehicle,createPatrol,disbandPatrol,callName,callBrief,canRedirect,unitFitsCall,changeCrew,crewChangeReason,reserveOfficers,shiftCost,configureVehicle,PAINTS,financialSummary,unitReason} from './sim.js';
+ import {serviceSummary,CAREER_PERMISSIONS} from './career.js';
+ import {loadGame,saveGame} from './storage.js';
+ import {createRenderer} from './render.js';
+@@ -50,9 +51,9 @@
+  const identityMarkup=`<span class="eyebrow">${state.mode==='career'?'ЛИЧНОЕ ДЕЛО / ВАША КАРЬЕРА':'УПРАВЛЕНИЕ ОТДЕЛЕНИЕМ'}</span><strong>${state.mode==='career'?RANKS[state.rank]:'Начальник смены'}</strong><p>${state.mode==='career'?'Напарник: Алексей Морозов':`${state.officers.length} сотрудников · ${state.vehicles.length} машин`}</p><div class="xpbar"><i style="width:${state.rank===4?100:state.xp%150/150*100}%"></i></div><small>${state.xp} опыта ${state.rank<4?'· до следующего звания '+(150-state.xp%150):'· высшая ступень прототипа'}</small>`;if($('identity').innerHTML!==identityMarkup)$('identity').innerHTML=identityMarkup;$('serviceBtn').hidden=state.mode!=='career';
+  if(showUnits)setHtml('units',state.units.map(u=>`<button class="unit ${u.id===selectedUnit?'selected':''}" data-unit="${u.id}"><div class="unit-top"><strong>${escapeHtml(u.name)}</strong><span class="status">${u.auto?'АВТО':'РУЧНОЙ'}</span></div><div class="people">${u.people.map(escapeHtml).join(' · ')}</div><small>${u.foot?({exit:'Выходят из машины',approach:'Пеший подход',onScene:status[u.status],return:'Возвращаются к машине',board:'Посадка'})[u.foot.phase]:status[u.status]} · ${escapeHtml(locationLabel(u))} · ${Number.isFinite(u.currentSpeedKmh)?Math.round(u.currentSpeedKmh):0} км/ч${Number.isFinite(u.roadLimitKmh)?' · лимит '+Math.round(u.roadLimitKmh)+(u.roadLimitSource==='osm'?' (знак)':' (игровой)'):''}${u.incident?' · №'+u.incident:''}</small><p class="unit-reason">${escapeHtml(unitReason(state,u))}${u.trafficReason?"<br>"+escapeHtml(u.trafficReason):""}</p><div class="fatigue">Усталость <div class="meter"><i style="width:${Math.round(u.fatigue)}%"></i></div>${Math.round(u.fatigue)}%</div></button>`).join('')||'<div class="empty">Создайте первый патруль<br>Наймите сотрудника и назначьте машину. Напарник — по желанию.</div>'); $('unitCount').textContent=state.units.length+' НА СМЕНЕ';$('departmentBtn').hidden=state.mode!=='chief';
+  const active=state.incidents.filter(i=>!['resolved','missed'].includes(i.state));if(selectedCall&&!active.find(i=>i.id===selectedCall))selectedCall=null;if(!selectedCall&&active.length)selectedCall=active[0].id;
+- $('callCount').textContent=active.length+' АКТИВНЫХ';if(showCalls)setHtml('calls',active.length?active.map(i=>{const t=TYPES[i.type];return `<button class="call ${selectedCall===i.id?'selected':''}" data-call="${i.id}"><div class="call-top"><span>${t.severity===3?'ВЫСОКИЙ':t.severity===2?'СРЕДНИЙ':'ОБЫЧНЫЙ'} ПРИОРИТЕТ</span><span>№${String(i.id).padStart(3,'0')}</span></div><strong>${t.name}</strong><small>${escapeHtml(locationLabel(sceneAnchor(i)))} · ${i.state==='waiting'?'Ожидает экипаж':i.state==='assigned'?'Экипаж в пути':'Экипаж на месте'}</small><div class="meter"><i style="width:${Math.max(0,Math.round(100-i.age/t.limit*100))}%"></i></div></button>`;}).join(''):'<div class="empty">В районе спокойно<br><small>Новые вызовы поступят по радио</small></div>');
++ $('callCount').textContent=active.length+' АКТИВНЫХ';if(showCalls)setHtml('calls',active.length?active.map(i=>{const t=TYPES[i.type];return `<button class="call ${selectedCall===i.id?'selected':''}" data-call="${i.id}"><div class="call-top"><span>${t.severity===3?'ВЫСОКИЙ':t.severity===2?'СРЕДНИЙ':'ОБЫЧНЫЙ'} ПРИОРИТЕТ</span><span>№${String(i.id).padStart(3,'0')}</span></div><strong>${escapeHtml(callName(i))}</strong><small>${escapeHtml(locationLabel(sceneAnchor(i)))} · ${i.state==='waiting'?'Ожидает экипаж':i.state==='assigned'?'Экипаж в пути':'Экипаж на месте'}</small><div class="meter"><i style="width:${Math.max(0,Math.round(100-i.age/t.limit*100))}%"></i></div></button>`;}).join(''):'<div class="empty">В районе спокойно<br><small>Новые вызовы поступят по радио</small></div>');
+  const u=state.units.find(x=>x.id===selectedUnit),i=active.find(x=>x.id===selectedCall),control=canControl(state,u);if(showUnits&&(full||settingsRank!==state.rank)){renderSettings(u,control);settingsRank=state.rank;}
+- if(showCalls){if(i){const t=TYPES[i.type],my=state.units.find(u=>u.incident===i.id&&['decision','working'].includes(u.status)&&crewAtScene(u)&&!u.auto&&canControl(state,u));setHtml('callDetail',`<div class="call-detail"><span class="eyebrow">КАРТОЧКА ПРОИСШЕСТВИЯ</span><h3>${t.name}</h3><p class="incident-location">Меридиан · ${escapeHtml(locationLabel(sceneAnchor(i)))}</p><button id="locateCallBtn">Показать вызов на карте ↗</button><p>${t.brief}</p>${i.scene?`<div class="scene-card"><strong>${PHASES[i.scene.phase]}</strong><p>${escapeHtml(i.scene.reason)}</p><small>Напряжение: ${Math.round(i.scene.tension)}%${i.type===2?' · Ориентировка: '+Math.round(i.scene.clues*100)+'%':''}</small>${i.scene.participants.map(a=>`<div class="scene-person"><b>${escapeHtml(a.name)}</b> · ${escapeHtml(a.role)}<small>${a.visible?escapeHtml(({waiting:'Ждёт',missing:'Разыскивается',found:'Найден',fleeing:'Уезжает',stopping:'Останавливается',stopped:'Остановлен',resolved:'Помощь завершена',left:'Ушёл'})[a.status]??a.status):'Местоположение пока неизвестно'}</small>${a.residentId?`<button id="callResident-${a.residentId}" data-resident-link="${a.residentId}">Карточка жителя ↗</button>`:''}</div>`).join('')}</div>`:''}${i.carriedFrom?`<p class="notice">Продолжается со смены ${i.carriedFrom}. Прогресс и оставшееся время сохранены.</p>`:''}<p>До закрытия: ${formatWorldDuration(t.limit-i.age)} · ${i.units.length?'Экипажи: '+i.units.map(id=>'0'+id).join(', '):'Экипаж не назначен'}</p>${my?`<p style="color:var(--cyan)">${escapeHtml(my.name)} · выберите или измените действие:</p>`+t.options.map(([label,value])=>`<button class="primary" data-decision="${value}" data-uid="${my.id}">${label}</button>`).join(''):`<button id="dispatchBtn" class="primary" ${!control||!['patrol','idle'].includes(u?.status)||(i.units.length&&!i.backupRequested)||state.ended?'disabled':''}>Направить ${u?escapeHtml(u.name.toLowerCase()):'патруль (сначала создайте экипаж)'}</button>${!control&&state.mode==='career'?`<p>${escapeHtml(controlReason(state,u))}</p>`:''}`}${i.progress>0?`<p>Выполнение: ${Math.min(100,Math.round(i.progress/t.duration*100))}%${i.backupRequested&&i.units.length<2?' · ждём подкрепление':''}</p>`:''}</div>`);document.querySelectorAll('[data-resident-link]').forEach(b=>b.onclick=()=>residentsPanel(Number(b.dataset.residentLink)));$('locateCallBtn').onclick=()=>{renderer.locate(sceneAnchor(i));setTab('map');};const b=$('dispatchBtn');if(b)b.onclick=()=>{if(assign(state,selectedUnit,i.id)){toast('Экипаж направлен на вызов');refresh(true);}else toast('Выберите свободный доступный экипаж');};}else setHtml('callDetail','');}if(showUnits&&u&&$('crewCondition')){const assessment=crewAssessment(state,u);const text=assessment.members.map(o=>o.name+' · '+o.role+' · усталость '+Math.round(o.fatigue)+'% · навык '+Math.round(o.skill*100)+'%').join('\n')+'\n'+assessment.explanation+'\nНавык состава: '+Math.round(assessment.skill*100)+'%. '+assessment.readiness;if($('crewCondition').textContent!==text)$('crewCondition').textContent=text;}
++ if(showCalls){if(i){const t=TYPES[i.type],my=state.units.find(u=>u.incident===i.id&&['decision','working'].includes(u.status)&&crewAtScene(u)&&!u.auto&&canControl(state,u));setHtml('callDetail',`<div class="call-detail"><span class="eyebrow">КАРТОЧКА ПРОИСШЕСТВИЯ</span><h3>${escapeHtml(callName(i))}</h3><p class="incident-location">Меридиан · ${escapeHtml(locationLabel(sceneAnchor(i)))}</p><button id="locateCallBtn">Показать вызов на карте ↗</button><p>${escapeHtml(callBrief(i))}</p><p class="call-fit">Нужный профиль: <b>${callSpecialty(i.type).label}</b>${u&&state.mode==='chief'?(unitFitsCall(state,u,i)?' · у выбранного экипажа есть (+15% к скорости)':' · у выбранного экипажа нет'):''}</p>${i.scene?`<div class="scene-card"><strong>${PHASES[i.scene.phase]}</strong><p>${escapeHtml(i.scene.reason)}</p><small>Напряжение: ${Math.round(i.scene.tension)}%${i.type===2?' · Ориентировка: '+Math.round(i.scene.clues*100)+'%':''}</small>${i.scene.participants.map(a=>`<div class="scene-person"><b>${escapeHtml(a.name)}</b> · ${escapeHtml(a.role)}<small>${a.visible?escapeHtml(({waiting:'Ждёт',missing:'Разыскивается',found:'Найден',fleeing:'Уезжает',stopping:'Останавливается',stopped:'Остановлен',resolved:'Помощь завершена',left:'Ушёл'})[a.status]??a.status):'Местоположение пока неизвестно'}</small>${a.residentId?`<button id="callResident-${a.residentId}" data-resident-link="${a.residentId}">Карточка жителя ↗</button>`:''}</div>`).join('')}</div>`:''}${i.carriedFrom?`<p class="notice">Продолжается со смены ${i.carriedFrom}. Прогресс и оставшееся время сохранены.</p>`:''}<p>До закрытия: ${formatWorldDuration(t.limit-i.age)} · ${i.units.length?'Экипажи: '+i.units.map(id=>'0'+id).join(', '):'Экипаж не назначен'}</p>${my?`<p style="color:var(--cyan)">${escapeHtml(my.name)} · выберите или измените действие:</p>`+t.options.map(([label,value])=>`<button class="primary" data-decision="${value}" data-uid="${my.id}">${label}</button>`).join(''):`<button id="dispatchBtn" class="primary" ${!control||!(['patrol','idle'].includes(u?.status)||canRedirect(state,u,i))||(i.units.length&&!i.backupRequested)||state.ended?'disabled':''}>${canRedirect(state,u,i)?'Перенаправить':'Направить'} ${u?escapeHtml(u.name.toLowerCase()):'патруль (сначала создайте экипаж)'}</button>${canRedirect(state,u,i)?`<small>Экипаж снимется с вызова №${u.incident}: этот вызов срочнее.</small>`:''}${!control&&state.mode==='career'?`<p>${escapeHtml(controlReason(state,u))}</p>`:''}`}${i.progress>0?`<p>Выполнение: ${Math.min(100,Math.round(i.progress/t.duration*100))}%${i.backupRequested&&i.units.length<2?' · ждём подкрепление':''}</p>`:''}</div>`);document.querySelectorAll('[data-resident-link]').forEach(b=>b.onclick=()=>residentsPanel(Number(b.dataset.residentLink)));$('locateCallBtn').onclick=()=>{renderer.locate(sceneAnchor(i));setTab('map');};const b=$('dispatchBtn');if(b)b.onclick=()=>{const redirect=canRedirect(state,u,i);if(assign(state,selectedUnit,i.id)){toast(redirect?'Экипаж перенаправлен':'Экипаж направлен на вызов');refresh(true);}else toast('Выберите свободный доступный экипаж');};}else setHtml('callDetail','');}if(showUnits&&u&&$('crewCondition')){const assessment=crewAssessment(state,u);const text=assessment.members.map(o=>o.name+' · '+o.role+' · усталость '+Math.round(o.fatigue)+'% · навык '+Math.round(o.skill*100)+'%').join('\n')+'\n'+assessment.explanation+'\nНавык состава: '+Math.round(assessment.skill*100)+'%. '+assessment.readiness;if($('crewCondition').textContent!==text)$('crewCondition').textContent=text;}
+  const needs=state.units.find(u=>u.status==='decision'&&crewAtScene(u)&&canControl(state,u));$('decisionBtn').hidden=!needs;$('decisionBtn').textContent=needs?'К решению · '+needs.name:'';
+  const latest=state.logs[0];$('radioText').textContent=latest?latest.text:'Диспетчер: приступаем к патрулированию.';$('followUnit').classList.toggle('active',renderer.isFollowing());$('followUnit').setAttribute('aria-pressed',String(renderer.isFollowing()));$('mapState').textContent=paused?'Симуляция на паузе':state.ended?'Смена завершена':`${state.units.length} экипажей · ${state.setupPending?'сначала сформируйте патруль':populationSummary(state).travelling+' жителей в пути'}`;$('mobileCalls').textContent='Вызовы'+(active.length?' · '+active.length:'');
+  $('mentor').textContent=state.mode==='career'?'Морозов: '+trainingSummary(state).hint:needs?'Мы прибыли. Открой карточку вызова и выбери дальнейшие действия.':state.units[0]?.auto?'Мы работаем самостоятельно: патрулируем, принимаем вызовы и решаем ситуации. Ты можешь просто наблюдать.':'Выбери вызов и направь наш экипаж 01. По прибытии нужно будет принять решение.';
+--- /dev/null
++++ b/tests/live-calls.test.mjs
+@@ -0,0 +1,53 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,spawnIncident,assign,hireOfficer,createPatrol,serialize,deserialize,callName,callBrief,canRedirect,unitFitsCall,TYPES,tick} from '../dist/sim.js';
++import {VARIANTS,pickVariant,variantWeights,hourBucket,placeNodes,defaultVariant} from '../dist/calls.js';
++import {NODES,byId} from '../dist/geography.js';
++// «Живые вызовы» v1: variants, crew fit and redirect.
++
++test('variants cover every call mechanic and keep the original wording as default',()=>{
++ for(let t=0;t<TYPES.length;t++){const v=defaultVariant(t);assert.ok(v,'type '+t);assert.equal(v.name,TYPES[t].name);assert.equal(v.brief,TYPES[t].brief);}
++ assert.equal(new Set(VARIANTS.map(v=>v.id)).size,VARIANTS.length);
++});
++
++test('time of day shifts the mix: flat noise and drunk drivers peak at night, shoplifting by day',()=>{
++ assert.deepEqual([hourBucket(23*60),hourBucket(3*60),hourBucket(18*60),hourBucket(12*60)],['night','night','evening','day']);
++ const share=(id,minute)=>{const w=variantWeights(minute),k=VARIANTS.findIndex(v=>v.id===id);return w[k]/w.reduce((a,b)=>a+b,0);};
++ assert.ok(share('noise-flat',23*60)>share('noise-flat',12*60));assert.ok(share('drunk-driver',1*60)>share('drunk-driver',13*60));assert.ok(share('shoplift',12*60)>share('shoplift',23*60));
++ // Public order is the most common group at night, like the PPA statistics.
++ const n=2000,count={};for(let k=0;k<n;k++){const v=pickVariant((k+.5)/n,23*60);count[v.type]=(count[v.type]??0)+1;}
++ assert.ok(count[0]>=Math.max(...Object.values(count)));
++});
++
++test('random calls get a matching variant and a place of the preferred kind; explicit types stay classic',()=>{
++ const s=createGame();for(let k=0;k<40;k++)spawnIncident(s);
++ for(const i of s.incidents){const v=VARIANTS.find(v=>v.id===i.variant);assert.equal(v.type,i.type);assert.equal(callName(i),v.name);assert.equal(callBrief(i),v.brief);}
++ assert.ok(new Set(s.incidents.map(i=>i.variant)).size>=6);
++ const classic=spawnIncident(createGame(),4);assert.equal(callName(classic),TYPES[4].name);
++ const homes=placeNodes(NODES,'residential',byId('centre'));assert.ok(homes.length<NODES.length&&homes.every(n=>['residential','living_street','unclassified','service'].includes(n.kind)));
++});
++
++test('variant survives save/load and a foreign variant is rejected',()=>{
++ const s=createGame();spawnIncident(s);const n=deserialize(serialize(s));assert.equal(n.incidents[0].variant,s.incidents[0].variant);
++ const bad=JSON.parse(serialize(s));bad.incidents[0].variant=VARIANTS.find(v=>v.type!==bad.incidents[0].type).id;assert.throws(()=>deserialize(JSON.stringify(bad)));
++});
++
++test('a crew still driving to a minor call can be redirected to a more urgent one',()=>{
++ const s=createGame(),u=s.units[1];u.auto=false;const minor=spawnIncident(s,0),urgent=spawnIncident(s,4),same=spawnIncident(s,0);s.nextIncident=999;
++ assert.equal(assign(s,u.id,minor.id,true),true);assert.equal(u.status,'responding');
++ assert.equal(canRedirect(s,u,same),false);assert.equal(assign(s,u.id,same.id,true),false);
++ assert.equal(canRedirect(s,u,urgent),true);assert.equal(assign(s,u.id,urgent.id,true),true);
++ assert.equal(u.incident,urgent.id);assert.deepEqual(minor.units,[]);assert.equal(minor.state,'waiting');assert.match(s.logs.map(l=>l.text).join('\n'),/снят с вызова/);
++});
++
++test('automation redirects a free-of-scene crew to an unattended urgent call',()=>{
++ const s=createGame();s.nextIncident=999;for(const u of s.units)u.auto=true;
++ const minors=s.units.map(()=>spawnIncident(s,0));s.units.forEach((u,k)=>assert.equal(assign(s,u.id,minors[k].id,true),true));
++ const urgent=spawnIncident(s,4);for(let k=0;k<40&&!urgent.units.length;k++)tick(s,.1);
++ assert.equal(urgent.units.length,1);
++});
++
++test('a crew whose specialty matches the call is marked as fitting',()=>{
++ const s=createGame('chief');for(const id of [1,4])assert.equal(hireOfficer(s,id).ok,true);
++ const [anna,ilya]=s.officers;assert.equal(createPatrol(s,anna.id,null,1).ok,true);assert.equal(createPatrol(s,ilya.id,null,2).ok,true);
++ const talk=spawnIncident(s,0);assert.equal(unitFitsCall(s,s.units[0],talk),true);assert.equal(unitFitsCall(s,s.units[1],talk),false);
++});

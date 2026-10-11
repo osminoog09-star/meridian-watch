@@ -1,0 +1,119 @@
+--- a/PLAN.md
++++ b/PLAN.md
+@@ -22,7 +22,9 @@
+ 
+ | R8 — отпуск, праздники, бумаги · **сделано Claude, ветка claude/leave-holidays** | Отпуск на цикл (35 дн./год, −8 дн., отпускные), 5 оплачиваемых дней здоровья, обновление с Нового года; праздники календаря (Новый год, День независимости, Яанипяэв, летний фестиваль, 1 сентября, Сочельник) — больше вызовов своего вида; протокол/материалы в каждом деле (проступок, материалы в криминальную полицию, сведения соцработнику) | Отпуск только после ночных смен; Яанипяэв — пьяные, костры, драки |
+ 
+-Порядок: R1 → R3 → R2 → R4 → R5 → R6 → R7 → R8. Каждый пакет отдельной веткой `claude/*`, интеграция и APK — Codex.
++| R9 — нагрузка и пиковые ночи · **сделано Claude, ветка claude/load-peaks** | Вызовы по часам (вечер и первая половина ночи — больше, 3–7 утра — тише) и дням недели (ночи пятницы и субботы ×1.45, утро воскресенья спокойнее); работа на месте реалистично дольше (×0.6 темпа), вызовы ×1.25 — на пиках автоматические экипажи иногда не успевают, решения игрока снова важны | Ночь пятницы: 35+ вызовов и редкие пропуски; будни: 22–26 без пропусков |
++
++Порядок: R1 → R3 → R2 → R4 → R5 → R6 → R7 → R8 → R9. Каждый пакет отдельной веткой `claude/*`, интеграция и APK — Codex.
+ 
+ ## Автономная работа: пакет на 45–50 минут
+ Ориентир одного запуска — 45–50 минут полезной работы с запасом до следующего ежечасного запуска. Это планирование, а не гарантированный таймер: лимит среды может оказаться меньше, а внешние операции — дольше. Не ждать специально ради заполнения времени. Подтверждение пользователя между уже согласованными этапами не требуется.
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -24,7 +24,7 @@
+ import {residentProfile,residentPosition,PLACES,RESIDENT_STATUS,populationSummary,cityMinute,formatMinute} from './population.js';
+ import {PHASES,sceneAnchor} from './scenes.js';
+ import {nearest,nearestRoad} from './geography.js';
+-import {shiftDateOf,setRole,grantLeave,offDuty,setPolicy,setPriorityDistrict,repairVehicle,setVehicleExtra,vehicleOf,createGame,tick,assign,decide,rest,nextShift,serialize,deserialize,TYPES,RANKS,canControl,controlReason,setUnitAutomation,configurePatrolArea,log,zone,hireOfficer,buyVehicle,createPatrol,disbandPatrol,callName,callBrief,districtOf,districtTrust,shiftWeather,setCustodyChoice,serviceStatus,canRedirect,unitFitsCall,changeCrew,crewChangeReason,reserveOfficers,shiftCost,configureVehicle,PAINTS,financialSummary,unitReason} from './sim.js';
++import {weekdayNow,shiftDateOf,setRole,grantLeave,offDuty,setPolicy,setPriorityDistrict,repairVehicle,setVehicleExtra,vehicleOf,createGame,tick,assign,decide,rest,nextShift,serialize,deserialize,TYPES,RANKS,canControl,controlReason,setUnitAutomation,configurePatrolArea,log,zone,hireOfficer,buyVehicle,createPatrol,disbandPatrol,callName,callBrief,districtOf,districtTrust,shiftWeather,setCustodyChoice,serviceStatus,canRedirect,unitFitsCall,changeCrew,crewChangeReason,reserveOfficers,shiftCost,configureVehicle,PAINTS,financialSummary,unitReason} from './sim.js';
+ import {serviceSummary,CAREER_PERMISSIONS} from './career.js';
+ import {loadGame,saveGame} from './storage.js';
+ import {createRenderer} from './render.js';
+@@ -56,7 +56,7 @@
+ function welcome(){modal(`<span class="eyebrow">MERCURY RESPONSE · ПЕРВАЯ СМЕНА</span><h2>Каждый город<br>начинается с людей.</h2><p>Меридиан встречает вечер. Экипажи выходят на улицы — и ваша смена начинается.</p><div class="start-options"><button id="startCareer" class="primary"><span>01 / КАРЬЕРА</span><strong>Ваш первый патруль</strong><small style="color:#315b55">Вы — стажёр. Морозов — ваш напарник. Наблюдайте за службой и набирайтесь опыта. Вмешивайтесь по желанию.</small></button><button id="startChief"><span>02 / КОМАНДОВАНИЕ</span><strong>Возглавьте смену</strong><small>Наймите сотрудников, сформируйте патрули и назначьте машины. Вы строите отделение.</small></button></div>${loading.recovered?'<p class="notice">Основное сохранение повреждено. Доступна последняя исправная резервная копия.</p>':loading.damaged?'<p class="notice">Сохранение не удалось прочитать. Можно начать новую кампанию или импортировать ранее экспортированный файл через отчёт.</p>':loading.unavailable?'<p class="notice">Браузер запретил доступ к сохранениям. Используйте экспорт в отчёте.</p>':''}${hadSave?'<button id="continueBtn" class="primary" style="width:100%">Продолжить сохранённую смену</button>':''}<p style="font-size:11px">Управление касанием. Кнопки «Карта», «Экипажи», «Вызовы» внизу экрана. Автоматический режим уже включён. Экипажи сами принимают решения. Вкладка в фоне ставит игру на паузу.</p><p style="font-size:10px">Город и его жители вымышлены. Старые кампании автоматически переносятся на новую карту.<br>Версия 0.6.0-b · собственная сессия для каждого игрока · без сетевого кооператива</p>`);$('startCareer').onclick=()=>hadSave?switchMode('career',true):begin('career');$('startChief').onclick=()=>hadSave?switchMode('chief',true):begin('chief');if($('continueBtn'))$('continueBtn').onclick=()=>begin(state.mode,true);}
+ function switchMode(mode,force=false){if(state.mode===mode&&!force)return;modal(`<span class="eyebrow">НОВАЯ КАМПАНИЯ</span><h2>${mode==='chief'?'Встать во главе смены?':'Начать карьеру?'}</h2><p>Начнётся новая кампания. Текущее сохранение будет заменено. Сначала можно экспортировать его в отчёте.</p><div class="modal-actions"><button id="cancelSwitch">Остаться в смене</button><button id="confirmSwitch" class="primary">Начать заново</button></div>`);$('cancelSwitch').onclick=()=>started?close():welcome();$('confirmSwitch').onclick=()=>begin(mode);}
+ $('careerBtn').onclick=()=>switchMode('career');$('chiefBtn').onclick=()=>switchMode('chief');
+-function refresh(full=false){if((interactionActive||$('modal').open)&&!full)return;const showUnits=full||!mobileMedia?.matches||document.body.dataset.tab==='units',showCalls=full||!mobileMedia?.matches||document.body.dataset.tab==='calls';if(!state.units.some(u=>u.id===selectedUnit))selectedUnit=state.units[0]?.id??null;$('clock').textContent=clock(state.time);{const w=shiftWeather(state),info=WEATHER[w.kind];setHtml('weather',`${info.icon} <span>${w.temp>0?'+':''}${w.temp}°<small>${info.label}${({rain:' · больше ДТП',fog:' · плохая видимость',clear:' · люди на улицах',wind:' · ветрено',snow:' · скользко, медленнее',ice:' · гололёд, осторожно',heat:' · жарко, людно'})[w.kind]??''}${shiftDateOf(state)?' · '+shiftDateOf(state).label:''}${w.event?' · '+w.event.label:''}</small></span>`);}$('clock').title='1 реальная секунда = '+worldRate*speed+' секунд города';$('timeScaleLabel').textContent=worldRate===1?'Время ×'+speed:'Быстрая смена ×'+worldRate*speed;$('trust').innerHTML=`${state.trust}<span>%</span>`;$('budget').textContent=state.budget.toLocaleString('ru');$('resolved').textContent=state.resolved;$('shiftLabel').textContent=`СМЕНА ${String(state.shift).padStart(2,'0')}`;$('shiftBar').style.width=`${state.time/state.shiftLength*100}%`;$('pauseBtn').textContent=paused?'▶':'Ⅱ';$('pauseBtn').setAttribute('aria-label',paused?'Продолжить':'Пауза');$('careerBtn').classList.toggle('active',state.mode==='career');$('chiefBtn').classList.toggle('active',state.mode==='chief');
++function refresh(full=false){if((interactionActive||$('modal').open)&&!full)return;const showUnits=full||!mobileMedia?.matches||document.body.dataset.tab==='units',showCalls=full||!mobileMedia?.matches||document.body.dataset.tab==='calls';if(!state.units.some(u=>u.id===selectedUnit))selectedUnit=state.units[0]?.id??null;$('clock').textContent=clock(state.time);{const w=shiftWeather(state),info=WEATHER[w.kind];setHtml('weather',`${info.icon} <span>${w.temp>0?'+':''}${w.temp}°<small>${info.label}${({rain:' · больше ДТП',fog:' · плохая видимость',clear:' · люди на улицах',wind:' · ветрено',snow:' · скользко, медленнее',ice:' · гололёд, осторожно',heat:' · жарко, людно'})[w.kind]??''}${shiftDateOf(state)?' · '+weekdayNow(state).slice(0,2)+', '+shiftDateOf(state).label:''}${w.event?' · '+w.event.label:''}</small></span>`);}$('clock').title='1 реальная секунда = '+worldRate*speed+' секунд города';$('timeScaleLabel').textContent=worldRate===1?'Время ×'+speed:'Быстрая смена ×'+worldRate*speed;$('trust').innerHTML=`${state.trust}<span>%</span>`;$('budget').textContent=state.budget.toLocaleString('ru');$('resolved').textContent=state.resolved;$('shiftLabel').textContent=`СМЕНА ${String(state.shift).padStart(2,'0')}`;$('shiftBar').style.width=`${state.time/state.shiftLength*100}%`;$('pauseBtn').textContent=paused?'▶':'Ⅱ';$('pauseBtn').setAttribute('aria-label',paused?'Продолжить':'Пауза');$('careerBtn').classList.toggle('active',state.mode==='career');$('chiefBtn').classList.toggle('active',state.mode==='chief');
+  const identityMarkup=`<span class="eyebrow">${state.mode==='career'?'ЛИЧНОЕ ДЕЛО / ВАША КАРЬЕРА':'УПРАВЛЕНИЕ ОТДЕЛЕНИЕМ'}</span><strong>${state.mode==='career'?RANKS[state.rank]:'Начальник смены'}</strong><p>${state.mode==='career'?'Напарник: Алексей Морозов':`${state.officers.length} сотрудников · ${state.vehicles.length} машин`}</p><div class="xpbar"><i style="width:${state.rank===4?100:state.xp%150/150*100}%"></i></div><small>${state.xp} опыта ${state.rank<4?'· до следующего звания '+(150-state.xp%150):'· высшая ступень прототипа'}</small>`;if($('identity').innerHTML!==identityMarkup)$('identity').innerHTML=identityMarkup;$('serviceBtn').hidden=state.mode!=='career';
+  if(showUnits)setHtml('units',state.units.map(u=>`<button class="unit ${u.id===selectedUnit?'selected':''}" data-unit="${u.id}"><div class="unit-top"><strong>${escapeHtml(u.name)}</strong><span class="status">${u.auto?'АВТО':'РУЧНОЙ'}</span></div><div class="people">${u.people.map(escapeHtml).join(' · ')}</div><small>${u.foot?({exit:'Выходят из машины',approach:'Пеший подход',onScene:status[u.status],return:'Возвращаются к машине',board:'Посадка'})[u.foot.phase]:status[u.status]} · ${escapeHtml(locationLabel(u))} · ${Number.isFinite(u.currentSpeedKmh)?Math.round(u.currentSpeedKmh):0} км/ч${Number.isFinite(u.roadLimitKmh)?' · лимит '+Math.round(u.roadLimitKmh)+(u.roadLimitSource==='osm'?' (знак)':' (игровой)'):''}${u.incident?' · №'+u.incident:''}</small><p class="unit-reason">${escapeHtml(unitReason(state,u))}${u.trafficReason?"<br>"+escapeHtml(u.trafficReason):""}</p><div class="fatigue">Усталость <div class="meter"><i style="width:${Math.round(u.fatigue)}%"></i></div>${Math.round(u.fatigue)}%</div>${carLine(vehicleOf(state,u))}</button>`).join('')||'<div class="empty">Создайте первый патруль<br>Наймите сотрудника и назначьте машину. Напарник — по желанию.</div>'); $('unitCount').textContent=state.units.length+' НА СМЕНЕ';$('departmentBtn').hidden=state.mode!=='chief';
+  const active=state.incidents.filter(i=>!['resolved','missed'].includes(i.state));if(selectedCall&&!active.find(i=>i.id===selectedCall))selectedCall=null;if(!selectedCall&&active.length)selectedCall=active[0].id;
+--- a/dist/season.js
++++ b/dist/season.js
+@@ -35,3 +35,14 @@
+ ]);
+ const holidayOn=(month,day)=>HOLIDAYS.find(h=>h.month===month&&h.day===day)??null;
+ export function shiftEvent(index,night){const start=dateOf(shiftStartMinute(index));let h=holidayOn(start.month,start.dayOfMonth);if(!h&&night){const next=dateOf(shiftStartMinute(index)+720);h=holidayOn(next.month,next.dayOfMonth);}return h;}
++
++// Call load by hour and weekday (roster campaigns): busy evenings and the first half of the night,
++// quiet early mornings, Friday and Saturday nights at their peak, calm Sunday mornings.
++// Multiplies the rate of new calls; together with holidays it decides how hard a shift is.
++const HOURLY=[1.35,1.25,1.05,.8,.6,.55,.6,.75,.9,.95,1,1,1.05,1,1,1.05,1.1,1.2,1.25,1.3,1.3,1.3,1.35,1.4];
++export const WEEKDAY_LABEL=Object.freeze(['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота']);
++export const weekdayOf=absMinute=>new Date(CAMPAIGN_EPOCH+(Math.floor(absMinute/1440)-2)*86400000).getUTCDay();
++export function loadFactor(absMinute){const m=((absMinute%1440)+1440)%1440,h=Math.floor(m/60),wd=weekdayOf(absMinute);let f=HOURLY[h];
++ // Friday/Saturday evening and the night after them; Sunday morning is calm.
++ const nightOf=h<6?(wd+6)%7:wd;if((nightOf===5||nightOf===6)&&(h>=18||h<6))f*=1.45;else if(wd===0&&h>=6&&h<14)f*=.75;return f;}
++export const absoluteMinute=elapsedMinutes=>1440+17*60+elapsedMinutes;
+--- a/dist/sim.js
++++ b/dist/sim.js
+@@ -7,7 +7,8 @@
+ import {ensurePopulation,resyncPopulation,tickPopulation,validatePopulation,linkResident,releaseResidents,validateResidentLinks} from './population.js';
+ import {SHIFT_TICKS,ROTA,isScheduled,validSchedule,shiftStartElapsed,nightFatigueFactor,shiftKind,restBefore} from './schedule.js';
+ import {ROUTINE,STATUS_TEXT,briefingFor,validBolo} from './routine.js';
+-import {shiftDate,seasonOf,SUN,weatherSpeed,shiftEvent} from './season.js';
++import {shiftDate,seasonOf,SUN,weatherSpeed,shiftEvent,loadFactor,absoluteMinute,weekdayOf,WEEKDAY_LABEL} from './season.js';
++import {worldMinutes} from './transport.js';
+ import {BURNOUT,BURNOUT_STRESS,VIOLENT,performanceFactor,microsleep,bucketOf} from './burnout.js';
+ import {ROSTER,ensureOfficer,rosterAfterShift,startFatigueOf,wagesFactor,canTakeLeave,validOfficerRoster} from './roster.js';
+ import {canTakeVacation,applyVacation,newYear,ensureLife,freeBlocks,validPlan,defaultPlan,applyPlan,workShift,startFatigue,courseBonus,validLife,scheduledRank,ROLES,roleBlocker,roleBonus,roleNoCaution,roleLeadBonus} from './life.js';
+@@ -101,7 +102,7 @@
+  for(const id of i.units){const u=s.units.find(u=>u.id===id);if(u&&!u.transport)radio(s,success?'clear':'failed',u,i);if(returnPoliceWalk(u))continue;u.incident=null;u.status='patrol';u.pursuing=false;u.route=u.route.length?[u.route[0]]:[];}
+  const text=success?`Вызов №${i.id} завершён. ${outcome}.`:`Вызов №${i.id}: ${outcome}. Доверие снизилось.`;log(s,text);s.history.unshift({id:i.id,name:callName(i),success,time:s.time,outcome});s.history=s.history.slice(0,50);}
+ export function tick(s,dt){if(s.ended||s.setupPending)return;s.time+=dt;s.nextIncident-=dt;
+- if(s.nextIncident<=0&&s.incidents.filter(i=>!['resolved','missed'].includes(i.state)).length<6){spawnIncident(s);s.nextIncident=(38+rng(s)*25)/(isScheduled(s)?shiftWeather(s).event?.intensity??1:1);}
++ if(s.nextIncident<=0&&s.incidents.filter(i=>!['resolved','missed'].includes(i.state)).length<6){spawnIncident(s);s.nextIncident=(38+rng(s)*25)/(isScheduled(s)?(shiftWeather(s).event?.intensity??1)*loadNow(s):1);}
+  releaseFollowUps(s);
+  tickServices(s,dt);
+  tickStaff(s,dt);if(isScheduled(s))nightDuty(s,dt);planTraffic(trafficItems(s));tickPopulation(s,dt);prepareScenes(s,dt);
+@@ -124,7 +125,7 @@
+  autoRedirect(s);
+  for(const i of s.incidents){if(['resolved','missed'].includes(i.state))continue;i.age+=dt;const working=s.units.filter(u=>u.incident===i.id&&u.status==='working'&&crewAtScene(u));
+  const sceneResult=sceneStep(i,working,dt);if(sceneResult.failure){finish(s,i,false,sceneResult.failure);continue;}
+- if(working.length){if(!i.decision)i.decision='check';const multi=working.length>1?1.45:1;const mine=s.mode==='career'&&working[0].id===1,caution=i.backupRequested&&working.length<2&&(s.time-(i.backupAt??s.time)<25)&&!(mine&&roleNoCaution(s.life))?.15:1;i.progress+=dt*sceneResult.rate*multi*caution*crewFit(s,working[0],i.type)*(1-working[0].fatigue*.004)*(.7+working[0].skill*.4+developmentBonus(s,i,working[0]))*((i.type===1&&working[0].kit==='aid')||(i.type===2&&working[0].kit==='search')?1.2:1)*extraBonus(departmentIndex(s).byVehicle.get(working[0].vehicleId),i.variant)*(s.mode==='career'&&working[0].id===1?courseBonus(s.life,i.variant)*roleBonus(s.life,i.variant):1)*(i.bolo?ROUTINE.boloBonus:1)*performanceFactor(crewStress(s,working[0]));if(i.progress>=TYPES[i.type].duration){finish(s,i,true);continue;}}
++ if(working.length){if(!i.decision)i.decision='check';const multi=working.length>1?1.45:1;const mine=s.mode==='career'&&working[0].id===1,caution=i.backupRequested&&working.length<2&&(s.time-(i.backupAt??s.time)<25)&&!(mine&&roleNoCaution(s.life))?.15:1;i.progress+=dt*sceneResult.rate*multi*caution*crewFit(s,working[0],i.type)*(1-working[0].fatigue*.004)*(.7+working[0].skill*.4+developmentBonus(s,i,working[0]))*((i.type===1&&working[0].kit==='aid')||(i.type===2&&working[0].kit==='search')?1.2:1)*extraBonus(departmentIndex(s).byVehicle.get(working[0].vehicleId),i.variant)*(s.mode==='career'&&working[0].id===1?courseBonus(s.life,i.variant)*roleBonus(s.life,i.variant):1)*(i.bolo?ROUTINE.boloBonus:1)*performanceFactor(crewStress(s,working[0]))*(isScheduled(s)?ROSTER_WORK_PACE:1);if(i.progress>=TYPES[i.type].duration){finish(s,i,true);continue;}}
+  if(i.age>TYPES[i.type].limit)finish(s,i,false);
+  }
+  s.incidents=s.incidents.filter(i=>!i.finished||s.time-i.finished<18);
+@@ -271,7 +272,7 @@
+  const leads=(s.followUps??[]).filter(f=>f.variant==='suspect-found'&&open.some(c=>c.id===f.from)).map(f=>({...f,at:40+((f.from*37)%80)}));if(leads.length)n.followUps=leads;}
+ 
+ // R2 shift routine (routine.js): briefing with lookouts, vehicle acceptance, meal break, reports.
+-function startRoutine(s){s.bolo=briefingFor(s.seed,s.shift);const ev=isScheduled(s)?shiftWeather(s).event:null;if(ev)log(s,`Инструктаж: ${ev.label} — усиленный режим, вызовов больше обычного.`);for(const u of s.units){Object.assign(u,{status:'briefing',route:[],routineLeft:ROUTINE.briefing,mealDone:false});}
++function startRoutine(s){s.bolo=briefingFor(s.seed,s.shift);const ev=isScheduled(s)?shiftWeather(s).event:null;if(ev)log(s,`Инструктаж: ${ev.label} — усиленный режим, вызовов больше обычного.`);else if(isScheduled(s)&&shiftKind(s.shift-1)==='night'&&[5,6].includes(weekdayOf(cityAbsoluteMinute(s))))log(s,`Инструктаж: ночь на ${weekdayOf(cityAbsoluteMinute(s))===5?'субботу':'воскресенье'} — бары, компании, пьяные водители. Будет жарко.`);for(const u of s.units){Object.assign(u,{status:'briefing',route:[],routineLeft:ROUTINE.briefing,mealDone:false});}
+  log(s,`Инструктаж: ориентировки на смену — ${s.bolo.map(b=>b.text).join('; ')}.`);}
+ function matchBolo(s,i){if(!isScheduled(s)||!Array.isArray(s.bolo))return;const b=s.bolo.find(b=>b.matched===null&&b.variant===i.variant);if(!b)return;b.matched=i.id;i.bolo=b.id;log(s,`Дежурный: вызов №${i.id} похож на ориентировку с инструктажа (${b.text}).`);}
+ const crewOfficers=(s,u)=>u.officerIds.map(id=>departmentIndex(s).byOfficer.get(id)).filter(Boolean);
+@@ -291,6 +292,14 @@
+  if(!u.mealDone&&s.time>=ROUTINE.mealFrom&&s.time<=ROUTINE.mealTo&&!s.incidents.some(i=>i.state==='waiting')){u.status='break';u.route=[];u.routineLeft=ROUTINE.meal;log(s,`${u.name}: обеденный перерыв.`);return true;}
+  return false;}
+ 
++// R9: call load by hour and weekday (season.js) — Friday/Saturday nights are the peak.
++export const cityAbsoluteMinute=s=>absoluteMinute(worldMinutes(s.population?.elapsed??0));
++export const loadNow=s=>isScheduled(s)?loadFactor(cityAbsoluteMinute(s))*ROSTER_CALL_RATE:1;
++// Real calls take longer on scene (statements, checks, paperwork): 30–60 minutes is common, so on
++// the roster scene work runs at 0.6 of the legacy pace and calls come 1.25× as often.
++const ROSTER_WORK_PACE=.6,ROSTER_CALL_RATE=1.25;
++export const weekdayNow=s=>isScheduled(s)?WEEKDAY_LABEL[weekdayOf(cityAbsoluteMinute(s))]:null;
++
+ // Snow, black ice and fog slow every car on roster campaigns (legacy campaigns unchanged).
+ const roadWeather=s=>isScheduled(s)?weatherSpeed(shiftWeather(s).kind):1;
+ 
+--- /dev/null
++++ b/tests/load.test.mjs
+@@ -0,0 +1,12 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {loadFactor,weekdayOf,absoluteMinute} from '../dist/season.js';
++import {shiftStartMinute} from '../dist/schedule.js';
++import {createGame,loadNow,weekdayNow} from '../dist/sim.js';
++// R9: call load by hour and weekday on the roster.
++test('the roster starts on Monday; Friday/Saturday nights are the peak, early mornings the calmest',()=>{
++ assert.equal(weekdayOf(shiftStartMinute(0)),1);const day=d=>(2+d)*1440;// d days after Monday 12.10
++ const friNight=loadFactor(day(4)+23*60),tueNight=loadFactor(day(1)+23*60),earlyTue=loadFactor(day(1)+5*60),sunMorning=loadFactor(day(6)+9*60),satAfterMidnight=loadFactor(day(6)+1*60);
++ assert.ok(friNight>tueNight*1.3);assert.ok(satAfterMidnight>loadFactor(day(2)+60)*1.3,'night after Saturday counts as weekend');assert.ok(earlyTue<.7);assert.ok(sunMorning<loadFactor(day(1)+9*60));
++ const s=createGame('career',7182,{schedule:'ppa'});assert.equal(weekdayNow(s),'понедельник');assert.ok(loadNow(s)>0);assert.equal(loadNow(createGame()),1,'legacy unchanged');
++ assert.equal(absoluteMinute(900),3360);
++});

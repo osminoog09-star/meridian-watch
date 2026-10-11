@@ -1,0 +1,120 @@
+--- a/dist/calls.js
++++ b/dist/calls.js
+@@ -116,3 +116,6 @@
+ export const MEDICAL=Object.freeze({crash:'Пострадавшие в ДТП','drunk-person':'Человеку плохо','street-fight':'Есть пострадавшие'});
+ export const needsAmbulance=variantId=>!!MEDICAL[variantId];
+ export const AMBULANCE=Object.freeze({treatTime:8,handoverTime:4,maxActive:3,kmh:60,trustBonus:1,paint:'#ece8c4',lights:'blue'});
++
++// 0.7.0 step 3 «Дела смены» (Claude, 11.10.2026): every closed call becomes a short case record.
++export const CASE_LIMIT=30;
+--- a/dist/sim.js
++++ b/dist/sim.js
+@@ -8,7 +8,7 @@
+ import {MAP_ID,NODES,byId,nearest,point,roadRoute,atNode,migrateMap} from './geography.js';
+ import {containsWorldPoint} from './city-coverage.js';
+ import {planTraffic} from './traffic.js';
+-import {pickVariant,placeNodes,defaultVariant,variantOf,validVariant,crewFits,FIT_BONUS,variantById,DISTRICT_IDS,FOLLOW_UPS,followUpChance,FOLLOW_UP_DELAY,DISTRICT_TRUST_STEP,weatherFor,WEATHER,custodyFor,HANDOVER_TIME,CUSTODY_REWARD,CUSTODY_CHOICES,CUSTODY_FOLLOW_UP,canChooseCustody,custodyDecision,needsAmbulance,MEDICAL,AMBULANCE} from './calls.js';
++import {pickVariant,placeNodes,defaultVariant,variantOf,validVariant,crewFits,FIT_BONUS,variantById,DISTRICT_IDS,FOLLOW_UPS,followUpChance,FOLLOW_UP_DELAY,DISTRICT_TRUST_STEP,weatherFor,WEATHER,custodyFor,HANDOVER_TIME,CUSTODY_REWARD,CUSTODY_CHOICES,CUSTODY_FOLLOW_UP,canChooseCustody,custodyDecision,needsAmbulance,MEDICAL,AMBULANCE,CASE_LIMIT} from './calls.js';
+ import {cityMinute} from './population.js';
+ import {cityGrant} from './economy.js';
+ export const SIZE=6;
+@@ -79,7 +79,7 @@
+ export function rest(s,uid){const u=s.units.find(u=>u.id===uid);if(!u||s.ended||!canControl(s,u)||!['patrol','idle'].includes(u.status))return false;u.status='returning';routeTo(u,HQ);log(s,`${u.name}: возвращаемся на отдых.`);return true;}
+ function move(u,dt,s){advanceVehicle(u,dt,Math.min(patrolSpeed(u),u.trafficTargetKmh??Infinity),{obeyLimits:!urgentMovement(s,u)});}
+ function trafficItems(s){const items=[];for(const r of s.population?.residents??[])if(!['walkVisit','walkBack','visiting'].includes(r.status))items.push({entity:r,id:'resident-'+r.id,desired:30,emergency:false});for(const u of s.units)items.push({entity:u,id:'unit-'+u.id,desired:patrolSpeed(u),emergency:urgentMovement(s,u),blocking:!u.route.length&&['decision','working'].includes(u.status)});for(const i of s.incidents)if(i.type===5&&i.scene)for(const a of i.scene.participants)items.push({entity:a,id:'actor-'+a.id,desired:a.status==='fleeing'?40:15,emergency:false});return items;}
+-function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));if(success&&i.medical==='treated')s.trust=Math.min(100,s.trust+AMBULANCE.trustBonus);recordConsequences(s,i,success);if(success)assignCustody(s,i);const rankBefore=s.rank;if(success){transact(s,110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=30;}s.rank=Math.min(RANKS.length-1,Math.floor(s.xp/150));if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
++function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));if(success&&i.medical==='treated')s.trust=Math.min(100,s.trust+AMBULANCE.trustBonus);recordConsequences(s,i,success);recordCase(s,i,success,outcome);if(success)assignCustody(s,i);const rankBefore=s.rank;if(success){transact(s,110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=30;}s.rank=Math.min(RANKS.length-1,Math.floor(s.xp/150));if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
+  for(const id of i.units){const u=s.units.find(u=>u.id===id);if(returnPoliceWalk(u))continue;u.incident=null;u.status='patrol';u.pursuing=false;u.route=u.route.length?[u.route[0]]:[];}
+  const text=success?`Вызов №${i.id} завершён. ${outcome}.`:`Вызов №${i.id}: ${outcome}. Доверие снизилось.`;log(s,text);s.history.unshift({id:i.id,name:callName(i),success,time:s.time,outcome});s.history=s.history.slice(0,50);}
+ export function tick(s,dt){if(s.ended||s.setupPending)return;s.time+=dt;s.nextIncident-=dt;
+@@ -189,7 +189,7 @@
+  if(s.followUps!==undefined&&!(Array.isArray(s.followUps)&&s.followUps.length<=12&&s.followUps.every(f=>num(f.at,0,2000)&&variantById(f.variant)&&containsWorldPoint(f)&&Number.isInteger(f.from)&&typeof f.reason==='string'&&f.reason.length<200)))return false;
+  if(s.custodyDone!==undefined&&!(Number.isInteger(s.custodyDone)&&s.custodyDone>=0&&s.custodyDone<10000))return false;
+  if(!s.incidents.every(i=>(i.custodyChoice===undefined||i.custodyChoice in CUSTODY_CHOICES)&&(i.medical===undefined||['called','treated'].includes(i.medical))))return false;
+- if(!validServices(s))return false;
++ if(!validServices(s)||!validCases(s))return false;
+  return s.incidents.every(i=>i.followUp===undefined||Number.isInteger(i.followUp.from)&&typeof i.followUp.reason==='string'&&i.followUp.reason.length<200);}
+ 
+ // Weather of the current shift: derived (not stored), so old saves and the random stream are unchanged.
+@@ -202,7 +202,7 @@
+  if(u.status==='transporting'){if(!u.route.length){u.status='handover';u.handover=HANDOVER_TIME;log(s,`${u.name}: в участке, передаём задержанного дежурному.`);}return true;}
+  if(u.status==='handover'){u.handover-=dt;if(u.handover>0)return true;const t=u.transport;u.status='patrol';u.transport=null;delete u.handover;
+   s.trust=Math.min(100,s.trust+CUSTODY_REWARD.trust);const d=ensureDistricts(s);if(t&&d[t.district]!==undefined)d[t.district]=Math.min(100,d[t.district]+CUSTODY_REWARD.district);if(u.id===1||s.mode==='chief')s.xp+=CUSTODY_REWARD.xp;s.rank=Math.min(RANKS.length-1,Math.floor(s.xp/150));s.custodyDone=(s.custodyDone??0)+1;
+-  log(s,`${u.name}: рапорт по вызову №${t?.from} составлен, дело передано. Возвращаемся к патрулю.`);return true;}
++  const file=(s.cases??[]).find(c=>c.id===t?.from);if(file)file.status='Передано дежурному';log(s,`${u.name}: рапорт по вызову №${t?.from} составлен, дело передано. Возвращаемся к патрулю.`);return true;}
+  return false;}
+ 
+ // Player choice at the scene (manual crews): arrest or release with a warning.
+@@ -225,3 +225,10 @@
+ export const serviceStatus=a=>({responding:'едет на вызов',treating:'помогает на месте',transporting:'везёт в больницу',handover:'в больнице'})[a.status]??'';
+ function validServices(s){if(s.services===undefined)return true;const num=(x,min,max)=>Number.isFinite(x)&&x>=min&&x<=max;
+  return Array.isArray(s.services)&&s.services.length<=AMBULANCE.maxActive&&(s.nextServiceId===undefined||Number.isInteger(s.nextServiceId))&&s.services.every(a=>Number.isInteger(a.id)&&a.kind==='ambulance'&&['responding','treating','transporting','handover'].includes(a.status)&&Number.isInteger(a.incident)&&num(a.timer,-1000,1000)&&containsWorldPoint(a)&&Array.isArray(a.route)&&a.route.length<3000&&a.route.every(p=>containsWorldPoint(p)));}
++
++// 0.7.0 step 3: case records of the current shift (newest first, bounded).
++function recordCase(s,i,success,outcome){if(!Array.isArray(s.cases))s.cases=[];const option=TYPES[i.type].options.find(o=>o[1]===i.decision);const custody=success?custodyDecision(i):null;
++ s.cases.unshift({id:i.id,name:callName(i),district:districtOf(i),time:s.time,success,decision:option?option[0]:null,custody,medical:i.medical==='treated',repeatOf:i.followUp?.from??null,outcome:String(outcome??'').slice(0,160),status:!success?'Не раскрыто':custody==='arrest'?'Задержанный в пути в участок':custody==='warn'?'Отпущены с предупреждением':'Закрыто на месте'});
++ s.cases=s.cases.slice(0,CASE_LIMIT);}
++function validCases(s){if(s.cases===undefined)return true;const str=(x,n)=>typeof x==='string'&&x.length<=n;
++ return Array.isArray(s.cases)&&s.cases.length<=CASE_LIMIT&&s.cases.every(c=>Number.isInteger(c.id)&&str(c.name,160)&&str(c.district,40)&&Number.isFinite(c.time)&&typeof c.success==='boolean'&&(c.decision===null||str(c.decision,160))&&[null,'arrest','warn'].includes(c.custody)&&typeof c.medical==='boolean'&&(c.repeatOf===null||Number.isInteger(c.repeatOf))&&str(c.outcome,160)&&str(c.status,60));}
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -78,7 +78,7 @@
+ $('pauseBtn').onclick=()=>{paused=!paused;diagnostics.event('pause',String(paused));if(!paused)audio.unlock();else audio.pause();refresh();};document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{speed=+b.dataset.speed;diagnostics.event('speed',String(speed));diagnostics.resetFrames();document.querySelectorAll('[data-speed]').forEach(x=>x.classList.toggle('active',x===b));refresh();});$('zoomIn').onclick=()=>renderer.zoom(.2);$('zoomOut').onclick=()=>renderer.zoom(-.2);$('resetView').onclick=renderer.reset;$('cityView').onclick=renderer.city;$('followUnit').onclick=()=>{renderer.follow(state.units.find(u=>u.id===selectedUnit));setTab('map');};$('saveBtn').onclick=()=>save(true);
+ function report(){const fin=financialSummary(state),unfinished=state.incidents.filter(i=>!['resolved','missed'].includes(i.state)).length;modal(`<span class="eyebrow">${state.ended?'СМЕНА ЗАВЕРШЕНА':'ТЕКУЩАЯ СМЕНА'} / ${String(state.shift).padStart(2,'0')}</span><h2>${state.ended?'Город говорит спасибо.':'Результаты вашей работы'}</h2>${(d=>`<div class="debrief"><p class="eyebrow">РАЗБОР СМЕНЫ · ${escapeHtml(d.weather)}</p><ul>${d.good.map(t=>`<li class="ok">${escapeHtml(t)}</li>`).join('')}${d.attention.map(t=>`<li class="warn">${escapeHtml(t)}</li>`).join('')}</ul><p class="tip"><b>Наставник:</b> ${escapeHtml(d.tip)}</p></div>`)(shiftDebrief(state))}<div class="report-grid"><div>Решено<strong>${state.resolved}</strong></div><div>Пропущено<strong>${state.missed}</strong></div><div>Опыт<strong>${state.xp}</strong></div></div><p>Доверие жителей: ${state.trust}%. Ваше звание: ${state.mode==='career'?RANKS[state.rank]:'Начальник смены'}. ${state.ended?'Данные сохранены. Следующая смена сохранит опыт, доверие и незавершённые вызовы. Занятые экипажи останутся на месте.':''}</p><p>Незавершённых вызовов: <b>${unfinished}</b>. Они продолжатся в следующей смене.</p><details class="finance-box"><summary>Доверие по районам</summary>${DISTRICT_IDS.map(id=>[id,districtTrust(state,id)]).sort((a,b)=>a[1]-b[1]).map(([id,v])=>`<div class="finance-row"><span>${districtName(id)}</span><b>${Math.round(v)}%</b></div>`).join('')}<p>Где доверие ниже, жители чаще звонят повторно. Ожидают повторных вызовов: ${state.followUps?.length??0}.</p></details><details class="finance-box" open><summary>Финансы этой смены</summary><div class="finance-row"><span>Остаток на начало учёта</span><b>${fin.opening}</b></div><div class="finance-row"><span>Доходы</span><b>+${fin.income}</b></div><div class="finance-row"><span>Расходы</span><b>−${fin.expenses}</b></div><div class="finance-row"><span>Сейчас в бюджете</span><b>${fin.balance}</b></div><div class="finance-row"><span>К списанию за содержание</span><b>−${fin.pending}</b></div>${(g=>`<div class="finance-row"><span>Мэрия на следующую смену</span><b>${g.total>=0?'+':''}${g.total}</b></div><p class="fine-print">${g.lines.map(escapeHtml).join(' · ')}</p>`)(cityGrant(state))}${fin.support?`<p>При переходе смены будет учтена субсидия ${fin.support}. В прототипе она покрывает дефицит содержания.</p>`:''}<p>После расчёта: <b>${Math.max(0,fin.balance+fin.grant-fin.pending)}</b>. ${fin.legacy?'Для старого сохранения подробный учёт начат с момента обновления.':''}</p>${fin.entries.slice().reverse().map(e=>`<div class="logrow"><small>${clock(e.time)}</small>${escapeHtml(e.label)} <b>${e.amount>0?'+':''}${e.amount}</b></div>`).join('')||'<p>Операций пока нет.</p>'}</details>${trainingMarkup()}${state.mode==='career'?'<button id="reportService">Личное дело и разбор решений</button>':''}${state.previousReport?`<details class="finance-box"><summary>Итоги предыдущей смены ${state.previousReport.shift}</summary><p>Решено: ${state.previousReport.resolved}. Пропущено: ${state.previousReport.missed}. Перенесено: ${state.previousReport.carried}.</p><p>Начало: ${state.previousReport.finance.opening} + доходы ${state.previousReport.finance.income} − расходы ${state.previousReport.finance.expenses} = остаток ${state.previousReport.finance.balance}.</p></details>`:''}<div class="modal-actions">${state.ended?'<button id="nextShiftBtn" class="primary">Следующая смена →</button>':'<button id="resumeBtn" class="primary">Вернуться к игре</button>'}<button id="exportBtn">Экспорт сохранения</button></div><p style="font-size:10px">Сохранение хранится только в этом браузере. Экспорт позволяет перенести кампанию на другое устройство.</p><label style="font-size:12px">Загрузить сохранение <input id="importFile" type="file" accept="application/json,.json" style="display:block;margin-top:8px;max-width:100%"></label><div style="margin-top:20px">${state.history.slice(0,8).map(h=>`<div class="logrow">${h.success?'✓':'—'} ${escapeHtml(h.name)} <small>№${h.id}</small>${h.outcome?'<p>'+escapeHtml(h.outcome)+'</p>':''}</div>`).join('')}</div>`);if($('reportService'))$('reportService').onclick=servicePanel;if($('nextShiftBtn'))$('nextShiftBtn').onclick=()=>{state=nextShift(state);reportShown=false;selectedCall=null;simulationClock.reset();close();save();refresh(true);};if($('resumeBtn'))$('resumeBtn').onclick=close;$('exportBtn').onclick=()=>{const a=document.createElement('a'),url=URL.createObjectURL(new Blob([serialize(state)],{type:'application/json'}));a.href=url;a.download='meridian-watch-save.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};$('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(file.size>1024*1024){toast('Файл слишком большой');return;}try{const imported=deserialize(await file.text());pendingImport=imported;modal('<h2>Загрузить кампанию?</h2><p>Текущее сохранение будет заменено данными из выбранного файла.</p><div class="modal-actions"><button id="cancelImport">Отмена</button><button id="applyImport" class="primary">Загрузить</button></div>');$('cancelImport').onclick=report;$('applyImport').onclick=()=>{state=pendingImport;pendingImport=null;reportShown=false;selectedCall=null;selectedUnit=1;save();close();refresh(true);toast('Кампания загружена');};}catch{toast('Не удалось прочитать сохранение');}};}
+ let pendingImport=null;$('reportBtn').onclick=report;
+-$('journalBtn').onclick=()=>modal(`<span class="eyebrow">РАДИОЭФИР / ЖУРНАЛ</span><h2>События смены</h2>${state.logs.map(l=>`<div class="logrow"><small>${clock(l.time)}</small>${escapeHtml(l.text)}</div>`).join('')||'<p>Событий пока нет.</p>'}`);
++$('journalBtn').onclick=()=>modal(`<span class="eyebrow">РАДИОЭФИР / ЖУРНАЛ</span>${(state.cases??[]).length?`<h2>Дела смены</h2><div class="cases">${state.cases.map(c=>`<div class="case ${c.success?'ok':'bad'}"><div class="case-top"><b>№${c.id} · ${escapeHtml(c.name)}</b><small>${clock(c.time)} · ${escapeHtml(districtName(c.district))}</small></div><p>${c.decision?'Решение: '+escapeHtml(c.decision)+'. ':''}${escapeHtml(c.outcome)}${c.outcome&&!/[.!?]$/.test(c.outcome)?'.':''}</p><span class="chip">${escapeHtml(c.status)}</span>${c.medical?'<span class="chip">✚ скорая</span>':''}${c.repeatOf?`<span class="chip">повтор после №${c.repeatOf}</span>`:''}</div>`).join('')}</div>`:''}<h2>События смены</h2>${state.logs.map(l=>`<div class="logrow"><small>${clock(l.time)}</small>${escapeHtml(l.text)}</div>`).join('')||'<p>Событий пока нет.</p>'}`);
+ $('helpBtn').onclick=()=>modal(`<span class="eyebrow">КРАТКИЙ ИНСТРУКТАЖ</span><h2>Добро пожаловать на службу.</h2><ol><li>Начальнику: откройте «Отделение», наймите одного или двух сотрудников и сформируйте патруль. В «Экипажах» выберите патруль. В карьере вам доступен экипаж 01 с наставником.</li><li>По умолчанию все экипажи действуют самостоятельно: принимают вызовы, выбирают действия и отдыхают.</li><li>Если хотите вмешаться, выключите автомат у своего экипажа. Тогда направляйте его на вызов и выбирайте действие по прибытии.</li><li>Настройте район патруля и разрешение покидать его. Включить автомат обратно можно в любой момент.</li><li>При усталости отправляйте экипаж на отдых. В автомате он делает это сам.</li><li>В конце восьмиминутной смены откройте отчёт. Каждые 150 опыта дают следующее звание.</li></ol><p>Кнопка «Центр» приближает центр, «Город» показывает весь город, «Патруль» находит выбранный экипаж. Карту можно двигать пальцем и масштабировать двумя пальцами. Перетаскивание отключает слежение за патрулём. В карточке вызова есть кнопка показа на карте. Кнопки + и − меняют масштаб. «На весь экран» разворачивает карту; «Выйти» возвращает интерфейс. Если браузер не разрешает полный экран, карта занимает всё доступное окно. Пауза и скорость — под картой. Во время открытия окна, сворачивания или смены вкладки симуляция приостанавливается.</p><p>Звания открывают полномочия; текущие права показаны в личном деле. Участники текущих вызовов видны на карте; у них есть состояния и разные исходы. Кнопка «Жители» открывает 16 постоянных жителей центра: дом, работу и расписание поездок. Светлые цветные машины — их поездки. Имена и назначения зданий вымышлены. Конфликты и заявления о краже могут затрагивать этих жителей: распорядок приостанавливается, результат сохраняется в карточке. После отдыха человек возвращается к делам автоматически. На проверенных участках сотрудники идут от машины по пешеходным путям. Решение доступно после подхода экипажа; по завершении он возвращается в машину. В ручном режиме действие можно изменить во время работы. Оранжевая машина — цель проверки или погони.</p><button id="helpPlan" style="width:100%">Посмотреть план развития</button><h3>Источники карты</h3><p>Меридиан — вымышленный город. Внешний вид и игровая симуляция разработаны для Mercury Response.</p><p class="fine-print">Картографическая основа: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors · ODbL</a>.</p>`);$('helpBtn').addEventListener('click',()=>{$('helpPlan').onclick=showPlan;});
+ function residentsPanel(id=null){
+  const stats=populationSummary(state),r=state.population.residents.find(r=>r.id===id);
+--- a/dist/style.css
++++ b/dist/style.css
+@@ -41,3 +41,6 @@
+ 
+ /* Device test (Claude, 11.10.2026) */
+ .device-test-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom));z-index:45;background:#102731f0;color:#dff3ec;border:1px solid #4b756a;border-radius:10px;padding:8px 12px;font-size:13px;display:flex;gap:10px;align-items:center;white-space:nowrap}.device-test-bar[hidden]{display:none}.device-test-bar button{padding:4px 10px}.device-table{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}.device-table td,.device-table th{padding:5px 6px;border-bottom:1px solid #284047;text-align:left}.device-table tr.ok td:nth-child(2){color:#9ff0c8}.device-table tr.mid td:nth-child(2){color:#f0d08a}.device-table tr.bad td:nth-child(2){color:#ff9c8a}.device-report{width:100%;font:11px monospace;background:#0d1d22;color:#cfe3dc;border:1px solid #2f4b52;border-radius:8px;padding:8px;box-sizing:border-box}
++
++/* Case files (Claude, 11.10.2026) */
++.cases{display:grid;gap:8px;margin-bottom:12px}.case{border:1px solid #2f4b52;border-left:3px solid #6fd3b4;border-radius:8px;padding:8px 10px;background:#12262c}.case.bad{border-left-color:#e7907c}.case-top{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}.case-top small{color:var(--muted)}.case p{margin:4px 0;font-size:13px}.case .chip{display:inline-block;font-size:11px;padding:2px 7px;margin:2px 4px 0 0;border-radius:10px;background:#1d3a42;color:#cfe8e0}
+--- /dev/null
++++ b/tests/case-files.test.mjs
+@@ -0,0 +1,39 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,spawnIncident,tick,serialize,deserialize,nextShift} from '../dist/sim.js';
++import {CASE_LIMIT,custodyFor} from '../dist/calls.js';
++import {NODES} from '../dist/geography.js';
++// 0.7.0 step 3: «Дела смены» — every closed call leaves a bounded case record.
++
++function solve(variant,want=()=>true){
++ for(let seed=1;seed<80;seed++){const s=createGame();s.seed=seed;s.nextIncident=9000;const anchor=NODES[(seed*7)%NODES.length];
++  const i=spawnIncident(s,null,{variant,point:{x:anchor.x,y:anchor.y}});
++  for(let k=0;k<6000&&!['resolved','missed'].includes(i.state);k++)tick(s,.1);
++  if(['resolved','missed'].includes(i.state)&&want(i))return {s,i};}
++ return null;
++}
++
++test('a closed call is filed with name, district, decision and status',()=>{
++ const r=solve('noise-flat');assert.ok(r);const {s,i}=r;const c=s.cases?.find(x=>x.id===i.id);assert.ok(c,'case recorded');
++ assert.equal(typeof c.name,'string');assert.ok(c.name.length>0);assert.equal(typeof c.district,'string');assert.equal(c.success,i.state==='resolved');
++ assert.equal(typeof c.status,'string');if(!c.success)assert.equal(c.status,'Не раскрыто');
++ assert.ok(c.outcome.length<=160);
++});
++
++test('an arrest case is marked as handed over after the report',()=>{
++ const r=solve('street-fight',i=>i.state==='resolved'&&custodyFor(i.variant,i.decision));assert.ok(r);const {s,i}=r;
++ const c=s.cases.find(x=>x.id===i.id);assert.equal(c.custody,'arrest');assert.equal(c.status,'Задержанный в пути в участок');
++ const u=s.units.find(x=>x.transport?.from===i.id);assert.ok(u);
++ for(let k=0;k<20000&&u.transport;k++)tick(s,.1);assert.equal(u.transport,null);assert.equal(c.status,'Передано дежурному');
++});
++
++test('cases survive save/load, bad records are rejected, list is bounded and resets next shift',()=>{
++ const r=solve('noise-flat');assert.ok(r);const {s}=r;
++ const n=deserialize(serialize(s));assert.deepEqual(n.cases,s.cases);
++ const bad=JSON.parse(serialize(s));bad.cases[0].status=42;assert.throws(()=>deserialize(JSON.stringify(bad)));
++ const old=JSON.parse(serialize(s));delete old.cases;assert.doesNotThrow(()=>deserialize(JSON.stringify(old)),'old saves without cases still load');
++ const big=JSON.parse(serialize(s));big.cases=Array.from({length:CASE_LIMIT+1},()=>({...s.cases[0]}));assert.throws(()=>deserialize(JSON.stringify(big)));
++ for(let k=0;k<CASE_LIMIT+5;k++){const i=spawnIncident(s,0);i.state='onscene';}
++ for(let k=0;k<6000&&s.incidents.some(i=>!['resolved','missed'].includes(i.state));k++)tick(s,.1);
++ assert.ok(s.cases.length<=CASE_LIMIT);
++ s.ended=true;assert.equal(nextShift(s).cases,undefined);
++});

@@ -1,0 +1,153 @@
+--- a/android/runtime_assets.py
++++ b/android/runtime_assets.py
+@@ -39,8 +39,9 @@
+             ref = ref.removeprefix('./')
+             if '/' in ref or ref.startswith('..'):
+                 continue  # only flat dist/ assets are packaged
+-            if (dist / ref).is_file():
+-                queue.append(ref)
++            if not (dist / ref).is_file():
++                raise FileNotFoundError(f'{name} references a missing runtime asset: {ref}')
++            queue.append(ref)
+     return sorted(seen)
+ 
+ 
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -143,10 +143,10 @@
+ function setTab(tab){if(tab!=='map'&&fullscreen.active)fullscreen.exit();document.body.dataset.tab=tab;framePacer.reset();diagnostics.resetFrames();document.querySelectorAll('[data-tab-button]').forEach(b=>b.classList.toggle('active',b.dataset.tabButton===tab));refresh(true);}
+ const nav=document.createElement('nav');nav.className='mobile-nav';nav.innerHTML='<button data-tab-button="map" class="active">⌖ Карта</button><button data-tab-button="units">▣ Экипажи</button><button id="mobileCalls" data-tab-button="calls">Вызовы</button><button id="mobileSettings">⚙ Настройки</button><button id="mobileMenu">☰ Меню</button>';document.body.append(nav);$('mobileSettings').onclick=audioPanel;document.querySelectorAll('[data-tab-button]').forEach(b=>b.onclick=()=>setTab(b.dataset.tabButton));$('mobileMenu').onclick=()=>modal('<span class="eyebrow">MERCURY RESPONSE</span><h2>Меню смены</h2><div class="menu-actions"><button id="menuAudio">Настройки · звук и графика</button><button id="menuGraphics">Графика и модели</button><button id="menuResidents">Жители центра</button><button id="menuService">Личное дело и развитие</button><button id="menuTraining">Учебная смена</button><button id="menuHelp">Как играть</button><button id="menuPlan">План развития</button><button id="menuDepartment">Отделение · найм и автопарк</button><button id="menuReport">Отчёт и сохранение</button><button id="menuJournal">Радиожурнал</button><button id="menuCareer">Новая карьера</button><button id="menuChief">Новая игра за начальника</button></div><p>Друг может открыть эту же ссылку и начать собственную кампанию. Общего города пока нет.</p>');$('mobileMenu').addEventListener('click',()=>{$('menuService').hidden=state.mode!=='career';$('menuService').onclick=servicePanel;$('menuTraining').onclick=trainingPanel;$('menuAudio').onclick=audioPanel;$('menuGraphics').onclick=graphicsPanel;$('menuResidents').onclick=()=>residentsPanel();$('menuDepartment').hidden=state.mode!=='chief';$('menuDepartment').onclick=department;$('menuHelp').onclick=()=>$('helpBtn').click();$('menuPlan').onclick=showPlan;$('menuReport').onclick=report;$('menuJournal').onclick=()=>$('journalBtn').click();$('menuCareer').onclick=()=>{switchMode('career',true);};$('menuChief').onclick=()=>{switchMode('chief',true);};});
+ const db=document.createElement('button');db.id='decisionBtn';db.className='decision-jump';db.hidden=true;document.body.append(db);db.onclick=()=>{const u=state.units.find(u=>u.status==='decision'&&crewAtScene(u)&&canControl(state,u));if(u){selectedUnit=u.id;selectedCall=u.incident;setTab('calls');refresh(true);}};
+-setTab('map');document.addEventListener('visibilitychange',()=>{diagnostics.event('visibility',document.hidden?'hidden':'visible');diagnostics.resetFrames();if(document.hidden){audio.pause();renderer.cancel();activePointers.clear();interactionActive=false;if(started){save();paused=true;}}last=performance.now();simulationClock.reset();});window.addEventListener('pagehide',()=>{audio.pause();if(started)save();});document.addEventListener('keydown',e=>{if(e.code==='Escape'&&fullscreen.active&&!$('modal').open)fullscreen.exit();if(e.code==='Space'&&!['INPUT','SELECT','BUTTON'].includes(document.activeElement.tagName)&&!$('modal').open){e.preventDefault();paused=!paused;if(!paused)audio.unlock();else audio.pause();refresh();}});
++setTab('map');document.addEventListener('visibilitychange',()=>{diagnostics.event('visibility',document.hidden?'hidden':'visible');diagnostics.resetFrames();if(document.hidden){if(deviceTest.active()){deviceTest.cancel();finishDeviceTest(null);}audio.pause();renderer.cancel();activePointers.clear();interactionActive=false;if(started){save();paused=true;}}last=performance.now();simulationClock.reset();});window.addEventListener('pagehide',()=>{if(deviceTest.active()){deviceTest.cancel();finishDeviceTest(null);}audio.pause();if(started)save();});document.addEventListener('keydown',e=>{if(e.code==='Escape'&&fullscreen.active&&!$('modal').open)fullscreen.exit();if(e.code==='Space'&&!['INPUT','SELECT','BUTTON'].includes(document.activeElement.tagName)&&!$('modal').open){e.preventDefault();paused=!paused;if(!paused)audio.unlock();else audio.pause();refresh();}});
+ function frame(now){let frameSaveMs=0;const measuring=diagnostics.enabled(),frameStart=measuring?performance.now():0,frameInterval=now-last;const dt=Math.min((now-last)/1000,.1);last=now;if(document.hidden){framePacer.reset();requestAnimationFrame(frame);return;}const simulationStart=measuring?performance.now():0;if(started&&!paused&&!document.hidden&&!$('modal').open&&!state.ended){const advanced=simulationClock.advance(Math.max(0,frameInterval)/1000,speed,step=>tick(state,step));if(advanced.dropped)diagnostics.event('time-gap-dropped',advanced.dropped.toFixed(3)+' real seconds');saveTime+=dt;if(saveTime>10){frameSaveMs=save();saveTime=0;}}
+  const uiStart=measuring?performance.now():0;if(measuring){pendingSimulation+=Math.max(0,uiStart-simulationStart-frameSaveMs);pendingSave+=frameSaveMs;}uiTime+=dt;if(uiTime>.5){refresh();uiTime=0;const u=state.units.find(x=>x.id===selectedUnit);const restButton=$('restBtn');if(restButton)restButton.disabled=!canControl(state,u)||!['patrol','idle'].includes(u?.status);}
+- const audioStart=measuring?performance.now():0;if(measuring)pendingUI+=audioStart-uiStart;const drawingAllowed=!$('modal').open&&mapVisible(),drawInterval=drawingAllowed?framePacer.take(now):null;if(!drawingAllowed){renderer.suspend();framePacer.reset();pendingWork=0;pendingSimulation=0;pendingUI=0;pendingAudio=0;pendingSave=0;}audio.update(state,selectedUnit,started&&!paused&&!document.hidden&&!$('modal').open&&!state.ended&&!state.setupPending,renderer.scene());const renderStart=performance.now();if(measuring)pendingAudio+=renderStart-audioStart;if(drawInterval!==null)renderer.draw(state,selectedUnit,selectedCall,selectedResident,Math.min(.5,drawInterval/1000),simulationClock.visualScale(paused?0:speed));else if(drawingAllowed)renderer.idle?.();const renderMs=performance.now()-renderStart;if(adaptiveResolution&&drawInterval!==null){const cap=resolutionGovernor.sample(now,drawInterval,renderMs,frameRate);if(cap!==null){renderer.resolution(cap);diagnostics.event('resolution-adapted',String(cap));}}if(measuring)pendingWork+=performance.now()-frameStart;if(diagnostics.enabled()&&drawInterval!==null){const end=performance.now();diagnostics.frame(drawInterval,pendingWork,renderMs,{speed,zoom:renderer.scene().zoom,units:state.units.length,residents:state.population?.residents.length??0,calls:state.incidents.length,width:$('map').width,height:$('map').height,dpr:devicePixelRatio,quality:graphicsQuality,frameRate,worldRate,coverageId:coverage.id,coverageRegion:coverage.region,coverageWidth:coverage.world.maxX-coverage.world.minX,coverageHeight:coverage.world.maxY-coverage.world.minY,simulationMs:pendingSimulation,uiMs:pendingUI,audioMs:pendingAudio,saveMs:pendingSave,...renderer.stats()});pendingWork=0;pendingSimulation=0;pendingUI=0;pendingAudio=0;pendingSave=0;if(now-diagnosticUpdate>500){diagnosticUpdate=now;const m=diagnostics.summary();fpsHud.textContent=`${m.fps} FPS · P95 ${m.frameP95Ms} мс · время ×${worldRate*speed}`;}}if(deviceTest.active())deviceTest.frame(now,drawInterval!==null);if(state.ended&&started&&!reportShown){reportShown=true;save();report();}requestAnimationFrame(frame);}
++ const audioStart=measuring?performance.now():0;if(measuring)pendingUI+=audioStart-uiStart;const drawingAllowed=!$('modal').open&&mapVisible(),drawInterval=drawingAllowed?framePacer.take(now):null;if(!drawingAllowed){renderer.suspend();framePacer.reset();pendingWork=0;pendingSimulation=0;pendingUI=0;pendingAudio=0;pendingSave=0;}audio.update(state,selectedUnit,started&&!paused&&!document.hidden&&!$('modal').open&&!state.ended&&!state.setupPending,renderer.scene());const renderStart=performance.now();if(measuring)pendingAudio+=renderStart-audioStart;if(drawInterval!==null)renderer.draw(state,selectedUnit,selectedCall,selectedResident,Math.min(.5,drawInterval/1000),simulationClock.visualScale(paused?0:speed));else if(drawingAllowed)renderer.idle?.();const renderMs=performance.now()-renderStart;if(adaptiveResolution&&drawInterval!==null){const cap=resolutionGovernor.sample(now,drawInterval,renderMs,frameRate);if(cap!==null){renderer.resolution(cap);diagnostics.event('resolution-adapted',String(cap));}}if(measuring)pendingWork+=performance.now()-frameStart;if(diagnostics.enabled()&&drawInterval!==null){const end=performance.now();diagnostics.frame(drawInterval,pendingWork,renderMs,{speed,zoom:renderer.scene().zoom,units:state.units.length,residents:state.population?.residents.length??0,calls:state.incidents.length,width:$('map').width,height:$('map').height,dpr:devicePixelRatio,quality:graphicsQuality,frameRate,worldRate,coverageId:coverage.id,coverageRegion:coverage.region,coverageWidth:coverage.world.maxX-coverage.world.minX,coverageHeight:coverage.world.maxY-coverage.world.minY,simulationMs:pendingSimulation,uiMs:pendingUI,audioMs:pendingAudio,saveMs:pendingSave,...renderer.stats()});pendingWork=0;pendingSimulation=0;pendingUI=0;pendingAudio=0;pendingSave=0;if(now-diagnosticUpdate>500){diagnosticUpdate=now;const m=diagnostics.summary();fpsHud.textContent=`${m.fps} FPS · P95 ${m.frameP95Ms} мс · время ×${worldRate*speed}`;}}if(deviceTest.active())deviceTest.frame(now,drawInterval!==null);if(state.ended&&started&&!reportShown&&!deviceTest.active()){reportShown=true;save();report();}requestAnimationFrame(frame);}
+ refresh(true);welcome();requestAnimationFrame(frame);
+ 
+ function trainingMarkup(){const t=trainingSummary(state);if(!t)return '<p>Учебная смена доступна в режиме карьеры.</p>';return `<section class="training-card"><span class="eyebrow">ПАТРУЛЬ 01 · МОРОЗОВ И СТАЖЁР</span><h3>${t.completed?'Первый цикл пройден':'Учебная смена'} · ${t.done}/4</h3><p>${escapeHtml(t.hint)}</p>${t.lessons.map(l=>`<div class="training-step ${l.event?'done':''}"><b>${l.event?'✓':'○'} ${l.title}</b><small>${l.event?'Вызов №'+l.event.incident+' · смена '+l.event.shift+(l.kind==='decision'?(l.event.manual?' · ваше решение':' · решение автомата'):''):l.hint}</small></div>`).join('')}<details><summary>Журнал учебных действий</summary>${t.events.map(e=>`<p>Смена ${e.shift} · ${clock(e.time)} · вызов №${e.incident}: ${escapeHtml(({accepted:"Вызов принят",arrived:"Прибыли",decision:"Выбрано действие",resolved:"Помощь завершена",failed:"Помощь не завершена"})[e.kind])}${e.detail?" — "+escapeHtml(({talk:"разговор и деэскалация",check:"проверка обстоятельств",secure:"безопасность места",backup:"подкрепление",chase:"преследование",observe:"наблюдение"})[e.detail]??e.detail):""}${e.kind==="decision"?(e.manual?" (вручную)":" (автомат)"):""}</p>`).join("")||"<p>Событий пока нет.</p>"}</details><p>Решений вручную: ${t.manual}. В автомате: ${t.automatic}. Неудачных исходов: ${t.failed}.</p><p class="fine-print">${t.legacy?'Учёт начат после обновления; прежние действия не оценивались. ':''}Это разбор первого учебного цикла экипажа. Автоматический режим засчитывается отдельно; обучение не требует обязательных нажатий и не даёт дополнительной награды.</p></section>`;}
+@@ -179,7 +179,7 @@
+ function startDeviceTest(){if(!started||deviceTest.active())return;if(!state.units.length){toast('Сначала сформируйте хотя бы один патруль.');return;}
+  deviceTestRestore={snapshot:serialize(state),speed,paused};$('modal').close();paused=false;setTab('map');deviceTestBar.hidden=false;deviceTest.start(performance.now());}
+ function finishDeviceTest(results){const r=deviceTestRestore;deviceTestRestore=null;deviceTestBar.hidden=true;
+- if(r){try{state=deserialize(r.snapshot);}catch{}setGameSpeed(r.speed);paused=r.paused;renderer.city();refresh(true);}
++ if(r){try{state=deserialize(r.snapshot);}catch{}setGameSpeed(r.speed);paused=r.paused;simulationClock.reset();last=performance.now();renderer.city();refresh(true);}
+  if(!results){toast('Проверка устройства отменена. Кампания не изменилась.');return;}
+  const scene=renderer.stats(),text=formatDeviceReport(results,{version:$('modal')&&document.querySelector('.build')?.textContent?.trim(),width:innerWidth,height:innerHeight,dpr:devicePixelRatio,pixelWidth:scene.pixelWidth,pixelHeight:scene.pixelHeight,frameRate,quality:graphicsQuality,agent:navigator.userAgent.replace(/\s+/g,' ').slice(0,160)});
+  modal(`<span class="eyebrow">ПРОВЕРКА УСТРОЙСТВА</span><h2>Результат</h2><table class="device-table"><tr><th>Вид</th><th>к/с</th><th>P95</th><th>Худший</th><th>Подвис.</th></tr>${results.map(x=>`<tr class="${x.fps>=25?'ok':x.fps>=15?'mid':'bad'}"><td>${escapeHtml(x.label)}</td><td>${x.fps}</td><td>${x.p95Ms} мс</td><td>${x.worstMs} мс</td><td>${x.stalls}</td></tr>`).join('')}</table><p>Скопируйте текст и отправьте разработчикам. Кампания восстановлена в состоянии до проверки.</p><textarea id="deviceReport" class="device-report" readonly rows="9">${escapeHtml(text)}</textarea><button id="copyDeviceReport" class="primary">Скопировать результат</button>`);
+--- a/dist/sim.js
++++ b/dist/sim.js
+@@ -188,7 +188,7 @@
+  if(s.districts!==undefined&&!(s.districts&&typeof s.districts==='object'&&Object.entries(s.districts).every(([k,v])=>DISTRICT_IDS.includes(k)&&num(v,0,100))))return false;
+  if(s.followUps!==undefined&&!(Array.isArray(s.followUps)&&s.followUps.length<=12&&s.followUps.every(f=>num(f.at,0,2000)&&variantById(f.variant)&&containsWorldPoint(f)&&Number.isInteger(f.from)&&typeof f.reason==='string'&&f.reason.length<200)))return false;
+  if(s.custodyDone!==undefined&&!(Number.isInteger(s.custodyDone)&&s.custodyDone>=0&&s.custodyDone<10000))return false;
+- if(!s.incidents.every(i=>(i.custodyChoice===undefined||i.custodyChoice in CUSTODY_CHOICES)&&(i.medical===undefined||['called','treated'].includes(i.medical))))return false;
++ if(!s.incidents.every(i=>(i.custodyChoice===undefined||Object.hasOwn(CUSTODY_CHOICES,i.custodyChoice))&&(i.medical===undefined||['called','treated'].includes(i.medical))))return false;
+  if(!validServices(s)||!validCases(s))return false;
+  return s.incidents.every(i=>i.followUp===undefined||Number.isInteger(i.followUp.from)&&typeof i.followUp.reason==='string'&&i.followUp.reason.length<200);}
+ 
+@@ -207,7 +207,7 @@
+ 
+ // Player choice at the scene (manual crews): arrest or release with a warning.
+ export function setCustodyChoice(s,uid,choice){const u=s.units.find(x=>x.id===uid),i=s.incidents.find(x=>x.id===u?.incident);
+- if(!u||!i||s.ended||!(choice in CUSTODY_CHOICES)||!canChooseCustody(i.variant)||!crewAtScene(u)||!['decision','working'].includes(u.status)||!canControl(s,u))return false;
++ if(!u||!i||s.ended||!(Object.hasOwn(CUSTODY_CHOICES,choice))||!canChooseCustody(i.variant)||!crewAtScene(u)||!['decision','working'].includes(u.status)||!canControl(s,u))return false;
+  i.custodyChoice=choice;log(s,`${u.name}: ${choice==='arrest'?'задерживаем участника, повезём в участок':'отпустим с предупреждением'} (вызов №${i.id}).`);return true;}
+ 
+ // 0.7.1 v1 ambulance service: hospital -> scene (treat) -> hospital (handover) -> done.
+--- a/dist/diagnostics.js
++++ b/dist/diagnostics.js
+@@ -7,5 +7,5 @@
+  function event(type,detail=''){if(!enabled)return;const at=clock(),entry={atMs:Math.round(at),type:clean(type),detail:clean(detail),context:{...context}};const prior=events.at(-1);if(prior&&prior.type===entry.type&&prior.detail===entry.detail&&at-prior.atMs<1000){prior.count=(prior.count??1)+1;return;}events.push(entry);if(events.length>limit)events.shift();}
+  function frame(intervalMs,workMs,renderMs,info={}){if(!enabled||![intervalMs,workMs,renderMs].every(Number.isFinite)||intervalMs<=0)return;frames.push({intervalMs,workMs:Math.max(0,workMs),renderMs:Math.max(0,renderMs),...Object.fromEntries(['simulationMs','uiMs','audioMs','saveMs','backgroundSliceMs'].map(key=>[key,Math.max(0,Number.isFinite(info[key])?info[key]:0)]))});if(frames.length>windowSize)frames.shift();context={};for(const key of ['speed','zoom','units','residents','calls','width','height','dpr','frameRate','worldRate','renderDpr','pixelWidth','pixelHeight','spriteHits','spriteMisses','spriteEntries','spriteBytes','peopleSpriteHits','peopleSpriteMisses','peopleSpriteEntries','peopleSpriteBytes','backgroundBuilds','backgroundSlices','backgroundSliceMs','backgroundPeakMs','backgroundPending','backgroundPhase','backgroundBytes','startupMs','prepareMs','indexMs','preparationSteps','preparationPeakMs','occlusionGridCell','occlusionGridCells','occlusionGridReferences','occlusionGridLarge','occlusionCacheCandidates','occlusionCacheLimit','occlusionCacheEntries','occlusionQueries','occlusionFaces','occlusionSkippedFaces','preparationPending','coverageWidth','coverageHeight'])if(Number.isFinite(info[key]))context[key]=info[key];if(['models','eco','simple'].includes(info.quality))context.quality=info.quality;for(const key of ['coverageId','coverageRegion'])if(typeof info[key]==='string')context[key]=clean(info[key]);if(intervalMs>100&&clock()-lastSlow>=1000){lastSlow=clock();event('slow-frame',Math.round(intervalMs)+' ms');}}
+  function summary(){const n=frames.length,percentile=(key,p)=>{if(!n)return 0;const list=frames.map(f=>f[key]).sort((a,b)=>a-b);return Math.round(list[Math.ceil(n*p)-1]*10)/10;};return {samples:n,fps:n?Math.round(1000*n/frames.reduce((sum,f)=>sum+f.intervalMs,0)):0,frameP50Ms:percentile('intervalMs',.5),frameP95Ms:percentile('intervalMs',.95),workP95Ms:percentile('workMs',.95),renderP95Ms:percentile('renderMs',.95),simulationP95Ms:percentile('simulationMs',.95),uiP95Ms:percentile('uiMs',.95),audioP95Ms:percentile('audioMs',.95),saveP95Ms:percentile('saveMs',.95),backgroundP95Ms:percentile('backgroundSliceMs',.95),over50Ms:frames.filter(f=>f.intervalMs>50).length};}
+- return {event,frame,summary,enabled:()=>enabled,setEnabled(value){enabled=!!value;if(enabled)browserStalls.start();else browserStalls.stop();frames=[];lastSlow=-Infinity;if(enabled)event('diagnostics','enabled');},resetFrames(){frames=[];},clear(){browserStalls.clear();frames=[];events=[];lastSlow=-Infinity;},report(){return {schema:2,version:'0.6.0-b',createdAt:new Date().toISOString(),enabled,browser:browserStalls.report(),backgroundPhases:{0:'idle',1:'city-preparation',2:'feature-selection',3:'ground-roads',4:'masks-shadows',5:'mask-index',6:'facades',7:'labels'},metrics:summary(),context:{...context},events:events.map(e=>({...e,context:{...e.context}})),limits:'Local current-tab session. Up to 240 frames and 120 events. Frame timing is not GPU timing. No network upload.'};}};
++ return {event,frame,summary,enabled:()=>enabled,setEnabled(value){enabled=!!value;if(enabled)browserStalls.start();else browserStalls.stop();frames=[];lastSlow=-Infinity;if(enabled)event('diagnostics','enabled');},resetFrames(){frames=[];},clear(){browserStalls.clear();frames=[];events=[];lastSlow=-Infinity;},report(){return {schema:2,version:'0.7.0-a',createdAt:new Date().toISOString(),enabled,browser:browserStalls.report(),backgroundPhases:{0:'idle',1:'city-preparation',2:'feature-selection',3:'ground-roads',4:'masks-shadows',5:'mask-index',6:'facades',7:'labels'},metrics:summary(),context:{...context},events:events.map(e=>({...e,context:{...e.context}})),limits:'Local current-tab session. Up to 240 frames and 120 events. Frame timing is not GPU timing. No network upload.'};}};
+ }
+--- a/tests/ui.test.mjs
++++ b/tests/ui.test.mjs
+@@ -76,3 +76,14 @@
+  const before=storage.get('meridian-watch-v1');elements.get('wizardSecond').value='candidate:2';elements.get('wizardNext').click();elements.get('wizardVehicle').value='new:sedan';elements.get('wizardBack').click();assert.equal(elements.get('wizardSecond').value,'candidate:2');elements.get('wizardNext').click();assert.equal(elements.get('wizardVehicle').value,'new:sedan');elements.get('wizardCancel').click();elements.get('saveBtn').click();assert.equal(storage.get('meridian-watch-v1'),before);
+  elements.get('patrolWizardBtn').click();elements.get('wizardSecond').value='candidate:1';elements.get('wizardNext').click();assert.match(elements.get('modalContent').innerHTML,/role="alert"/);elements.get('wizardSecond').value='candidate:2';elements.get('wizardNext').click();elements.get('wizardNext').click();elements.get('wizardZone').value='west';elements.get('wizardNext').click();assert.match(elements.get('modalContent').innerHTML,/Разовый найм/);assert.equal(storage.get('meridian-watch-v1'),before);elements.get('wizardNext').click();const s=JSON.parse(storage.get('meridian-watch-v1'));assert.equal(s.budget,1680);assert.equal(s.units.length,1);assert.deepEqual(s.units[0].officerIds,[1,2]);assert.equal(s.units[0].zone,'west');assert.equal(elements.get('modal').open,false);assert.equal(document.body.dataset.tab,'map');
+ });
++
++// Codex: phone lifecycle must cancel the measuring tour without saving its simulated progress.
++test('device tour restores the campaign before background save',async()=>{
++ const {createGame,serialize}=await import('../dist/sim.js');const initial=serialize(createGame());storage.set('meridian-watch-v1',initial);document.hidden=false;
++ await import('../dist/app.js?device-tour-background-review');elements.get('continueBtn').click();elements.get('saveBtn').click();const before=storage.get('meridian-watch-v1');
++ elements.get('mobileSettings').click();elements.get('runDeviceTest').click();assert.ok(elements.get('cancelDeviceTest'));
++ let now=performance.now();for(let k=0;k<20;k++)raf(now+=100);
++ assert.equal(storage.get('meridian-watch-v1'),before,'autosave suppressed during tour');
++ document.hidden=true;events.visibilitychange();assert.equal(storage.get('meridian-watch-v1'),before,'original campaign saved on background');document.hidden=false;events.visibilitychange();
++ elements.get('saveBtn').click();assert.equal(storage.get('meridian-watch-v1'),before);
++});
+--- a/tests/deploy/test_runtime_assets.py
++++ b/tests/deploy/test_runtime_assets.py
+@@ -1,5 +1,5 @@
+ """APK runtime asset closure (Claude, 11.10.2026)."""
+-import importlib.util, re, unittest
++import importlib.util, re, tempfile, unittest
+ from pathlib import Path
+ 
+ ROOT = Path(__file__).resolve().parents[2]
+@@ -8,6 +8,14 @@
+ 
+ 
+ class RuntimeAssets(unittest.TestCase):
++    def test_missing_import_stops_packaging(self):
++        with tempfile.TemporaryDirectory() as folder:
++            dist = Path(folder)
++            (dist / 'index.html').write_text('<script type="module" src="app.js"></script>')
++            (dist / 'app.js').write_text("import './missing.js';")
++            with self.assertRaises(FileNotFoundError):
++                runtime.closure(dist)
++
+     def setUp(self):
+         self.dist = ROOT / 'dist'
+         self.names = runtime.closure(self.dist)
+--- a/android/AndroidManifest.xml
++++ b/android/AndroidManifest.xml
+@@ -1,5 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.mercurypolice.response" android:versionCode="5" android:versionName="0.2.3">
++<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.mercurypolice.response" android:versionCode="6" android:versionName="0.2.4">
+   <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+   <uses-permission android:name="android.permission.INTERNET" />
+   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+--- a/package.json
++++ b/package.json
+@@ -1 +1,8 @@
+-{"name":"meridian-watch","version":"0.6.0-b","type":"module","scripts":{"test":"node --test tests/*.test.mjs"}}
++{
++  "name": "meridian-watch",
++  "version": "0.7.0-a",
++  "type": "module",
++  "scripts": {
++    "test": "node --test tests/*.test.mjs"
++  }
++}
+--- a/dist/index.html
++++ b/dist/index.html
+@@ -1,5 +1,5 @@
+ <!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#111c23"><meta name="description" content="Mercury Response: живая полицейская смена. Карьера с напарником, автономные патрули и управление отделением."><title>Mercury Response — на страже города</title><link rel="stylesheet" href="style.css"></head><body>
+-<header><a class="brand" href="#" aria-label="Mercury Response"><span class="shield">M</span><span>MERCURY <b>RESPONSE</b><small>ГОРОД ЖИВЁТ. ВЫ НА СЛУЖБЕ.</small></span></a><div class="header-right"><span class="build">ПРОТОТИП 0.6.0-b</span><button id="settingsBtn" class="settings-entry">⚙ Настройки</button><button id="planBtn" class="quiet">План развития</button><button id="helpBtn" class="quiet">Как играть <span>?</span></button></div></header>
++<header><a class="brand" href="#" aria-label="Mercury Response"><span class="shield">M</span><span>MERCURY <b>RESPONSE</b><small>ГОРОД ЖИВЁТ. ВЫ НА СЛУЖБЕ.</small></span></a><div class="header-right"><span class="build">ПРОТОТИП 0.7.0-a</span><button id="settingsBtn" class="settings-entry">⚙ Настройки</button><button id="planBtn" class="quiet">План развития</button><button id="helpBtn" class="quiet">Как играть <span>?</span></button></div></header>
+ <main><aside class="left-panel"><div class="section-label">ОПЕРАТИВНЫЙ ЦЕНТР <span class="live-dot"></span></div><div class="mode-switch"><button id="careerBtn" class="active">Карьера</button><button id="chiefBtn">Начальник</button></div><div id="identity" class="identity"></div><button id="serviceBtn">Личное дело · полномочия</button><div class="section-heading"><h2>Экипажи</h2><span id="unitCount">3 НА СМЕНЕ</span></div><button id="departmentBtn" class="primary" hidden>Отделение · найм и автопарк</button><div id="units"></div><div id="unitSettings" class="settings"></div><div class="bottom-note">Меридиан<br><span>Одиночная игра · сохранение на устройстве</span></div></aside>
+ <section class="world"><div class="world-top"><div><span class="eyebrow">ГОРОД МЕРИДИАН</span><h1>На улицах Меридиана</h1></div><div class="weather" id="weather">☀ <span>+14°<small>Ясно</small></span></div></div><div class="stats"><div><span>ВРЕМЯ</span><strong id="clock">17:00</strong><small id="timeScaleLabel">Время ×1</small></div><div><span>ДОВЕРИЕ</span><strong id="trust">78<span>%</span></strong></div><div><span>БЮДЖЕТ</span><strong id="budget">2 400</strong></div><div><span>ЗАВЕРШЕНО</span><strong id="resolved">0</strong></div></div><div class="map-container"><div id="loadingScreen" class="map-loading">Загружаем улицы и дома…<small>Первое открытие требует загрузки карты.</small></div><canvas id="map" aria-label="Улицы и здания города. Экипажи и вызовы также доступны кнопками в боковых панелях."></canvas><div class="map-badge"><span class="live-dot"></span> МЕРИДИАН · ГОРОД <small id="mapState">16 постоянных жителей центра</small></div><button id="fullscreenBtn" class="fullscreen-button" aria-pressed="false">⛶ На весь экран</button><div class="map-controls"><button id="quarterBtn" aria-label="Показать детальный квартал у музея">Квартал</button><button id="residentsBtn" aria-label="Жители центра и их маршруты">Жители</button><button id="cityView" aria-label="Приблизить центр города">Центр</button><button id="followUnit" aria-label="Найти выбранный патруль">Патруль</button><button id="zoomIn" aria-label="Приблизить">+</button><button id="zoomOut" aria-label="Отдалить">−</button><button id="resetView" aria-label="Показать весь город">Город</button></div><div class="map-legend"><span><i class="cyan"></i> Патруль</span><span><i class="orange"></i> Вызов</span><span><i class="lilac"></i> Житель</span><span>Тяните карту для перемещения</span></div></div><div class="transport"><div class="time-controls"><button id="pauseBtn" aria-label="Пауза">Ⅱ</button><button data-speed="1" class="active">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button></div><div class="shift-progress"><span id="shiftLabel">СМЕНА 01</span><div><i id="shiftBar"></i></div></div><button id="saveBtn" class="quiet">Сохранить</button><button id="reportBtn" class="quiet">Отчёт</button></div><div class="radio"><span class="radio-icon">◉</span><div><span class="eyebrow">РАДИОЭФИР</span><p id="radioText" aria-live="polite">Диспетчер: экипажи, приступаем к патрулированию.</p></div><button id="journalBtn" class="quiet">Журнал ↗</button></div></section>
+ <aside class="right-panel"><div class="section-heading"><h2>Вызовы</h2><span id="callCount">0 АКТИВНЫХ</span></div><p class="panel-caption">Выберите происшествие и направьте экипаж.</p><div id="calls"></div><div id="callDetail"></div><div class="tip"><span>ЗАМЕТКА НАСТАВНИКА</span><button id="trainingBtn">Учебная смена · разбор</button><p id="mentor">Следи за усталостью. Отдохнувший экипаж справляется с вызовами быстрее.</p></div></aside></main>
+--- a/patches/apply-claude.sh
++++ b/patches/apply-claude.sh
+@@ -6,6 +6,7 @@
+ set -e
+ cd "$(dirname "$0")/.."
+ last="${1:-case-files}"
++case "$last" in perf|review|live-calls|consequences|weather|custody|debrief|city-budget|apk-assets|device-test|scene-choice|ambulance|case-files) ;; *) echo "Unknown patch stage: $last" >&2; exit 2 ;; esac
+ for step in perf:claude-perf-060b review:claude-review-fixes-060b live-calls:claude-live-calls consequences:claude-consequences weather:claude-weather custody:claude-custody debrief:claude-debrief city-budget:claude-city-budget apk-assets:claude-apk-runtime-assets device-test:claude-device-test scene-choice:claude-scene-choice ambulance:claude-ambulance case-files:claude-case-files; do
+   name="${step%%:*}"; file="patches/${step#*:}.patch"
+   patch -p1 --dry-run -s < "$file" >/dev/null
+@@ -13,4 +14,4 @@
+   echo "applied $file"
+   [ "$name" = "$last" ] && break
+ done
+-npm test 2>&1 | grep -E '^# (tests|pass|fail)'+npm test

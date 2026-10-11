@@ -1,0 +1,251 @@
+--- a/PLAN.md
++++ b/PLAN.md
+@@ -18,7 +18,9 @@
+ 
+ | R6 — роли и дела между сменами · **сделано Claude, ветка claude/roles-cases** | Роли после курсов: ГБР (тактика, форма ≥70, стрельбы), кинолог, оператор дрона — реальные бонусы своему экипажу; «Розыск» и зацепки переходят в следующую смену; скорая v2 — пострадавшие при семейном конфликте и найденные пропавшие | Роль недоступна без звания и курса; дело из прошлой смены закрывается задержанием |
+ 
+-Порядок: R1 → R3 → R2 → R4 → R5 → R6. Каждый пакет отдельной веткой `claude/*`, интеграция и APK — Codex.
++| R7 — сезоны и свет · **сделано Claude, ветка claude/seasons** | Календарь с датами (кампания с 12.10), времена года: зимой снег и гололёд (машины медленнее ×0.8/×0.7, ДТП ×2.5–3), летом жара (дворы, бары, драки), долгота дня Пярну по месяцам (декабрь ~7 ч, июнь ~18 ч) | Зимняя смена темнее и медленнее, летняя — светлее и людная |
++
++Порядок: R1 → R3 → R2 → R4 → R5 → R6 → R7. Каждый пакет отдельной веткой `claude/*`, интеграция и APK — Codex.
+ 
+ ## Автономная работа: пакет на 45–50 минут
+ Ориентир одного запуска — 45–50 минут полезной работы с запасом до следующего ежечасного запуска. Это планирование, а не гарантированный таймер: лимит среды может оказаться меньше, а внешние операции — дольше. Не ждать специально ради заполнения времени. Подтверждение пользователя между уже согласованными этапами не требуется.
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -24,7 +24,7 @@
+ import {residentProfile,residentPosition,PLACES,RESIDENT_STATUS,populationSummary,cityMinute,formatMinute} from './population.js';
+ import {PHASES,sceneAnchor} from './scenes.js';
+ import {nearest,nearestRoad} from './geography.js';
+-import {setRole,grantLeave,offDuty,setPolicy,setPriorityDistrict,repairVehicle,setVehicleExtra,vehicleOf,createGame,tick,assign,decide,rest,nextShift,serialize,deserialize,TYPES,RANKS,canControl,controlReason,setUnitAutomation,configurePatrolArea,log,zone,hireOfficer,buyVehicle,createPatrol,disbandPatrol,callName,callBrief,districtOf,districtTrust,shiftWeather,setCustodyChoice,serviceStatus,canRedirect,unitFitsCall,changeCrew,crewChangeReason,reserveOfficers,shiftCost,configureVehicle,PAINTS,financialSummary,unitReason} from './sim.js';
++import {shiftDateOf,setRole,grantLeave,offDuty,setPolicy,setPriorityDistrict,repairVehicle,setVehicleExtra,vehicleOf,createGame,tick,assign,decide,rest,nextShift,serialize,deserialize,TYPES,RANKS,canControl,controlReason,setUnitAutomation,configurePatrolArea,log,zone,hireOfficer,buyVehicle,createPatrol,disbandPatrol,callName,callBrief,districtOf,districtTrust,shiftWeather,setCustodyChoice,serviceStatus,canRedirect,unitFitsCall,changeCrew,crewChangeReason,reserveOfficers,shiftCost,configureVehicle,PAINTS,financialSummary,unitReason} from './sim.js';
+ import {serviceSummary,CAREER_PERMISSIONS} from './career.js';
+ import {loadGame,saveGame} from './storage.js';
+ import {createRenderer} from './render.js';
+@@ -56,7 +56,7 @@
+ function welcome(){modal(`<span class="eyebrow">MERCURY RESPONSE · ПЕРВАЯ СМЕНА</span><h2>Каждый город<br>начинается с людей.</h2><p>Меридиан встречает вечер. Экипажи выходят на улицы — и ваша смена начинается.</p><div class="start-options"><button id="startCareer" class="primary"><span>01 / КАРЬЕРА</span><strong>Ваш первый патруль</strong><small style="color:#315b55">Вы — стажёр. Морозов — ваш напарник. Наблюдайте за службой и набирайтесь опыта. Вмешивайтесь по желанию.</small></button><button id="startChief"><span>02 / КОМАНДОВАНИЕ</span><strong>Возглавьте смену</strong><small>Наймите сотрудников, сформируйте патрули и назначьте машины. Вы строите отделение.</small></button></div>${loading.recovered?'<p class="notice">Основное сохранение повреждено. Доступна последняя исправная резервная копия.</p>':loading.damaged?'<p class="notice">Сохранение не удалось прочитать. Можно начать новую кампанию или импортировать ранее экспортированный файл через отчёт.</p>':loading.unavailable?'<p class="notice">Браузер запретил доступ к сохранениям. Используйте экспорт в отчёте.</p>':''}${hadSave?'<button id="continueBtn" class="primary" style="width:100%">Продолжить сохранённую смену</button>':''}<p style="font-size:11px">Управление касанием. Кнопки «Карта», «Экипажи», «Вызовы» внизу экрана. Автоматический режим уже включён. Экипажи сами принимают решения. Вкладка в фоне ставит игру на паузу.</p><p style="font-size:10px">Город и его жители вымышлены. Старые кампании автоматически переносятся на новую карту.<br>Версия 0.6.0-b · собственная сессия для каждого игрока · без сетевого кооператива</p>`);$('startCareer').onclick=()=>hadSave?switchMode('career',true):begin('career');$('startChief').onclick=()=>hadSave?switchMode('chief',true):begin('chief');if($('continueBtn'))$('continueBtn').onclick=()=>begin(state.mode,true);}
+ function switchMode(mode,force=false){if(state.mode===mode&&!force)return;modal(`<span class="eyebrow">НОВАЯ КАМПАНИЯ</span><h2>${mode==='chief'?'Встать во главе смены?':'Начать карьеру?'}</h2><p>Начнётся новая кампания. Текущее сохранение будет заменено. Сначала можно экспортировать его в отчёте.</p><div class="modal-actions"><button id="cancelSwitch">Остаться в смене</button><button id="confirmSwitch" class="primary">Начать заново</button></div>`);$('cancelSwitch').onclick=()=>started?close():welcome();$('confirmSwitch').onclick=()=>begin(mode);}
+ $('careerBtn').onclick=()=>switchMode('career');$('chiefBtn').onclick=()=>switchMode('chief');
+-function refresh(full=false){if((interactionActive||$('modal').open)&&!full)return;const showUnits=full||!mobileMedia?.matches||document.body.dataset.tab==='units',showCalls=full||!mobileMedia?.matches||document.body.dataset.tab==='calls';if(!state.units.some(u=>u.id===selectedUnit))selectedUnit=state.units[0]?.id??null;$('clock').textContent=clock(state.time);{const w=shiftWeather(state),info=WEATHER[w.kind];setHtml('weather',`${info.icon} <span>${w.temp>0?'+':''}${w.temp}°<small>${info.label}${w.kind==='rain'?' · больше ДТП':w.kind==='fog'?' · плохая видимость':w.kind==='clear'?' · люди на улицах':' · ветрено'}</small></span>`);}$('clock').title='1 реальная секунда = '+worldRate*speed+' секунд города';$('timeScaleLabel').textContent=worldRate===1?'Время ×'+speed:'Быстрая смена ×'+worldRate*speed;$('trust').innerHTML=`${state.trust}<span>%</span>`;$('budget').textContent=state.budget.toLocaleString('ru');$('resolved').textContent=state.resolved;$('shiftLabel').textContent=`СМЕНА ${String(state.shift).padStart(2,'0')}`;$('shiftBar').style.width=`${state.time/state.shiftLength*100}%`;$('pauseBtn').textContent=paused?'▶':'Ⅱ';$('pauseBtn').setAttribute('aria-label',paused?'Продолжить':'Пауза');$('careerBtn').classList.toggle('active',state.mode==='career');$('chiefBtn').classList.toggle('active',state.mode==='chief');
++function refresh(full=false){if((interactionActive||$('modal').open)&&!full)return;const showUnits=full||!mobileMedia?.matches||document.body.dataset.tab==='units',showCalls=full||!mobileMedia?.matches||document.body.dataset.tab==='calls';if(!state.units.some(u=>u.id===selectedUnit))selectedUnit=state.units[0]?.id??null;$('clock').textContent=clock(state.time);{const w=shiftWeather(state),info=WEATHER[w.kind];setHtml('weather',`${info.icon} <span>${w.temp>0?'+':''}${w.temp}°<small>${info.label}${({rain:' · больше ДТП',fog:' · плохая видимость',clear:' · люди на улицах',wind:' · ветрено',snow:' · скользко, медленнее',ice:' · гололёд, осторожно',heat:' · жарко, людно'})[w.kind]??''}${shiftDateOf(state)?' · '+shiftDateOf(state).label:''}</small></span>`);}$('clock').title='1 реальная секунда = '+worldRate*speed+' секунд города';$('timeScaleLabel').textContent=worldRate===1?'Время ×'+speed:'Быстрая смена ×'+worldRate*speed;$('trust').innerHTML=`${state.trust}<span>%</span>`;$('budget').textContent=state.budget.toLocaleString('ru');$('resolved').textContent=state.resolved;$('shiftLabel').textContent=`СМЕНА ${String(state.shift).padStart(2,'0')}`;$('shiftBar').style.width=`${state.time/state.shiftLength*100}%`;$('pauseBtn').textContent=paused?'▶':'Ⅱ';$('pauseBtn').setAttribute('aria-label',paused?'Продолжить':'Пауза');$('careerBtn').classList.toggle('active',state.mode==='career');$('chiefBtn').classList.toggle('active',state.mode==='chief');
+  const identityMarkup=`<span class="eyebrow">${state.mode==='career'?'ЛИЧНОЕ ДЕЛО / ВАША КАРЬЕРА':'УПРАВЛЕНИЕ ОТДЕЛЕНИЕМ'}</span><strong>${state.mode==='career'?RANKS[state.rank]:'Начальник смены'}</strong><p>${state.mode==='career'?'Напарник: Алексей Морозов':`${state.officers.length} сотрудников · ${state.vehicles.length} машин`}</p><div class="xpbar"><i style="width:${state.rank===4?100:state.xp%150/150*100}%"></i></div><small>${state.xp} опыта ${state.rank<4?'· до следующего звания '+(150-state.xp%150):'· высшая ступень прототипа'}</small>`;if($('identity').innerHTML!==identityMarkup)$('identity').innerHTML=identityMarkup;$('serviceBtn').hidden=state.mode!=='career';
+  if(showUnits)setHtml('units',state.units.map(u=>`<button class="unit ${u.id===selectedUnit?'selected':''}" data-unit="${u.id}"><div class="unit-top"><strong>${escapeHtml(u.name)}</strong><span class="status">${u.auto?'АВТО':'РУЧНОЙ'}</span></div><div class="people">${u.people.map(escapeHtml).join(' · ')}</div><small>${u.foot?({exit:'Выходят из машины',approach:'Пеший подход',onScene:status[u.status],return:'Возвращаются к машине',board:'Посадка'})[u.foot.phase]:status[u.status]} · ${escapeHtml(locationLabel(u))} · ${Number.isFinite(u.currentSpeedKmh)?Math.round(u.currentSpeedKmh):0} км/ч${Number.isFinite(u.roadLimitKmh)?' · лимит '+Math.round(u.roadLimitKmh)+(u.roadLimitSource==='osm'?' (знак)':' (игровой)'):''}${u.incident?' · №'+u.incident:''}</small><p class="unit-reason">${escapeHtml(unitReason(state,u))}${u.trafficReason?"<br>"+escapeHtml(u.trafficReason):""}</p><div class="fatigue">Усталость <div class="meter"><i style="width:${Math.round(u.fatigue)}%"></i></div>${Math.round(u.fatigue)}%</div>${carLine(vehicleOf(state,u))}</button>`).join('')||'<div class="empty">Создайте первый патруль<br>Наймите сотрудника и назначьте машину. Напарник — по желанию.</div>'); $('unitCount').textContent=state.units.length+' НА СМЕНЕ';$('departmentBtn').hidden=state.mode!=='chief';
+  const active=state.incidents.filter(i=>!['resolved','missed'].includes(i.state));if(selectedCall&&!active.find(i=>i.id===selectedCall))selectedCall=null;if(!selectedCall&&active.length)selectedCall=active[0].id;
+@@ -105,7 +105,7 @@
+  $('startShiftBtn').onclick=()=>startNextShift(plan.map(p=>({...p})));}
+ // R1: realistic roster line in the shift report.
+ function nextShiftLine(){const n=nextShiftInfo(state.shift);return `Данные сохранены. Смена 12 часов закончена. Следующая — ${n.label}, ${n.when} в ${formatMinute(n.startMinute)}${n.daysOff?` после ${n.daysOff} выходных`:''} (отдых ${Math.round(n.restHours)} ч). Незавершённые вызовы принимает следующая смена.`;}
+-function report(){const fin=financialSummary(state),unfinished=state.incidents.filter(i=>!['resolved','missed'].includes(i.state)).length;modal(`<span class="eyebrow">${state.ended?'СМЕНА ЗАВЕРШЕНА':'ТЕКУЩАЯ СМЕНА'} / ${String(state.shift).padStart(2,'0')}${isScheduled(state)?' · '+SHIFT_LABEL[shiftKind(state.shift-1)].toUpperCase()+' · 12 Ч':''}</span><h2>${state.ended?'Город говорит спасибо.':'Результаты вашей работы'}</h2>${(d=>`<div class="debrief"><p class="eyebrow">РАЗБОР СМЕНЫ · ${escapeHtml(d.weather)}</p><ul>${d.good.map(t=>`<li class="ok">${escapeHtml(t)}</li>`).join('')}${d.attention.map(t=>`<li class="warn">${escapeHtml(t)}</li>`).join('')}</ul><p class="tip"><b>Наставник:</b> ${escapeHtml(d.tip)}</p></div>`)(shiftDebrief(state))}<div class="report-grid"><div>Решено<strong>${state.resolved}</strong></div><div>Пропущено<strong>${state.missed}</strong></div><div>Опыт<strong>${state.xp}</strong></div></div><p>Доверие жителей: ${state.trust}%. Ваше звание: ${state.mode==='career'?RANKS[state.rank]:'Начальник смены'}. ${state.ended?(isScheduled(state)?nextShiftLine():'Данные сохранены. Следующая смена сохранит опыт, доверие и незавершённые вызовы. Занятые экипажи останутся на месте.'):''}</p><p>Незавершённых вызовов: <b>${unfinished}</b>. Они продолжатся в следующей смене.</p><details class="finance-box"><summary>Доверие по районам</summary>${DISTRICT_IDS.map(id=>[id,districtTrust(state,id)]).sort((a,b)=>a[1]-b[1]).map(([id,v])=>`<div class="finance-row"><span>${districtName(id)}</span><b>${Math.round(v)}%</b></div>`).join('')}<p>Где доверие ниже, жители чаще звонят повторно. Ожидают повторных вызовов: ${state.followUps?.length??0}.</p></details><details class="finance-box" open><summary>Финансы этой смены</summary><div class="finance-row"><span>Остаток на начало учёта</span><b>${fin.opening}</b></div><div class="finance-row"><span>Доходы</span><b>+${fin.income}</b></div><div class="finance-row"><span>Расходы</span><b>−${fin.expenses}</b></div><div class="finance-row"><span>Сейчас в бюджете</span><b>${fin.balance}</b></div><div class="finance-row"><span>К списанию за содержание</span><b>−${fin.pending}</b></div>${(g=>`<div class="finance-row"><span>Мэрия на следующую смену</span><b>${g.total>=0?'+':''}${g.total}</b></div><p class="fine-print">${g.lines.map(escapeHtml).join(' · ')}</p>`)(cityGrant(state))}${fin.support?`<p>При переходе смены будет учтена субсидия ${fin.support}. В прототипе она покрывает дефицит содержания.</p>`:''}<p>После расчёта: <b>${Math.max(0,fin.balance+fin.grant-fin.pending)}</b>. ${fin.legacy?'Для старого сохранения подробный учёт начат с момента обновления.':''}</p>${fin.entries.slice().reverse().map(e=>`<div class="logrow"><small>${clock(e.time)}</small>${escapeHtml(e.label)} <b>${e.amount>0?'+':''}${e.amount}</b></div>`).join('')||'<p>Операций пока нет.</p>'}</details>${trainingMarkup()}${state.mode==='career'?'<button id="reportService">Личное дело и разбор решений</button>':''}${state.previousReport?`<details class="finance-box"><summary>Итоги предыдущей смены ${state.previousReport.shift}</summary><p>Решено: ${state.previousReport.resolved}. Пропущено: ${state.previousReport.missed}. Перенесено: ${state.previousReport.carried}.</p><p>Начало: ${state.previousReport.finance.opening} + доходы ${state.previousReport.finance.income} − расходы ${state.previousReport.finance.expenses} = остаток ${state.previousReport.finance.balance}.</p></details>`:''}<div class="modal-actions">${state.ended?'<button id="nextShiftBtn" class="primary">Следующая смена →</button>':'<button id="resumeBtn" class="primary">Вернуться к игре</button>'}<button id="exportBtn">Экспорт сохранения</button></div><p style="font-size:10px">Сохранение хранится только в этом браузере. Экспорт позволяет перенести кампанию на другое устройство.</p><label style="font-size:12px">Загрузить сохранение <input id="importFile" type="file" accept="application/json,.json" style="display:block;margin-top:8px;max-width:100%"></label><div style="margin-top:20px">${state.history.slice(0,8).map(h=>`<div class="logrow">${h.success?'✓':'—'} ${escapeHtml(h.name)} <small>№${h.id}</small>${h.outcome?'<p>'+escapeHtml(h.outcome)+'</p>':''}</div>`).join('')}</div>`);if($('reportService'))$('reportService').onclick=servicePanel;if($('nextShiftBtn'))$('nextShiftBtn').onclick=()=>{if(offDuty(state)){offDutyPlanner();return;}startNextShift();};if($('resumeBtn'))$('resumeBtn').onclick=close;$('exportBtn').onclick=()=>{const a=document.createElement('a'),url=URL.createObjectURL(new Blob([serialize(state)],{type:'application/json'}));a.href=url;a.download='meridian-watch-save.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};$('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(file.size>1024*1024){toast('Файл слишком большой');return;}try{const imported=deserialize(await file.text());pendingImport=imported;modal('<h2>Загрузить кампанию?</h2><p>Текущее сохранение будет заменено данными из выбранного файла.</p><div class="modal-actions"><button id="cancelImport">Отмена</button><button id="applyImport" class="primary">Загрузить</button></div>');$('cancelImport').onclick=report;$('applyImport').onclick=()=>{state=pendingImport;pendingImport=null;reportShown=false;selectedCall=null;selectedUnit=1;save();close();refresh(true);toast('Кампания загружена');};}catch{toast('Не удалось прочитать сохранение');}};}
++function report(){const fin=financialSummary(state),unfinished=state.incidents.filter(i=>!['resolved','missed'].includes(i.state)).length;modal(`<span class="eyebrow">${state.ended?'СМЕНА ЗАВЕРШЕНА':'ТЕКУЩАЯ СМЕНА'} / ${String(state.shift).padStart(2,'0')}${isScheduled(state)?' · '+SHIFT_LABEL[shiftKind(state.shift-1)].toUpperCase()+' · 12 Ч · '+shiftDateOf(state).label:''}</span><h2>${state.ended?'Город говорит спасибо.':'Результаты вашей работы'}</h2>${(d=>`<div class="debrief"><p class="eyebrow">РАЗБОР СМЕНЫ · ${escapeHtml(d.weather)}</p><ul>${d.good.map(t=>`<li class="ok">${escapeHtml(t)}</li>`).join('')}${d.attention.map(t=>`<li class="warn">${escapeHtml(t)}</li>`).join('')}</ul><p class="tip"><b>Наставник:</b> ${escapeHtml(d.tip)}</p></div>`)(shiftDebrief(state))}<div class="report-grid"><div>Решено<strong>${state.resolved}</strong></div><div>Пропущено<strong>${state.missed}</strong></div><div>Опыт<strong>${state.xp}</strong></div></div><p>Доверие жителей: ${state.trust}%. Ваше звание: ${state.mode==='career'?RANKS[state.rank]:'Начальник смены'}. ${state.ended?(isScheduled(state)?nextShiftLine():'Данные сохранены. Следующая смена сохранит опыт, доверие и незавершённые вызовы. Занятые экипажи останутся на месте.'):''}</p><p>Незавершённых вызовов: <b>${unfinished}</b>. Они продолжатся в следующей смене.</p><details class="finance-box"><summary>Доверие по районам</summary>${DISTRICT_IDS.map(id=>[id,districtTrust(state,id)]).sort((a,b)=>a[1]-b[1]).map(([id,v])=>`<div class="finance-row"><span>${districtName(id)}</span><b>${Math.round(v)}%</b></div>`).join('')}<p>Где доверие ниже, жители чаще звонят повторно. Ожидают повторных вызовов: ${state.followUps?.length??0}.</p></details><details class="finance-box" open><summary>Финансы этой смены</summary><div class="finance-row"><span>Остаток на начало учёта</span><b>${fin.opening}</b></div><div class="finance-row"><span>Доходы</span><b>+${fin.income}</b></div><div class="finance-row"><span>Расходы</span><b>−${fin.expenses}</b></div><div class="finance-row"><span>Сейчас в бюджете</span><b>${fin.balance}</b></div><div class="finance-row"><span>К списанию за содержание</span><b>−${fin.pending}</b></div>${(g=>`<div class="finance-row"><span>Мэрия на следующую смену</span><b>${g.total>=0?'+':''}${g.total}</b></div><p class="fine-print">${g.lines.map(escapeHtml).join(' · ')}</p>`)(cityGrant(state))}${fin.support?`<p>При переходе смены будет учтена субсидия ${fin.support}. В прототипе она покрывает дефицит содержания.</p>`:''}<p>После расчёта: <b>${Math.max(0,fin.balance+fin.grant-fin.pending)}</b>. ${fin.legacy?'Для старого сохранения подробный учёт начат с момента обновления.':''}</p>${fin.entries.slice().reverse().map(e=>`<div class="logrow"><small>${clock(e.time)}</small>${escapeHtml(e.label)} <b>${e.amount>0?'+':''}${e.amount}</b></div>`).join('')||'<p>Операций пока нет.</p>'}</details>${trainingMarkup()}${state.mode==='career'?'<button id="reportService">Личное дело и разбор решений</button>':''}${state.previousReport?`<details class="finance-box"><summary>Итоги предыдущей смены ${state.previousReport.shift}</summary><p>Решено: ${state.previousReport.resolved}. Пропущено: ${state.previousReport.missed}. Перенесено: ${state.previousReport.carried}.</p><p>Начало: ${state.previousReport.finance.opening} + доходы ${state.previousReport.finance.income} − расходы ${state.previousReport.finance.expenses} = остаток ${state.previousReport.finance.balance}.</p></details>`:''}<div class="modal-actions">${state.ended?'<button id="nextShiftBtn" class="primary">Следующая смена →</button>':'<button id="resumeBtn" class="primary">Вернуться к игре</button>'}<button id="exportBtn">Экспорт сохранения</button></div><p style="font-size:10px">Сохранение хранится только в этом браузере. Экспорт позволяет перенести кампанию на другое устройство.</p><label style="font-size:12px">Загрузить сохранение <input id="importFile" type="file" accept="application/json,.json" style="display:block;margin-top:8px;max-width:100%"></label><div style="margin-top:20px">${state.history.slice(0,8).map(h=>`<div class="logrow">${h.success?'✓':'—'} ${escapeHtml(h.name)} <small>№${h.id}</small>${h.outcome?'<p>'+escapeHtml(h.outcome)+'</p>':''}</div>`).join('')}</div>`);if($('reportService'))$('reportService').onclick=servicePanel;if($('nextShiftBtn'))$('nextShiftBtn').onclick=()=>{if(offDuty(state)){offDutyPlanner();return;}startNextShift();};if($('resumeBtn'))$('resumeBtn').onclick=close;$('exportBtn').onclick=()=>{const a=document.createElement('a'),url=URL.createObjectURL(new Blob([serialize(state)],{type:'application/json'}));a.href=url;a.download='meridian-watch-save.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};$('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(file.size>1024*1024){toast('Файл слишком большой');return;}try{const imported=deserialize(await file.text());pendingImport=imported;modal('<h2>Загрузить кампанию?</h2><p>Текущее сохранение будет заменено данными из выбранного файла.</p><div class="modal-actions"><button id="cancelImport">Отмена</button><button id="applyImport" class="primary">Загрузить</button></div>');$('cancelImport').onclick=report;$('applyImport').onclick=()=>{state=pendingImport;pendingImport=null;reportShown=false;selectedCall=null;selectedUnit=1;save();close();refresh(true);toast('Кампания загружена');};}catch{toast('Не удалось прочитать сохранение');}};}
+ let pendingImport=null;$('reportBtn').onclick=report;
+ $('journalBtn').onclick=()=>modal(`<span class="eyebrow">РАДИОЭФИР / ЖУРНАЛ</span>${(state.cases??[]).length?`<h2>Дела смены</h2><div class="cases">${state.cases.map(c=>`<div class="case ${c.success?'ok':'bad'}"><div class="case-top"><b>№${c.id} · ${escapeHtml(c.name)}</b><small>${clock(c.time)} · ${escapeHtml(districtName(c.district))}</small></div><p>${c.decision?'Решение: '+escapeHtml(c.decision)+'. ':''}${escapeHtml(c.outcome)}${c.outcome&&!/[.!?]$/.test(c.outcome)?'.':''}</p><span class="chip">${escapeHtml(c.status)}</span>${c.medical?'<span class="chip">✚ скорая</span>':''}${c.rescue?'<span class="chip">▲ спасатели</span>':''}${c.fromShift&&c.fromShift<state.shift?`<span class="chip">из смены ${c.fromShift}</span>`:''}${c.repeatOf?`<span class="chip">${c.lead?'розыск по делу':'повтор после'} №${c.repeatOf}</span>`:''}${c.evidence?`<span class="chip">улики: ${escapeHtml(c.evidence)}</span>`:''}</div>`).join('')}</div>`:''}${(state.radio??[]).length?`<h2>Радиоэфир</h2><div class="radio-log">${state.radio.map(r=>`<div class="logrow"><small>${clock(r.time)}</small><b>${escapeHtml(r.from)}:</b> ${escapeHtml(r.text)}</div>`).join('')}</div>`:''}<h2>События смены</h2>${state.logs.map(l=>`<div class="logrow"><small>${clock(l.time)}</small>${escapeHtml(l.text)}</div>`).join('')||'<p>Событий пока нет.</p>'}`);
+ $('helpBtn').onclick=()=>modal(`<span class="eyebrow">КРАТКИЙ ИНСТРУКТАЖ</span><h2>Добро пожаловать на службу.</h2><ol><li>Начальнику: откройте «Отделение», наймите одного или двух сотрудников и сформируйте патруль. В «Экипажах» выберите патруль. В карьере вам доступен экипаж 01 с наставником.</li><li>По умолчанию все экипажи действуют самостоятельно: принимают вызовы, выбирают действия и отдыхают.</li><li>Если хотите вмешаться, выключите автомат у своего экипажа. Тогда направляйте его на вызов и выбирайте действие по прибытии.</li><li>Настройте район патруля и разрешение покидать его. Включить автомат обратно можно в любой момент.</li><li>При усталости отправляйте экипаж на отдых. В автомате он делает это сам.</li><li>В конце восьмиминутной смены откройте отчёт. Каждые 150 опыта дают следующее звание.</li></ol><p>Кнопка «Центр» приближает центр, «Город» показывает весь город, «Патруль» находит выбранный экипаж. Карту можно двигать пальцем и масштабировать двумя пальцами. Перетаскивание отключает слежение за патрулём. В карточке вызова есть кнопка показа на карте. Кнопки + и − меняют масштаб. «На весь экран» разворачивает карту; «Выйти» возвращает интерфейс. Если браузер не разрешает полный экран, карта занимает всё доступное окно. Пауза и скорость — под картой. Во время открытия окна, сворачивания или смены вкладки симуляция приостанавливается.</p><p>Звания открывают полномочия; текущие права показаны в личном деле. Участники текущих вызовов видны на карте; у них есть состояния и разные исходы. Кнопка «Жители» открывает 16 постоянных жителей центра: дом, работу и расписание поездок. Светлые цветные машины — их поездки. Имена и назначения зданий вымышлены. Конфликты и заявления о краже могут затрагивать этих жителей: распорядок приостанавливается, результат сохраняется в карточке. После отдыха человек возвращается к делам автоматически. На проверенных участках сотрудники идут от машины по пешеходным путям. Решение доступно после подхода экипажа; по завершении он возвращается в машину. В ручном режиме действие можно изменить во время работы. Оранжевая машина — цель проверки или погони.</p><button id="helpPlan" style="width:100%">Посмотреть план развития</button><h3>Источники карты</h3><p>Меридиан — вымышленный город. Внешний вид и игровая симуляция разработаны для Mercury Response.</p><p class="fine-print">Картографическая основа: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors · ODbL</a>.</p>`);$('helpBtn').addEventListener('click',()=>{$('helpPlan').onclick=showPlan;});
+--- a/dist/calls.js
++++ b/dist/calls.js
+@@ -4,6 +4,7 @@
+ // Mix roughly follows Estonian police call categories (public order ~31%, traffic ~19%,
+ // violence ~14%; ERR/PPA) and typical night calls: alcohol, noise, traffic, family disputes.
+ import {SPECIALTIES,specialtyFor} from './professional.js';
++import {SEASON_WEATHER} from './season.js';
+ 
+ // hours: when the call is most likely; place: preferred kind of location.
+ export const VARIANTS=Object.freeze([
+@@ -89,10 +90,14 @@
+  clear:{label:'Ясно',icon:'☀',temps:[14,22],mods:{'yard-company':1.3,'noise-venue':1.2,'street-fight':1.1}},
+  rain:{label:'Дождь',icon:'☂',temps:[6,14],mods:{crash:2,'animal-road':1.2,'yard-company':.5,'noise-venue':.7,'street-fight':.6,'bike-theft':.6,'drunk-person':.8}},
+  fog:{label:'Туман',icon:'≋',temps:[3,10],mods:{crash:1.6,'animal-road':2,'dangerous-driving':.7}},
+- wind:{label:'Ветер',icon:'≈',temps:[5,13],mods:{'blocked-exit':1.5,'yard-company':.7}}
++ wind:{label:'Ветер',icon:'≈',temps:[5,13],mods:{'blocked-exit':1.5,'yard-company':.7}},
++ // Seasonal kinds (roster campaigns only, season.js).
++ snow:{label:'Снег',icon:'❄',temps:[-9,-1],mods:{crash:2.5,'animal-road':1.3,'blocked-exit':1.6,'yard-company':.3,'noise-venue':.7,'bike-theft':.2,'street-fight':.7}},
++ ice:{label:'Гололёд',icon:'⛸',temps:[-3,1],mods:{crash:3,'drunk-person':1.3,'yard-company':.3,'bike-theft':.3}},
++ heat:{label:'Жара',icon:'☀',temps:[25,31],mods:{'yard-company':1.6,'noise-venue':1.4,'street-fight':1.3,'drunk-person':1.3,'noise-flat':1.2,'bike-theft':1.3}}
+ });
+ const WEATHER_ORDER=['clear','clear','rain','clear','fog','rain','wind','clear'];
+-export function weatherFor(seed,shift){const h=Math.abs(Math.imul((seed>>>0)^0x9e3779b9,31)+Math.imul(shift|0,7919))>>>0,kind=WEATHER_ORDER[h%WEATHER_ORDER.length],[lo,hi]=WEATHER[kind].temps;return {kind,temp:lo+(h>>>8)%(hi-lo+1)};}
++export function weatherFor(seed,shift,season=null){const h=Math.abs(Math.imul((seed>>>0)^0x9e3779b9,31)+Math.imul(shift|0,7919))>>>0,table=season?SEASON_WEATHER[season]:null,order=table?.order??WEATHER_ORDER,kind=order[h%order.length],[lo,hi]=table?.temps?.[kind]??WEATHER[kind].temps;return {kind,temp:lo+(h>>>8)%(hi-lo+1),...(season?{season}:{})};}
+ export const weatherFactor=(weather,variantId)=>WEATHER[weather?.kind]?.mods?.[variantId]??1;
+ 
+ // «Задержание и доставка» — 0.7.0 v1 (Claude, 11.10.2026). A successful call whose decision
+--- a/dist/debrief.js
++++ b/dist/debrief.js
+@@ -2,12 +2,13 @@
+ // what went well, what needs attention and one mentor tip. Pure function over the campaign state.
+ import {WEATHER,weatherFor,DISTRICT_IDS} from './calls.js';
+ import {districtName} from './fiction.js';
++import {shiftWeather} from './sim.js';
+ 
+ const REPEAT=/^Повторно: /;
+ export function shiftDebrief(s){
+  // s.history belongs to the current shift (nextShift starts a fresh one).
+  const history=s.history??[],missed=history.filter(h=>!h.success),repeats=history.filter(h=>REPEAT.test(h.name));
+- const w=weatherFor(7182,s.shift),weather=`${WEATHER[w.kind].icon} ${WEATHER[w.kind].label}, ${w.temp>0?'+':''}${w.temp}°`;
++ const w=shiftWeather(s),weather=`${WEATHER[w.kind].icon} ${WEATHER[w.kind].label}, ${w.temp>0?'+':''}${w.temp}°`;
+  const districts=DISTRICT_IDS.map(id=>[id,s.districts?.[id]??s.trust]).sort((a,b)=>a[1]-b[1]);
+  const [worstId,worst]=districts[0],[bestId,best]=districts.at(-1);
+  const custody=s.custodyDone??0;
+--- a/dist/lighting.js
++++ b/dist/lighting.js
+@@ -1,6 +1,7 @@
+ import {urgentIncident} from './response-priority.js';
+ // Cosmetic lighting follows the saved city clock and never changes simulation.
+-export function cityLighting(minute){const m=((minute%1440)+1440)%1440;if(m>=420&&m<1020)return {name:'День',darkness:0};if(m>=1020&&m<1260)return {name:'Вечер',darkness:(m-1020)/240*.55};if(m>=300&&m<420)return {name:'Рассвет',darkness:(420-m)/120*.55};return {name:'Ночь',darkness:.55};}
++// Optional sun [sunrise,sunset] (season.js) for roster campaigns; without it the legacy fixed day.
++export function cityLighting(minute,sun=null){const m=((minute%1440)+1440)%1440;if(sun){const [rise,set]=sun;if(m>=rise+30&&m<set-30)return {name:'День',darkness:0};if(m>=set-30&&m<set+90)return {name:'Вечер',darkness:(m-(set-30))/120*.55};if(m>=rise-90&&m<rise+30)return {name:'Рассвет',darkness:(rise+30-m)/120*.55};return {name:'Ночь',darkness:.55};}if(m>=420&&m<1020)return {name:'День',darkness:0};if(m>=1020&&m<1260)return {name:'Вечер',darkness:(m-1020)/240*.55};if(m>=300&&m<420)return {name:'Рассвет',darkness:(420-m)/120*.55};return {name:'Ночь',darkness:.55};}
+ export function emergencyLights(unit,state=null){if(state)return unit.pursuing===true||!!unit.incident&&urgentIncident(state,unit.incident)&&['responding','working','decision'].includes(unit.status);return !!unit.incident&&['responding','working','decision'].includes(unit.status)||unit.pursuing===true;}
+ export function beamPoints(q,angle,size){const c=Math.cos(angle),s=Math.sin(angle);return [[4,-2],[size,-size*.26],[size,size*.26],[4,2]].map(([x,y])=>[q.x+x*c-y*s,q.y+x*s+y*c]);}
+ // Presentation-only heading memory: a stopped vehicle keeps its last direction.
+--- a/dist/render.js
++++ b/dist/render.js
+@@ -24,7 +24,7 @@
+ import {PLACES,residentProfile,residentPosition,cityMinute} from './population.js';
+ import {sceneAnchor} from './scenes.js';
+ import {createCamera} from './camera.js';
+-import {PAINTS,FUEL_STATIONS} from './sim.js';
++import {PAINTS,FUEL_STATIONS,shiftWeather,sunOf} from './sim.js';
+ import {LIVERIES} from './garage.js';
+ import {departmentIndex} from './staff.js';
+ import {NODES,byId,project} from './geography.js';
+@@ -64,7 +64,7 @@
+  // Owner decision 11.10.2026: the fictional city shows no street or district labels.
+  }
+  // Shift weather (calls.js): light rain streaks or haze. ~70 strokes per frame, no allocation.
+- function weatherOverlay(w){if(w.kind==='fog'){ctx.fillStyle='rgba(214,226,230,.13)';ctx.fillRect(0,0,width,height);return;}if(w.kind!=='rain'||!lightEffects)return;ctx.strokeStyle='rgba(190,215,235,.28)';ctx.lineWidth=1;ctx.beginPath();const t=cosmeticTime*620;for(let k=0;k<70;k++){const x=((k*97.3+t*.35)%(width+60))-30,y=((k*53.9+t)%(height+40))-20;ctx.moveTo(x,y);ctx.lineTo(x-4,y+12);}ctx.stroke();}
++ function weatherOverlay(w){if(w.kind==='snow'&&lightEffects){ctx.fillStyle='rgba(235,242,248,.85)';const t=cosmeticTime*40;for(let k=0;k<90;k++){const x=((k*71.3+Math.sin(t*.05+k)*14+t*.15)%(width+20))-10,y=((k*47.9+t)%(height+20))-10;ctx.fillRect(x,y,2.5,2.5);}ctx.fillStyle='rgba(232,240,246,.15)';ctx.fillRect(0,0,width,height);return;}if(w.kind==='ice'){ctx.fillStyle='rgba(170,205,235,.10)';ctx.fillRect(0,0,width,height);return;}if(w.kind==='heat'){ctx.fillStyle='rgba(255,200,120,.06)';ctx.fillRect(0,0,width,height);return;}if(w.kind==='fog'){ctx.fillStyle='rgba(214,226,230,.13)';ctx.fillRect(0,0,width,height);return;}if(w.kind!=='rain'||!lightEffects)return;ctx.strokeStyle='rgba(190,215,235,.28)';ctx.lineWidth=1;ctx.beginPath();const t=cosmeticTime*620;for(let k=0;k<70;k++){const x=((k*97.3+t*.35)%(width+60))-30,y=((k*53.9+t)%(height+40))-20;ctx.moveTo(x,y);ctx.lineTo(x-4,y+12);}ctx.stroke();}
+  function releaseBlend(){lightBlend=null;lightCache.width=0;lightCache.height=0;}
+  function cancelBackground(){backgroundJob=null;staging.width=0;staging.height=0;}
+  function beginBackground(view,night,lightKey){const target={...view,night,lightKey,light:lightEffects?viewLight(lightKey*30):null,w:width,h:height,px:dpr},jobScale=scale,jobZoom=zoom;const world=q=>{const v=groundInverse((q.x-width/2)/jobScale,(q.y-height/2)/jobScale,CITY_VIEW);return {x:target.x+v.x,y:target.y+v.y};};const bounds=featureViewBounds(world,width,height,margin,buildingRise(80,jobScale,jobZoom));staging.width=Math.round((width+margin*2)*dpr);staging.height=Math.round((height+margin*2)*dpr);backgroundJob={target,scale:jobScale,zoom:jobZoom,occluders:[],job:createFrameJob(base(bounds),{budgetMs:4,maxItems:4096})};}
+@@ -123,7 +123,7 @@
+  const services=(s.services??[]).map(a=>({...smooth(a,'m'+a.id),status:a.status,kind:a.kind}));
+  for(const u of units)for(const a of u.foot?.actors??[])seen.add('p'+a.id);for(const key of visuals.keys())if(!seen.has(key))visuals.delete(key);for(const key of headings.keys())if(!seen.has(key))headings.delete(key);for(const u of units)u.renderHeading=vehicleHeading(headings,'u'+u.id,u,dt);for(const a of services)a.renderHeading=vehicleHeading(headings,'m'+a.id,a,dt);
+  camera.track(units,dt,timeScale);const view=camera.getView();zoom=view.zoom;scale=camera.scale();
+- const light=cityLighting(cityMinute(s.population?.elapsed??s.time));darkness=lightEffects?light.darkness:0;const night=darkness>=.25,atmosphere=cityAtmosphere(cityMinute(s.population?.elapsed??s.time)),lightKey=lightEffects?atmosphere.key:-1;actorLight=lightEffects?viewLight(Math.floor(cityMinute(s.population?.elapsed??s.time)/2)*2):null;
++ const light=cityLighting(cityMinute(s.population?.elapsed??s.time),sunOf(s));darkness=lightEffects?light.darkness:0;const night=darkness>=.25,atmosphere=cityAtmosphere(cityMinute(s.population?.elapsed??s.time)),lightKey=lightEffects?atmosphere.key:-1;actorLight=lightEffects?viewLight(Math.floor(cityMinute(s.population?.elapsed??s.time)/2)*2):null;
+  const drift=baseView?Math.hypot(baseView.x-view.x,baseView.y-view.y)*scale:Infinity,interactive=camera.interacting()||cosmeticTime<gestureUntil||view.tracking!==null;
+  const needsBase=!baseView||baseStale||baseView.night!==night||baseView.lightKey!==lightKey||baseView.zoom!==zoom||drift>margin-40;
+  // Start ahead of the margin during continuous panning. Do not restart a running job
+@@ -138,7 +138,7 @@
+  if(!baseView||dx>0||dy>0||dx+cache.width/bpx*ratio<width||dy+cache.height/bpx*ratio<height){ctx.fillStyle=shadeMaterial('#536957',[0,1,0],baseView?.light??actorLight);ctx.fillRect(0,0,width,height);}
+  if(baseView)ctx.drawImage(cache,0,0,cache.width,cache.height,dx,dy,cache.width/bpx*ratio,cache.height/bpx*ratio);if(lightBlend){lightBlend.left=Math.max(0,lightBlend.left-Math.max(0,dt));const v=lightBlend.view;if(v.zoom===zoom&&Math.hypot(v.x-view.x,v.y-view.y)*scale<margin-40){ctx.globalAlpha=lightBlend.left;const lw=v.w??width,lh=v.h??height,lpx=v.px??dpr;ctx.drawImage(lightCache,0,0,lightCache.width,lightCache.height,width/2-(lw/2+margin)+delta(v,view).x,height/2-(lh/2+margin)+delta(v,view).y,lightCache.width/lpx,lightCache.height/lpx);ctx.globalAlpha=1;}else releaseBlend();if(lightBlend?.left===0)releaseBlend();}hits=[];
+  if(darkness){ctx.fillStyle=`rgba(9,20,40,${darkness*.25})`;ctx.fillRect(0,0,width,height);}
+- weatherOverlay(weatherFor(7182,s.shift));
++ weatherOverlay(shiftWeather(s));
+  for(const u of units){const q=p(u);if(q.x<-80||q.y<-80||q.x>width+80||q.y>height+80)continue;const angle=u.renderHeading;
+   headlights(q,angle,vehicles.get(u.vehicleId)?.type==='suv');
+   if(lightEffects&&emergencyLights(u,s)){ctx.beginPath();ctx.arc(q.x,q.y,Math.min(24,10+zoom*.4),0,7);ctx.fillStyle=cosmeticTime%1<.5?'rgba(77,170,255,.16)':'rgba(247,89,91,.13)';ctx.fill();}
+--- /dev/null
++++ b/dist/season.js
+@@ -0,0 +1,21 @@
++// Seasons and daylight for roster campaigns (Claude, 11.10.2026). The PPA calendar (schedule.js)
++// gives every shift a real date; a new campaign starts on 12 October. Pärnu climate and daylight:
++// January ≈ −4 °C and 7 h of daylight, July ≈ +17 °C and 18 h. Snow and black ice slow every car
++// and multiply crashes; summer heat brings yards, bars and the beach to life.
++import {shiftStartMinute} from './schedule.js';
++export const CAMPAIGN_EPOCH=Date.UTC(2026,9,12);// day 2 of the roster clock = 12.10.2026
++export function dateOf(minute){const day=Math.floor(minute/1440)-2,d=new Date(CAMPAIGN_EPOCH+day*86400000);return {month:d.getUTCMonth(),dayOfMonth:d.getUTCDate(),year:d.getUTCFullYear(),label:`${String(d.getUTCDate()).padStart(2,'0')}.${String(d.getUTCMonth()+1).padStart(2,'0')}`};}
++export const shiftDate=index=>dateOf(shiftStartMinute(index));
++export const SEASONS=Object.freeze({winter:'Зима',spring:'Весна',summer:'Лето',autumn:'Осень'});
++export const seasonOf=month=>month<=1||month===11?'winter':month<=4?'spring':month<=7?'summer':'autumn';
++// Local sunrise/sunset (minutes) per month, Pärnu, rounded; DST included.
++export const SUN=Object.freeze([[540,960],[480,1035],[420,1110],[390,1230],[315,1290],[255,1365],[270,1350],[345,1275],[420,1185],[480,1095],[495,975],[550,945]]);
++export const SEASON_WEATHER=Object.freeze({
++ winter:{order:['snow','clear','ice','snow','fog','clear','snow','wind'],temps:{snow:[-9,-1],clear:[-14,-3],ice:[-3,1],fog:[-4,2],wind:[-8,0]}},
++ spring:{order:['clear','rain','clear','wind','rain','clear','fog','clear'],temps:{clear:[6,16],rain:[3,10],wind:[4,11],fog:[1,7]}},
++ summer:{order:['clear','heat','clear','rain','clear','heat','wind','clear'],temps:{clear:[17,24],heat:[25,31],rain:[13,19],wind:[15,20]}},
++ autumn:{order:['rain','clear','fog','rain','wind','clear','rain','fog'],temps:{rain:[4,11],clear:[5,13],fog:[2,8],wind:[3,10]}}
++});
++// Speed of all traffic in the weather (black ice is the worst).
++export const WEATHER_SPEED=Object.freeze({snow:.8,ice:.7,fog:.9});
++export const weatherSpeed=kind=>WEATHER_SPEED[kind]??1;
+--- a/dist/sim.js
++++ b/dist/sim.js
+@@ -7,6 +7,7 @@
+ import {ensurePopulation,resyncPopulation,tickPopulation,validatePopulation,linkResident,releaseResidents,validateResidentLinks} from './population.js';
+ import {SHIFT_TICKS,isScheduled,validSchedule,shiftStartElapsed,nightFatigueFactor,shiftKind,restBefore} from './schedule.js';
+ import {ROUTINE,STATUS_TEXT,briefingFor,validBolo} from './routine.js';
++import {shiftDate,seasonOf,SUN,weatherSpeed} from './season.js';
+ import {BURNOUT,BURNOUT_STRESS,VIOLENT,performanceFactor,microsleep,bucketOf} from './burnout.js';
+ import {ROSTER,ensureOfficer,rosterAfterShift,startFatigueOf,wagesFactor,canTakeLeave,validOfficerRoster} from './roster.js';
+ import {ensureLife,freeBlocks,validPlan,defaultPlan,applyPlan,workShift,startFatigue,courseBonus,validLife,scheduledRank,ROLES,roleBlocker,roleBonus,roleNoCaution,roleLeadBonus} from './life.js';
+@@ -94,7 +95,7 @@
+ export function decide(s,uid,choice){const u=s.units.find(x=>x.id===uid),i=s.incidents.find(x=>x.id===u?.incident);if(!u||!i||!crewAtScene(u)||!['decision','working'].includes(u.status)||s.ended||!canControl(s,u)||!TYPES[i.type].options.some(o=>o[1]===choice))return false;
+  i.decision=choice;explainChoice(i);recordAssessment(s,i,true);if(s.mode==='career'&&u.id===1)trainingEvent(s,'decision',i,true,choice);if(choice==='backup'){i.backupRequested=true;i.backupAt=s.time;radio(s,'backup',u,i);log(s,`${u.name}: запрашиваем подкрепление.`);}u.status='working';return true;}
+ export function rest(s,uid){const u=s.units.find(u=>u.id===uid);if(!u||s.ended||!canControl(s,u)||!['patrol','idle'].includes(u.status))return false;u.status='returning';routeTo(u,HQ);log(s,`${u.name}: возвращаемся на отдых.`);return true;}
+-function move(u,dt,s,v=null){advanceVehicle(u,dt,Math.min(patrolSpeed(u)*speedFactor(v),u.trafficTargetKmh??Infinity),{obeyLimits:!urgentMovement(s,u)});}
++function move(u,dt,s,v=null){advanceVehicle(u,dt,Math.min(patrolSpeed(u)*speedFactor(v)*roadWeather(s),u.trafficTargetKmh??Infinity),{obeyLimits:!urgentMovement(s,u)});}
+ function trafficItems(s){const items=[];for(const r of s.population?.residents??[])if(!['walkVisit','walkBack','visiting'].includes(r.status))items.push({entity:r,id:'resident-'+r.id,desired:30,emergency:false});for(const u of s.units)items.push({entity:u,id:'unit-'+u.id,desired:patrolSpeed(u),emergency:urgentMovement(s,u),blocking:!u.route.length&&['decision','working'].includes(u.status)});for(const i of s.incidents)if(i.type===5&&i.scene)for(const a of i.scene.participants)items.push({entity:a,id:'actor-'+a.id,desired:a.status==='fleeing'?40:15,emergency:false});return items;}
+ function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));if(success&&i.medical==='treated')s.trust=Math.min(100,s.trust+AMBULANCE.trustBonus);if(success&&i.rescue==='done')s.trust=Math.min(100,s.trust+RESCUE_TEAM.trustBonus);if(success&&i.bolo){s.trust=Math.min(100,s.trust+ROUTINE.boloTrust);log(s,`Вызов №${i.id}: ориентировка с инструктажа подтвердилась.`);}if(success)applyPolicyCustody(s,i);recordConsequences(s,i,success);recordCase(s,i,success,outcome);investigate(s,i,success);if(isScheduled(s))callStress(s,i,success);if(success)assignCustody(s,i);const rankBefore=s.rank;if(success){transact(s,110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=xpGain(s,30);}s.rank=rankOf(s);if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
+  for(const id of i.units){const u=s.units.find(u=>u.id===id);if(u&&!u.transport)radio(s,success?'clear':'failed',u,i);if(returnPoliceWalk(u))continue;u.incident=null;u.status='patrol';u.pursuing=false;u.route=u.route.length?[u.route[0]]:[];}
+@@ -213,7 +214,10 @@
+  return s.incidents.every(i=>i.followUp===undefined||Number.isInteger(i.followUp.from)&&typeof i.followUp.reason==='string'&&i.followUp.reason.length<200);}
+ 
+ // Weather of the current shift: derived (not stored), so old saves and the random stream are unchanged.
+-export const shiftWeather=s=>weatherFor(7182,s.shift);
++export const shiftWeather=s=>isScheduled(s)?weatherFor(7182,s.shift,seasonOf(shiftDate(s.shift-1).month)):weatherFor(7182,s.shift);
++// Roster campaigns: real date of the current shift and the sun of that month (season.js).
++export const shiftDateOf=s=>isScheduled(s)?shiftDate(s.shift-1):null;
++export const sunOf=s=>{const d=shiftDateOf(s);return d?SUN[d.month]:null;};
+ 
+ // 0.7.0 v1 custody cycle: patrol -> transporting (to HQ) -> handover (timer) -> patrol with report.
+ function assignCustody(s,i){const choice=custodyDecision(i);if(choice==='warn'){const bonus=policyOf(s).warnDistrict;if(bonus){const d=ensureDistricts(s),id=districtOf(i);d[id]=Math.min(100,d[id]+bonus);}log(s,`Вызов №${i.id}: участников отпустили с предупреждением.`);return;}if(choice!=='arrest')return;const u=s.units.find(x=>i.units.includes(x.id));if(!u||u.transport)return;u.transport={from:i.id,label:callName(i),district:districtOf(i)};}
+@@ -236,7 +240,7 @@
+  const id=(s.nextServiceId??1);s.nextServiceId=id+1;const a={id,kind:'ambulance',x:HOSPITAL.x,y:HOSPITAL.y,route:[],status:'responding',incident:i.id,timer:0,target:{x:i.x,y:i.y}};a.route=roadRoute(a,a.target);s.services.push(a);i.medical='called';
+  log(s,`Скорая ${id}: ${medicalText(i)} — выезжаем на вызов №${i.id}.`);pushRadio(s,serviceCallsign(a),radioText('ambulance',i.id,id));}
+ function tickServices(s,dt){if(!s.services?.length)return;for(const a of [...s.services]){if(a.kind==='rescue'){tickRescue(s,a,dt);continue;}
+- if(a.status==='responding'||a.status==='transporting'){advanceVehicle(a,dt,AMBULANCE.kmh,{obeyLimits:false});if(a.route.length)continue;
++ if(a.status==='responding'||a.status==='transporting'){advanceVehicle(a,dt,AMBULANCE.kmh*roadWeather(s),{obeyLimits:false});if(a.route.length)continue;
+   if(a.status==='responding'){a.status='treating';a.timer=AMBULANCE.treatTime;const i=s.incidents.find(x=>x.id===a.incident);if(i&&!['resolved','missed'].includes(i.state))i.medical='treated';log(s,`Скорая ${a.id}: на месте, оказываем помощь (вызов №${a.incident}).`);}
+   else{a.status='handover';a.timer=AMBULANCE.handoverTime;log(s,`Скорая ${a.id}: пострадавший доставлен в больницу.`);}continue;}
+  a.timer-=dt;if(a.timer>0)continue;
+@@ -252,7 +256,7 @@
+  log(s,`Спасатели ${id}: ${RESCUE[i.variant]} — выезжаем на вызов №${i.id}.`);pushRadio(s,serviceCallsign(a),radioText('rescue',i.id,id));}
+ const policeCordon=(s,i)=>s.units.some(u=>u.incident===i.id&&['decision','working'].includes(u.status)&&crewAtScene(u));
+ function tickRescue(s,a,dt){const i=s.incidents.find(x=>x.id===a.incident),open=i&&!['resolved','missed'].includes(i.state);
+- if(a.status==='responding'||a.status==='returning'){advanceVehicle(a,dt,RESCUE_TEAM.kmh,{obeyLimits:false});if(a.route.length)return;
++ if(a.status==='responding'||a.status==='returning'){advanceVehicle(a,dt,RESCUE_TEAM.kmh*roadWeather(s),{obeyLimits:false});if(a.route.length)return;
+   if(a.status==='returning'){s.services=s.services.filter(x=>x!==a);return;}
+   a.status='securing';a.timer=RESCUE_TEAM.secureTime;if(i)i.rescue='working';log(s,`Спасатели ${a.id}: на месте, ставим безопасную зону (вызов №${a.incident}).`);return;}
+  a.timer-=dt*(a.status==='working'&&open&&policeCordon(s,i)?RESCUE_TEAM.cordonSpeed:1);if(a.timer>0)return;
+@@ -287,6 +291,9 @@
+  if(!u.mealDone&&s.time>=ROUTINE.mealFrom&&s.time<=ROUTINE.mealTo&&!s.incidents.some(i=>i.state==='waiting')){u.status='break';u.route=[];u.routineLeft=ROUTINE.meal;log(s,`${u.name}: обеденный перерыв.`);return true;}
+  return false;}
+ 
++// Snow, black ice and fog slow every car on roster campaigns (legacy campaigns unchanged).
++const roadWeather=s=>isScheduled(s)?weatherSpeed(shiftWeather(s).kind):1;
++
+ // R6 roles (life.js ROLES): the career officer applies for a role once rank and course allow.
+ export function setRole(s,id){if(s.mode!=='career'||!isScheduled(s)||!s.life)return {ok:false,message:'Роли — в карьере по графику.'};if(id===null||id===''){s.life.role=null;log(s,'Вы вернулись в обычный патруль.');return {ok:true,message:'Обычный патруль'};}
+  const why=roleBlocker(s.life,id,s.rank,s.shift);if(why)return {ok:false,message:why};s.life.role=id;log(s,`Приказ: вы назначены — ${ROLES[id].label}.`);return {ok:true,message:ROLES[id].label};}
+--- /dev/null
++++ b/tests/seasons.test.mjs
+@@ -0,0 +1,30 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,tick,shiftWeather,shiftDateOf,sunOf} from '../dist/sim.js';
++import {shiftDate,seasonOf,SUN,weatherSpeed} from '../dist/season.js';
++import {cityLighting} from '../dist/lighting.js';
++import {weatherFor,WEATHER} from '../dist/calls.js';
++// Seasons, daylight and road weather on the roster calendar.
++
++test('the roster calendar has real dates and seasons',()=>{
++ assert.equal(shiftDate(0).label,'12.10');assert.equal(seasonOf(shiftDate(0).month),'autumn');
++ let k=0;while(seasonOf(shiftDate(k).month)!=='winter')k++;assert.equal(shiftDate(k).month,11,'December comes first');
++ const winter=new Set(Array.from({length:40},(_,n)=>weatherFor(7182,n,'winter').kind));assert.ok(winter.has('snow')&&winter.has('ice'));
++ const summer=new Set(Array.from({length:40},(_,n)=>weatherFor(7182,n,'summer').kind));assert.ok(summer.has('heat')&&!summer.has('snow'));
++ for(const kind of [...winter,...summer])assert.ok(WEATHER[kind],kind);
++ assert.ok(weatherFor(7182,5,'winter').temp<=2);
++ assert.deepEqual(weatherFor(7182,3),weatherFor(7182,3,null),'legacy weather unchanged');
++ const s=createGame('career',7182,{schedule:'ppa'});assert.equal(shiftDateOf(s).label,'12.10');assert.deepEqual(sunOf(s),SUN[9]);assert.equal(shiftDateOf(createGame()),null);
++});
++
++test('daylight follows the month; legacy lighting unchanged',()=>{
++ assert.equal(cityLighting(420).darkness,0);assert.equal(cityLighting(1260).darkness,.55);
++ const dec=SUN[11],jun=SUN[5];assert.ok(cityLighting(8*60,dec).darkness>0,'dark at 08:00 in December');assert.equal(cityLighting(8*60,jun).darkness,0);
++ assert.ok(cityLighting(21*60,jun).darkness===0||cityLighting(21*60,jun).darkness<.2,'light June evening');assert.equal(cityLighting(18*60,dec).darkness,.55);
++});
++
++test('snow and black ice slow every car',()=>{
++ assert.ok(weatherSpeed('ice')<weatherSpeed('snow')&&weatherSpeed('snow')<1);assert.equal(weatherSpeed('clear'),1);
++ const run=wantSnow=>{const s=createGame('career',7182,{schedule:'ppa'});s.nextIncident=9000;let n=1;while(n<400&&(shiftWeather({...s,shift:n}).kind==='snow')!==wantSnow)n++;s.shift=n;
++  for(let k=0;k<30;k++)tick(s,.1);const u=s.units[1];let d=0,last={x:u.x,y:u.y};for(let k=0;k<300;k++){tick(s,.1);d+=Math.hypot(u.x-last.x,u.y-last.y);last={x:u.x,y:u.y};}return d;};
++ assert.ok(run(true)<run(false),'patrol covers less ground in snow');
++});

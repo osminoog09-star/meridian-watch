@@ -1,0 +1,8 @@
+{
+  "gameVersion": "0.9.0-a",
+  "androidVersion": "0.2.7",
+  "versionCode": 9,
+  "base": "e55a47a81b3f1ab8ab85ebbc150f45193751882b",
+  "patchesIntegrated": 27,
+  "apkSHA256": "f3fb82d9d4dab8e3dade028d7731a0f719f9bdfdf8a728bc93bce8ec0eb3db72"
+}

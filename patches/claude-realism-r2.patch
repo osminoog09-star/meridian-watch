@@ -1,0 +1,257 @@
+--- a/PLAN.md
++++ b/PLAN.md
+@@ -12,7 +12,7 @@
+ |---|---|---|
+ | R1 — смена и календарь · **сделано Claude, ветка claude/realism-r1** | Новые кампании: 12-часовая смена, календарь Д-Д-Н-Н-4 выходных, время города идёт между сменами, ночная усталость; старые сохранения в прежнем режиме | Смена заканчивается в 20:00/08:00; следующая начинается по графику; жители на своих местах; старые сохранения продолжаются как раньше |
+ | R3 — «Между сменами» (карьера) · **сделано Claude, ветка claude/realism-r3** | Календарь свободных дней: отдых, доп. смена (×1.5, ≥12 ч отдыха, лимит), обучение (стрельбы/физо обязательно, первая помощь, вождение, переговоры, допуски к ролям), личная жизнь; усталость-недосып, стресс, физформа, зарплата | Выбор меняет показатели и следующую смену; нарушить 12 ч отдыха нельзя |
+-| R2 — распорядок смены | Инструктаж с ориентировками, приёмка машины (гараж), обед 1 ч, рапорты и переработка ≤1 ч | Ориентировка встречается в вызове; пропуск обеда даёт усталость |
++| R2 — распорядок смены · **сделано Claude, ветка claude/realism-r2** | Инструктаж с ориентировками, приёмка машины (гараж), обед 1 ч, рапорты и переработка ≤1 ч | Ориентировка встречается в вызове; пропуск обеда даёт усталость |
+ | R4 — выгорание | Стресс и недосып → ошибки, медленнее реакция, ночной «чуть не заснул» за рулём | Эффект объяснён игроку, без безвыходной спирали |
+ | R5 — табель начальника | Ротация экипажей 12 ч, переработки, отпуска, нехватка людей ночью | Начальник видит табель и последствия |
+ 
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -36,7 +36,7 @@
+ function diagnosticPanel(){const report=diagnostics.report();modal(`<h2>Диагностика</h2><label><input id="diagEnabled" type="checkbox"> Показывать FPS и вести журнал</label><p>FPS — частота кадров. P95 — длительность, в которую укладываются 95% последних кадров. Журнал локальный: ошибки, задержки, скорость и настройки. Данные автоматически никуда не отправляются; после перезагрузки журнал очищается.</p><pre id="diagSummary"></pre><button id="diagExport">Скачать отчёт JSON</button><button id="diagClear">Очистить журнал диагностики</button><p>Для замера закройте меню и поиграйте. Отчёт содержит до 240 кадров статистики и 120 событий, без копии кампании. Дополнительно — до 60 задержек браузера, если браузер поддерживает такой замер. Это не время GPU.</p>`);$('diagEnabled').checked=diagnostics.enabled();$('diagSummary').textContent=JSON.stringify(report.metrics,null,2)+'\nПокрытие: '+coverage.region+' / '+coverage.place+' · '+coverage.world.maxX+' × '+coverage.world.maxY+'\nКарта и перекрытия: '+JSON.stringify(Object.fromEntries(Object.entries(report.context).filter(([key])=>key.startsWith('occlusion')||key.startsWith('background'))),null,2)+'\nЗадержки браузера: '+report.browser.mode+' · '+report.browser.samples.length+'\nСобытий: '+report.events.length;$('diagEnabled').onchange=()=>{diagnostics.setEnabled($('diagEnabled').checked);fpsHud.hidden=!diagnostics.enabled();fpsHud.textContent='FPS · сбор данных…';try{localStorage.setItem('mercury-diagnostics',diagnostics.enabled()?'on':'off');}catch{}};$('diagExport').onclick=()=>{const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(diagnostics.report(),null,2)],{type:'application/json'}));a.href=url;a.download='mercury-diagnostics-0.6.0-b.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};$('diagClear').onclick=()=>{diagnostics.clear();$('diagSummary').textContent='Журнал очищен';};}
+ let loading={state:null};try{loading=loadGame(localStorage);if(loading.state){state=loading.state;hadSave=true;}}catch{loading.unavailable=true;}
+ let savedAudio=null;try{savedAudio=localStorage.getItem(AUDIO_KEY);}catch{}const audio=createAudio({preferences:audioPreferences(savedAudio)});
+-const status={patrol:'Патрулирование',idle:'Свободен',responding:'На вызов',decision:'Нужно решение',working:'На месте',returning:'В участок',resting:'Отдых',transporting:'Доставка',handover:'Передача',servicing:'Обслуживание'};
++const status={patrol:'Патрулирование',idle:'Свободен',responding:'На вызов',decision:'Нужно решение',working:'На месте',returning:'В участок',resting:'Отдых',transporting:'Доставка',handover:'Передача',servicing:'Обслуживание',briefing:'Инструктаж',break:'Обед',reports:'Рапорты'};
+ $('loadingScreen').hidden=true;
+ const renderer=createRenderer($('map'),hit=>{if(hit.kind==='resident'){selectedResident=hit.id;residentsPanel(hit.id);return;}if(hit.kind==='unit'){selectedUnit=hit.id;setTab('units');}else{selectedCall=hit.id;setTab('calls');}refresh(true);},{maxSurfacePixels:/Android|MercuryResponseAndroid/i.test(navigator.userAgent)?2000000:Infinity});
+ const locationCache=new WeakMap();function locationLabel(p){const cached=locationCache.get(p);if(cached&&cached.x===p.x&&cached.y===p.y)return cached.label;const road=nearestRoad(p),label=road.name==='Местная улица'?nearest(p).name:road.name;locationCache.set(p,{x:p.x,y:p.y,label});return label;}
+--- a/dist/debrief.js
++++ b/dist/debrief.js
+@@ -13,7 +13,7 @@
+  const custody=s.custodyDone??0;
+  const good=[`Решено вызовов: ${s.resolved}`];if(custody)good.push(`Доведено до участка: ${custody}`);
+  // 0.7.0 step 4: investigations opened this shift (cases list belongs to the shift).
+- const cases=s.cases??[],solved=cases.filter(c=>/^Раскрыто/.test(c.status)).length,open=cases.filter(c=>/^Розыск/.test(c.status)).length;if(solved)good.push(`Раскрыто по розыску: ${solved}`);if(best-worst>=5)good.push(`Спокойнее всего: ${districtName(bestId)} (${Math.round(best)}%)`);
++ const cases=s.cases??[],solved=cases.filter(c=>/^Раскрыто/.test(c.status)).length,open=cases.filter(c=>/^Розыск/.test(c.status)).length;if(solved)good.push(`Раскрыто по розыску: ${solved}`);const bolo=(s.bolo??[]).filter(b=>b.matched!==null).length;if(bolo)good.push(`Ориентировки с инструктажа: ${bolo} из ${s.bolo.length}`);if(best-worst>=5)good.push(`Спокойнее всего: ${districtName(bestId)} (${Math.round(best)}%)`);
+  const attention=[];if(s.missed)attention.push(`Пропущено: ${s.missed}${missed.length?` — ${[...new Set(missed.map(h=>h.name))].slice(0,3).join(', ')}`:''}`);
+  if(repeats.length)attention.push(`Повторные вызовы: ${repeats.length}`);if(open)attention.push(`Дел в розыске: ${open}`);if(worst<60)attention.push(`Проблемный район: ${districtName(worstId)} (${Math.round(worst)}%)`);else if(best-worst>=5)attention.push(`Ниже всего доверие: ${districtName(worstId)} (${Math.round(worst)}%)`);
+  const tip=s.missed>s.resolved?'Пропусков больше, чем решённых вызовов. Отправляйте ближайший свободный экипаж и перенаправляйте машины с мелких вызовов на срочные.'
+--- /dev/null
++++ b/dist/routine.js
+@@ -0,0 +1,27 @@
++// R2 «Распорядок смены» (Claude, 11.10.2026): what a real 12-hour patrol shift looks like.
++//   · Briefing (инструктаж) at the station: tasks and 1–2 lookouts (ориентировки) for the shift.
++//   · Vehicle acceptance: below half a tank the crew refuels before patrol (fleet practice).
++//   · One 1-hour meal break (PPA: 1 h + short pauses per 12 h shift), taken when the queue is
++//     calm between the 4th and 8th hour; an urgent call interrupts it; no break → extra fatigue.
++//   · Reports and car handover in the last 30 minutes at the station.
++// Pure rules and texts; sim.js drives units through these statuses. Scheduled campaigns only.
++import {WORLD_SECONDS_PER_TICK_SECOND} from './transport.js';
++const ticks=minutes=>minutes*60/WORLD_SECONDS_PER_TICK_SECOND;
++export const ROUTINE=Object.freeze({briefing:ticks(15),meal:ticks(60),mealFrom:ticks(4*60),mealTo:ticks(8*60),mealLate:ticks(9*60),reports:ticks(30),mealRecovery:16,skippedMeal:8,acceptFuelShare:.5,boloBonus:1.2,boloTrust:1});
++export const ROUTINE_STATUSES=Object.freeze(['briefing','break','reports']);
++export const STATUS_TEXT=Object.freeze({briefing:'Инструктаж в участке: задачи и ориентировки на смену.',break:'Обеденный перерыв (1 ч). Срочный вызов прервёт обед.',reports:'Конец смены: рапорты и сдача машины в участке.'});
++// Lookouts: what the briefing asks crews to watch for; matched to a later call of that variant.
++const BOLO=Object.freeze([
++ {variant:'drunk-driver',text:'серый универсал, водитель мог быть пьян — номер на инструктаже'},
++ {variant:'dangerous-driving',text:'тёмный седан, гонки по ночным улицам'},
++ {variant:'vehicle-alert',text:'угнанный белый фургон'},
++ {variant:'no-licence',text:'водитель, лишённый прав, ездит на синем хэтчбеке'},
++ {variant:'shoplift',text:'мужчина в красной куртке, серия краж в магазинах'},
++ {variant:'bike-theft',text:'подросток с болторезом в рюкзаке, кражи велосипедов'},
++ {variant:'car-break',text:'двое в тёмной одежде вскрывают машины во дворах'},
++ {variant:'missing-elder',text:'пожилой мужчина с деменцией, мог уйти из дома'}
++]);
++const mix=(a,b)=>{let h=Math.imul((a|0)+31,2654435761)^Math.imul((b|0)+17,40503);h^=h>>>13;return (h>>>0);};
++export function briefingFor(seed,shift){const a=mix(seed,shift)%BOLO.length;let b=mix(shift,seed)%BOLO.length;if(b===a)b=(b+3)%BOLO.length;
++ return [a,b].map((k,n)=>({id:n+1,variant:BOLO[k].variant,text:BOLO[k].text,matched:null}));}
++export function validBolo(s){if(s.bolo===undefined)return true;return Array.isArray(s.bolo)&&s.bolo.length<=3&&s.bolo.every(b=>b&&Number.isInteger(b.id)&&typeof b.variant==='string'&&typeof b.text==='string'&&b.text.length<=160&&(b.matched===null||Number.isInteger(b.matched)));}
+--- a/dist/sim.js
++++ b/dist/sim.js
+@@ -6,6 +6,7 @@
+ import {LIVERIES,EXTRAS,SLOTS,FUEL,WEAR,REPAIR,ensureVehicle,addHistory,consume,speedFactor,emptyTank,needsFuel,broken,refuelCost,refuelLitres,repairCost,repairTime,repairMinutes,extraBonus,slotsOf,validVehicleState,toTicks,toMinutes,tankOf} from './garage.js';
+ import {ensurePopulation,resyncPopulation,tickPopulation,validatePopulation,linkResident,releaseResidents,validateResidentLinks} from './population.js';
+ import {SHIFT_TICKS,isScheduled,validSchedule,shiftStartElapsed,nightFatigueFactor,shiftKind} from './schedule.js';
++import {ROUTINE,STATUS_TEXT,briefingFor,validBolo} from './routine.js';
+ import {ensureLife,freeBlocks,validPlan,defaultPlan,applyPlan,workShift,startFatigue,courseBonus,validLife,scheduledRank} from './life.js';
+ import {ensureScene,autoChoice,explainChoice,prepareScenes,sceneStep,closeScene,validateScene} from './scenes.js';
+ import {MAP_ID,NODES,byId,nearest,point,roadRoute,atNode,migrateMap} from './geography.js';
+@@ -48,7 +49,7 @@
+ export function ensureDepartment(s){if(s.version===2)return s;s.version=2;s.officers=[];s.vehicles=[];let oid=1;for(const u of s.units){u.officerIds=u.people.map(name=>{const id=oid++;s.officers.push({id,name,specialty:'Патрулирование',skill:u.skill??.8,salary:40});return id;});u.vehicleId=u.id;s.vehicles.push({id:u.id,name:'Седан '+String(u.id).padStart(2,'0')});}s.candidates=RECRUITS.filter(c=>!s.officers.some(o=>o.name===c.name)).map(c=>({...c}));s.nextOfficerId=oid;s.nextVehicleId=Math.max(0,...s.vehicles.map(v=>v.id))+1;s.nextUnitId=Math.max(0,...s.units.map(u=>u.id))+1;s.setupPending=false;return s;}
+ export function createGame(mode='career',seed=7182,options={}){const s=baseGame(mode,seed);if(mode==='chief')s.units=[];ensureDepartment(s);ensureStaff(s);if(mode==='chief'){s.vehicles=[{id:1,name:'Седан 01'},{id:2,name:'Седан 02'}];s.nextVehicleId=3;s.setupPending=true;}for(const v of s.vehicles)ensureVehicle(v);ensureFinance(s);s.mapId=MAP_ID;s.units.forEach((u,k)=>Object.assign(u,point(byId(['centre','ulejoe','papiniidu'][k]))));ensurePopulation(s);ensureTraining(s);ensureService(s);if(options?.schedule==='ppa')applySchedule(s);return s;}
+ // R1: realistic 12-hour PPA roster for new campaigns (schedule.js). Legacy saves stay unchanged.
+-function applySchedule(s){s.schedule='ppa';s.shiftLength=SHIFT_TICKS;resyncPopulation(s,shiftStartElapsed(s.shift-1));ensureLife(s);}
++function applySchedule(s){s.schedule='ppa';s.shiftLength=SHIFT_TICKS;resyncPopulation(s,shiftStartElapsed(s.shift-1));ensureLife(s);startRoutine(s);}
+ export const rankOf=s=>s.mode==='career'&&isScheduled(s)&&s.life?scheduledRank(s):Math.min(RANKS.length-1,Math.floor(s.xp/150));
+ // Realistic pace: a 12-hour roster shift has twice the calls, so each one is worth a third of the XP.
+ const xpGain=(s,base)=>isScheduled(s)?Math.max(1,Math.round(base/3)):base;
+@@ -56,7 +57,7 @@
+ export function ensureFinance(s){if(!s.finance)s.finance={opening:s.budget,entries:[],legacy:s.time>0||s.shift>1};return s;}
+ export function transact(s,amount,category,label){ensureFinance(s);if(!Number.isFinite(amount)||s.budget+amount<0)throw Error('Некорректная операция');s.budget+=amount;s.finance.entries.push({time:s.time,amount,category,label});}
+ export function financialSummary(s){ensureFinance(s);const income=s.finance.entries.filter(e=>e.amount>0).reduce((n,e)=>n+e.amount,0),expenses=-s.finance.entries.filter(e=>e.amount<0).reduce((n,e)=>n+e.amount,0);const grant=Math.max(-s.budget,cityGrant(s).total);return {opening:s.finance.opening,income,expenses,balance:s.budget,pending:shiftCost(s),grant,support:Math.max(0,shiftCost(s)-s.budget-grant),legacy:s.finance.legacy,entries:s.finance.entries.map(e=>({...e}))};}
+-export function unitReason(s,u){if(!u)return 'Выберите экипаж.';const foot=policeWalkReason(u);if(foot)return foot;const incident=s.incidents.find(i=>i.id===u.incident);if(u.status==='servicing'){const v=departmentIndex(s).byVehicle.get(u.vehicleId),k=v?.service?.kind;const st=FUEL_STATIONS[v?.service?.station];return k==='tow'?'Машина сломалась: ждём эвакуатор.':k==='canister'?'Кончилось топливо: ждём канистру.':k==='repair'?`Машина в ремонте, ещё ~${Math.ceil(toMinutes(v.service.left))} мин.`:u.route.length?`Едем на заправку: ${st?.name??'АЗС'}.`:`Заправляемся: ${st?.name??'АЗС'}.`;}if(u.status==='resting')return 'Восстанавливаем силы в участке. Вернёмся к патрулю после отдыха.';if(u.status==='returning')return 'Едем в участок на отдых.';if(u.status==='transporting')return `Везём задержанного в участок (вызов №${u.transport?.from}).`;if(u.status==='handover')return 'Передаём задержанного дежурному и пишем рапорт.';if(u.status==='responding')return `Едем на вызов №${u.incident}. Приоритет: ${TYPES[incident?.type??0].severity}.`;if(u.status==='decision')return 'Ручной режим: ждём вашу команду в карточке вызова.';if(u.status==='working'&&incident?.scene)return incident.scene.reason;if(u.status==='working')return incident?.backupRequested&&incident.units.length<2?'Работаем осторожно, пока второй экипаж в пути или недоступен.':'На месте: выполняем выбранное действие. Навык, усталость и оснащение влияют на скорость.';return u.auto?`Патрулируем ${u.zone==='west'?'западную часть города':u.zone==='east'?'восточную часть города':'город'}. Принимаем доступные вызовы, сначала наиболее срочные.`:'Ручной режим: назначьте вызов или включите автомат.';}
++export function unitReason(s,u){if(!u)return 'Выберите экипаж.';const foot=policeWalkReason(u);if(foot)return foot;const incident=s.incidents.find(i=>i.id===u.incident);if(STATUS_TEXT[u.status])return STATUS_TEXT[u.status];if(u.status==='servicing'){const v=departmentIndex(s).byVehicle.get(u.vehicleId),k=v?.service?.kind;const st=FUEL_STATIONS[v?.service?.station];return k==='tow'?'Машина сломалась: ждём эвакуатор.':k==='canister'?'Кончилось топливо: ждём канистру.':k==='repair'?`Машина в ремонте, ещё ~${Math.ceil(toMinutes(v.service.left))} мин.`:u.route.length?`Едем на заправку: ${st?.name??'АЗС'}.`:`Заправляемся: ${st?.name??'АЗС'}.`;}if(u.status==='resting')return 'Восстанавливаем силы в участке. Вернёмся к патрулю после отдыха.';if(u.status==='returning')return 'Едем в участок на отдых.';if(u.status==='transporting')return `Везём задержанного в участок (вызов №${u.transport?.from}).`;if(u.status==='handover')return 'Передаём задержанного дежурному и пишем рапорт.';if(u.status==='responding')return `Едем на вызов №${u.incident}. Приоритет: ${TYPES[incident?.type??0].severity}.`;if(u.status==='decision')return 'Ручной режим: ждём вашу команду в карточке вызова.';if(u.status==='working'&&incident?.scene)return incident.scene.reason;if(u.status==='working')return incident?.backupRequested&&incident.units.length<2?'Работаем осторожно, пока второй экипаж в пути или недоступен.':'На месте: выполняем выбранное действие. Навык, усталость и оснащение влияют на скорость.';return u.auto?`Патрулируем ${u.zone==='west'?'западную часть города':u.zone==='east'?'восточную часть города':'город'}. Принимаем доступные вызовы, сначала наиболее срочные.`:'Ручной режим: назначьте вызов или включите автомат.';}
+ export function hireOfficer(s,cid){if(s.mode!=='chief'||s.ended)return {ok:false,message:'Найм доступен начальнику во время смены.'};const c=s.candidates.find(c=>c.id===cid);if(!c)return {ok:false,message:'Кандидат уже нанят.'};if(s.budget<c.fee)return {ok:false,message:'Недостаточно бюджета для найма.'};transact(s,-c.fee,'hire','Найм: '+c.name);const {fee,...person}=c;s.officers.push({...person,id:s.nextOfficerId++,staffVersion:1,fatigue:0});s.candidates=s.candidates.filter(c=>c.id!==cid);log(s,`В отделение принят сотрудник: ${c.name}. Расходы: ${fee}.`);return {ok:true,message:'Сотрудник принят в отделение'};}
+ function hiringReserve(s){return s.setupPending?s.candidates.map(c=>c.fee).sort((a,b)=>a-b).slice(0,Math.max(0,1-s.officers.length)).reduce((n,v)=>n+v,0):0;}
+ export function buyVehicle(s,type='sedan'){const price=type==='suv'?1200:800;if(!['sedan','suv'].includes(type))return {ok:false,message:'Неизвестная модель.'};if(s.mode!=='chief'||s.ended)return {ok:false,message:'Покупка недоступна.'};if(s.budget<price)return {ok:false,message:'Недостаточно бюджета: нужно '+price+'.'};if(s.budget-price<hiringReserve(s))return {ok:false,message:'Сначала наймите хотя бы одного сотрудника: оставьте бюджет на первый патруль.'};if(s.vehicles.length>=6)return {ok:false,message:'В гараже максимум 6 машин.'};const id=s.nextVehicleId++;const bought={id,name:(type==='suv'?'Внедорожник ':'Седан ')+String(id).padStart(2,'0'),type,paint:'white',lights:'redblue',kit:'base',km:0,wear:0,extras:[],history:[],service:null};ensureVehicle(bought);addHistory(bought,s.time,'Новая машина поступила в гараж');s.vehicles.push(bought);transact(s,-price,'vehicle','Покупка: '+(type==='suv'?'внедорожник':'седан'));return {ok:true,message:'Машина доставлена в гараж'};}
+@@ -69,7 +70,7 @@
+ export function routeTo(u,p){u.route=roadRoute(u,p);}
+ // «Живые вызовы»: a random call picks a realistic variant by hour and kind of place (calls.js).
+ // An explicit type keeps the original wording and uniform location (tests, scripted calls).
+-export function spawnIncident(s,type,options=null){let t=type,variant,node;if(options?.variant){variant=variantById(options.variant);t=variant.type;node=options.point;}else if(t==null){variant=pickVariant(rng(s),cityMinute(s.population?.elapsed??s.time),shiftWeather(s));t=variant.type;const nodes=placeNodes(NODES,variant.place,byId('centre'));node=nodes[Math.floor(rng(s)*nodes.length)];}else{variant=defaultVariant(t);node=NODES[Math.floor(rng(s)*NODES.length)];}const i={id:s.nextId++,type:t,variant:variant?.id,...point(node),age:0,state:'waiting',units:[],progress:0,decision:null,backupRequested:false};if(options?.followUp)i.followUp={from:options.followUp.from,reason:options.followUp.reason};ensureScene(i);linkResident(s,i);s.incidents.push(i);log(s,`Диспетчер: ${callName(i)}. Новый вызов №${i.id}.`);radio(s,'broadcast',null,i,DISPATCH);if(i.variant==='fire-smoke')callRescue(s,i);return i;}
++export function spawnIncident(s,type,options=null){let t=type,variant,node;if(options?.variant){variant=variantById(options.variant);t=variant.type;node=options.point;}else if(t==null){variant=pickVariant(rng(s),cityMinute(s.population?.elapsed??s.time),shiftWeather(s));t=variant.type;const nodes=placeNodes(NODES,variant.place,byId('centre'));node=nodes[Math.floor(rng(s)*nodes.length)];}else{variant=defaultVariant(t);node=NODES[Math.floor(rng(s)*NODES.length)];}const i={id:s.nextId++,type:t,variant:variant?.id,...point(node),age:0,state:'waiting',units:[],progress:0,decision:null,backupRequested:false};if(options?.followUp)i.followUp={from:options.followUp.from,reason:options.followUp.reason};ensureScene(i);linkResident(s,i);s.incidents.push(i);log(s,`Диспетчер: ${callName(i)}. Новый вызов №${i.id}.`);radio(s,'broadcast',null,i,DISPATCH);matchBolo(s,i);if(i.variant==='fire-smoke')callRescue(s,i);return i;}
+ export const callName=i=>(i.followUp?(i.variant==='suspect-found'?'Розыск: ':'Повторно: '):'')+(variantOf(i)?.name??TYPES[i.type].name);
+ export const callBrief=i=>variantOf(i)?.brief??TYPES[i.type].brief;
+ // Redirect: a crew still driving to a call may be taken to a strictly more urgent one.
+@@ -82,7 +83,7 @@
+ export function controlReason(s,u,action='command'){return careerPermission(s,u,action).reason;}
+ export function setUnitAutomation(s,uid,value){const u=s.units.find(u=>u.id===uid);if(!careerPermission(s,u,'command').ok||typeof value!=='boolean'||s.ended)return false;u.auto=value;log(s,`${u.name}: ${u.auto?'автономное патрулирование':'ручное управление'}.`);return true;}
+ export function configurePatrolArea(s,uid,zoneValue,crossValue){const u=s.units.find(u=>u.id===uid);if(!u||s.ended||!['all','west','east'].includes(zoneValue)||typeof crossValue!=='boolean')return false;if(!careerPermission(s,u,'zone').ok||crossValue!==u.cross&&!careerPermission(s,u,'cross').ok)return false;u.zone=zoneValue;u.cross=crossValue;if(u.status==='patrol')u.route=u.route.slice(0,1);log(s,`${u.name}: зона патруля изменена.`);return true;}
+-export function assign(s,uid,iid,system=false){const u=s.units.find(u=>u.id===uid),i=s.incidents.find(i=>i.id===iid);if(!u||!i||(!system&&!canControl(s,u))||s.ended||!['waiting','assigned','onscene'].includes(i.state))return false;const redirect=canRedirect(s,u,i);if(!['patrol','idle'].includes(u.status)&&!redirect)return false;
++export function assign(s,uid,iid,system=false){const u=s.units.find(u=>u.id===uid),i=s.incidents.find(i=>i.id===iid);if(!u||!i||(!system&&!canControl(s,u))||s.ended||!['waiting','assigned','onscene'].includes(i.state))return false;if(!system&&['briefing','break','reports'].includes(u.status)){const what=({briefing:'инструктаж',break:'обед',reports:'рапорты'})[u.status];if(u.status==='break')u.mealDone=true;delete u.routineLeft;u.status='patrol';log(s,`${u.name}: по вашему приказу прерываем ${what}.`);}const redirect=canRedirect(s,u,i);if(!['patrol','idle'].includes(u.status)&&!redirect)return false;
+  if(i.units.length&&!i.backupRequested)return false;
+  if(redirect)detach(s,u);
+  u.incident=i.id;u.status='responding';i.units.push(uid);i.state=i.state==='waiting'?'assigned':i.state;routeTo(u,Math.hypot(u.x-i.x,u.y-i.y)<1e-7&&!u.route.length?i:walkAccess(i));if(s.mode==='career'&&u.id===1)trainingEvent(s,'accepted',i,!system);log(s,`${u.name}: принят вызов №${i.id}.`);radio(s,'dispatch',u,i,DISPATCH);radio(s,'accept',u,i);return true;}
+@@ -91,7 +92,7 @@
+ export function rest(s,uid){const u=s.units.find(u=>u.id===uid);if(!u||s.ended||!canControl(s,u)||!['patrol','idle'].includes(u.status))return false;u.status='returning';routeTo(u,HQ);log(s,`${u.name}: возвращаемся на отдых.`);return true;}
+ function move(u,dt,s,v=null){advanceVehicle(u,dt,Math.min(patrolSpeed(u)*speedFactor(v),u.trafficTargetKmh??Infinity),{obeyLimits:!urgentMovement(s,u)});}
+ function trafficItems(s){const items=[];for(const r of s.population?.residents??[])if(!['walkVisit','walkBack','visiting'].includes(r.status))items.push({entity:r,id:'resident-'+r.id,desired:30,emergency:false});for(const u of s.units)items.push({entity:u,id:'unit-'+u.id,desired:patrolSpeed(u),emergency:urgentMovement(s,u),blocking:!u.route.length&&['decision','working'].includes(u.status)});for(const i of s.incidents)if(i.type===5&&i.scene)for(const a of i.scene.participants)items.push({entity:a,id:'actor-'+a.id,desired:a.status==='fleeing'?40:15,emergency:false});return items;}
+-function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));if(success&&i.medical==='treated')s.trust=Math.min(100,s.trust+AMBULANCE.trustBonus);if(success&&i.rescue==='done')s.trust=Math.min(100,s.trust+RESCUE_TEAM.trustBonus);if(success)applyPolicyCustody(s,i);recordConsequences(s,i,success);recordCase(s,i,success,outcome);investigate(s,i,success);if(success)assignCustody(s,i);const rankBefore=s.rank;if(success){transact(s,110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=xpGain(s,30);}s.rank=rankOf(s);if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
++function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));if(success&&i.medical==='treated')s.trust=Math.min(100,s.trust+AMBULANCE.trustBonus);if(success&&i.rescue==='done')s.trust=Math.min(100,s.trust+RESCUE_TEAM.trustBonus);if(success&&i.bolo){s.trust=Math.min(100,s.trust+ROUTINE.boloTrust);log(s,`Вызов №${i.id}: ориентировка с инструктажа подтвердилась.`);}if(success)applyPolicyCustody(s,i);recordConsequences(s,i,success);recordCase(s,i,success,outcome);investigate(s,i,success);if(success)assignCustody(s,i);const rankBefore=s.rank;if(success){transact(s,110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=xpGain(s,30);}s.rank=rankOf(s);if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
+  for(const id of i.units){const u=s.units.find(u=>u.id===id);if(u&&!u.transport)radio(s,success?'clear':'failed',u,i);if(returnPoliceWalk(u))continue;u.incident=null;u.status='patrol';u.pursuing=false;u.route=u.route.length?[u.route[0]]:[];}
+  const text=success?`Вызов №${i.id} завершён. ${outcome}.`:`Вызов №${i.id}: ${outcome}. Доверие снизилось.`;log(s,text);s.history.unshift({id:i.id,name:callName(i),success,time:s.time,outcome});s.history=s.history.slice(0,50);}
+ export function tick(s,dt){if(s.ended||s.setupPending)return;s.time+=dt;s.nextIncident-=dt;
+@@ -100,14 +101,16 @@
+  tickServices(s,dt);
+  tickStaff(s,dt);if(isScheduled(s))nightDuty(s,dt);planTraffic(trafficItems(s));tickPopulation(s,dt);prepareScenes(s,dt);
+  tickParkedService(s,dt);
+- for(const u of s.units){const vehicle=departmentIndex(s).byVehicle.get(u.vehicleId);u.kit=vehicle?.kit??'base';if(u.status==='servicing'&&tickServicing(s,u,vehicle,dt))continue;move(u,dt,s,vehicle);if(vehicle)wearAndFuel(s,u,vehicle,dt);const footBefore=u.foot?.phase;tickPoliceWalk(u,dt);if(footBefore==='approach'&&u.foot?.phase==='onScene'){const i=s.incidents.find(i=>i.id===u.incident);if(i){if(!u.auto&&!i.decision)u.status='decision';if(s.mode==='career'&&u.id===1)trainingEvent(s,'arrived',i);log(s,`${u.name}: сотрудники у участников вызова №${i.id}.`);}}
++ for(const u of s.units){const vehicle=departmentIndex(s).byVehicle.get(u.vehicleId);u.kit=vehicle?.kit??'base';if(u.status==='servicing'&&tickServicing(s,u,vehicle,dt))continue;if((u.status==='briefing'||u.status==='break')&&tickRoutine(s,u,vehicle,dt))continue;move(u,dt,s,vehicle);if(vehicle)wearAndFuel(s,u,vehicle,dt);const footBefore=u.foot?.phase;tickPoliceWalk(u,dt);if(footBefore==='approach'&&u.foot?.phase==='onScene'){const i=s.incidents.find(i=>i.id===u.incident);if(i){if(!u.auto&&!i.decision)u.status='decision';if(s.mode==='career'&&u.id===1)trainingEvent(s,'arrived',i);log(s,`${u.name}: сотрудники у участников вызова №${i.id}.`);}}
+  if(tickCustody(s,u,dt))continue;
++ if(u.status==='reports')continue;
+  if(u.status==='returning'&&!u.route.length)u.status='resting';
+  if(u.status==='resting'){if(crewReady(s,u)){u.status='patrol';log(s,`${u.name}: снова готовы к работе.`);}continue;}
+  if(u.status==='responding'&&!u.route.length){const i=s.incidents.find(i=>i.id===u.incident);if(i){i.state='onscene';callAmbulance(s,i);callRescue(s,i);u.status=u.auto?'working':'decision';const walking=beginPoliceWalk(u,i);if(walking)u.status='working';else if(s.mode==='career'&&u.id===1)trainingEvent(s,'arrived',i);log(s,`${u.name}: ${walking?'припарковались, идём к участникам':'на месте вызова'} №${i.id}.`);radio(s,'arrive',u,i);}}
+  if(u.status==='decision'&&u.auto)u.status='working';
+  if(u.status==='working'&&u.auto&&crewAtScene(u)){const i=s.incidents.find(i=>i.id===u.incident);if(i&&!i.decision){i.decision=autoChoice(i);explainChoice(i);recordAssessment(s,i,false);if(s.mode==='career'&&u.id===1)trainingEvent(s,'decision',i,false,i.decision);if(TYPES[i.type].severity===3){i.backupRequested=true;i.backupAt=s.time;radio(s,'backup',u,i);log(s,`${u.name}: держим дистанцию, запрашиваем второй экипаж.`);}else log(s,`${u.name}: ${i.scene.reason}`);}}
+ 
++ if(isScheduled(s)&&['patrol','idle'].includes(u.status)&&routineDue(s,u))continue;
+  if(['patrol','idle'].includes(u.status)&&u.auto){if(crewNeedsRest(s,u)){u.status='returning';routeTo(u,HQ);continue;}
+  const candidates=s.incidents.filter(i=>i.state==='waiting'||(i.backupRequested&&i.units.length<2&&!i.units.includes(u.id))).filter(i=>u.cross||u.zone==='all'||zone(i)===u.zone).sort((a,b)=>TYPES[b.type].severity-TYPES[a.type].severity||priorityRank(s,a)-priorityRank(s,b)||Math.hypot(a.x-u.x,a.y-u.y)-Math.hypot(b.x-u.x,b.y-u.y));
+  if(candidates.length)assign(s,u.id,candidates[0].id,true);
+@@ -116,7 +119,7 @@
+  autoRedirect(s);
+  for(const i of s.incidents){if(['resolved','missed'].includes(i.state))continue;i.age+=dt;const working=s.units.filter(u=>u.incident===i.id&&u.status==='working'&&crewAtScene(u));
+  const sceneResult=sceneStep(i,working,dt);if(sceneResult.failure){finish(s,i,false,sceneResult.failure);continue;}
+- if(working.length){if(!i.decision)i.decision='check';const multi=working.length>1?1.45:1;const caution=i.backupRequested&&working.length<2&&(s.time-(i.backupAt??s.time)<25)?.15:1;i.progress+=dt*sceneResult.rate*multi*caution*crewFit(s,working[0],i.type)*(1-working[0].fatigue*.004)*(.7+working[0].skill*.4+developmentBonus(s,i,working[0]))*((i.type===1&&working[0].kit==='aid')||(i.type===2&&working[0].kit==='search')?1.2:1)*extraBonus(departmentIndex(s).byVehicle.get(working[0].vehicleId),i.variant)*(s.mode==='career'&&working[0].id===1?courseBonus(s.life,i.variant):1);if(i.progress>=TYPES[i.type].duration){finish(s,i,true);continue;}}
++ if(working.length){if(!i.decision)i.decision='check';const multi=working.length>1?1.45:1;const caution=i.backupRequested&&working.length<2&&(s.time-(i.backupAt??s.time)<25)?.15:1;i.progress+=dt*sceneResult.rate*multi*caution*crewFit(s,working[0],i.type)*(1-working[0].fatigue*.004)*(.7+working[0].skill*.4+developmentBonus(s,i,working[0]))*((i.type===1&&working[0].kit==='aid')||(i.type===2&&working[0].kit==='search')?1.2:1)*extraBonus(departmentIndex(s).byVehicle.get(working[0].vehicleId),i.variant)*(s.mode==='career'&&working[0].id===1?courseBonus(s.life,i.variant):1)*(i.bolo?ROUTINE.boloBonus:1);if(i.progress>=TYPES[i.type].duration){finish(s,i,true);continue;}}
+  if(i.age>TYPES[i.type].limit)finish(s,i,false);
+  }
+  s.incidents=s.incidents.filter(i=>!i.finished||s.time-i.finished<18);
+@@ -135,14 +138,14 @@
+  // A custody still in progress at shift end is completed off-screen and credited.
+  for(const u of n.units)if(!activeIds.has(u.incident)&&!u.foot&&(u.transport||u.handover!==undefined)){if(u.transport){n.trust=Math.min(100,n.trust+CUSTODY_REWARD.trust);if(n.districts?.[u.transport.district]!==undefined)n.districts[u.transport.district]=Math.min(100,n.districts[u.transport.district]+CUSTODY_REWARD.district);if(u.id===1||n.mode==='chief'){n.xp+=CUSTODY_REWARD.xp;n.rank=rankOf(n);}}delete u.transport;delete u.handover;}
+  prepareStaffShift(n,activeIds);
+- n.population=JSON.parse(JSON.stringify(ensurePopulation(s)));if(isScheduled(s)){n.schedule=s.schedule;n.shiftLength=s.shiftLength;resyncPopulation(n,shiftStartElapsed(n.shift-1));for(const u of n.units){delete u.foot;Object.assign(u,{x:HQ.x,y:HQ.y,route:[],incident:null,status:'patrol',pursuing:false});}prepareStaffShift(n,new Set());if(s.mode==='career'&&s.life)offDutyLife(s,n,options.plan);}n.training=JSON.parse(JSON.stringify(ensureTraining(s)));n.service=JSON.parse(JSON.stringify(ensureService(s)));
++ n.population=JSON.parse(JSON.stringify(ensurePopulation(s)));if(isScheduled(s)){n.schedule=s.schedule;n.shiftLength=s.shiftLength;resyncPopulation(n,shiftStartElapsed(n.shift-1));for(const u of n.units){delete u.foot;Object.assign(u,{x:HQ.x,y:HQ.y,route:[],incident:null,status:'patrol',pursuing:false});}prepareStaffShift(n,new Set());if(s.mode==='career'&&s.life)offDutyLife(s,n,options.plan);startRoutine(n);}n.training=JSON.parse(JSON.stringify(ensureTraining(s)));n.service=JSON.parse(JSON.stringify(ensureService(s)));
+  n.finance={opening:n.budget,entries:[],legacy:false};n.previousReport={shift:s.shift,resolved:s.resolved,missed:s.missed,carried:n.incidents.length,finance:financialSummary(closed)};
+- log(n,`Новая смена. Расходы: ${cost}.${support?' Субсидия: '+support+'.':''} Продолжаем вызовы: ${n.incidents.length}. Занятые экипажи остаются на месте.`);return n;
++ log(n,`Новая смена. Расходы: ${cost}.${support?' Субсидия: '+support+'.':''} ${isScheduled(n)?' Смена начинается с инструктажа в участке.':` Продолжаем вызовы: ${n.incidents.length}. Занятые экипажи остаются на месте.`}`);return n;
+ }
+ export function serialize(s){return JSON.stringify(s);}
+ export function deserialize(raw){
+  const s=JSON.parse(raw),num=(x,min=0,max=1e9)=>Number.isFinite(x)&&x>=min&&x<=max,str=x=>typeof x==='string'&&x.length<500,pointInMap=p=>s.mapId===MAP_ID?containsWorldPoint(p):p&&num(p.x,0,5)&&num(p.y,0,5);
+- const valid=s&&[1,2].includes(s.version)&&['career','chief'].includes(s.mode)&&num(s.seed,0,4294967295)&&validSchedule(s)&&num(s.time,0,s.shiftLength)&&Number.isInteger(s.shift)&&s.shift>0&&Number.isInteger(s.rank)&&s.rank>=0&&s.rank<RANKS.length&&num(s.xp)&&num(s.budget)&&num(s.trust,0,100)&&num(s.resolved)&&num(s.missed)&&num(s.nextIncident,-1000,10000)&&Number.isInteger(s.nextId)&&typeof s.ended==='boolean'&&Array.isArray(s.units)&&s.units.length<=6&&new Set(s.units.map(u=>u.id)).size===s.units.length&&s.units.every((u,k)=>Number.isInteger(u.id)&&u.id>0&&str(u.name)&&Array.isArray(u.people)&&u.people.length>=1&&u.people.length<=2&&u.people.every(str)&&pointInMap(u)&&num(u.fatigue,0,100)&&(u.pursuing===undefined||typeof u.pursuing==='boolean')&&typeof u.auto==='boolean'&&typeof u.cross==='boolean'&&['all','west','east'].includes(u.zone)&&['patrol','idle','responding','decision','working','returning','resting','transporting','handover','servicing'].includes(u.status)&&(u.transport===undefined||u.transport===null||Number.isInteger(u.transport.from)&&typeof u.transport.label==='string'&&u.transport.label.length<120&&typeof u.transport.district==='string')&&(u.handover===undefined||num(u.handover,0,100))&&(u.incident===null||Number.isInteger(u.incident))&&Array.isArray(u.route)&&u.route.length<3000&&u.route.every(pointInMap))&&Array.isArray(s.incidents)&&s.incidents.length<30&&s.incidents.every(i=>Number.isInteger(i.id)&&Number.isInteger(i.type)&&TYPES[i.type]&&validVariant(i)&&(s.mapId===MAP_ID?atNode(i):s.mapId==='parnumaa-1'?Number.isFinite(i.x)&&Number.isFinite(i.y):Number.isInteger(i.x)&&Number.isInteger(i.y))&&pointInMap(i)&&num(i.age)&&num(i.progress)&&['waiting','assigned','onscene','resolved','missed'].includes(i.state)&&Array.isArray(i.units)&&i.units.every(id=>Number.isInteger(id)&&id>0))&&Array.isArray(s.logs)&&s.logs.length<=45&&s.logs.every(l=>num(l.time)&&str(l.text))&&Array.isArray(s.history)&&s.history.length<=50&&s.history.every(h=>num(h.id)&&str(h.name)&&num(h.time)&&typeof h.success==='boolean');
++ const valid=s&&[1,2].includes(s.version)&&['career','chief'].includes(s.mode)&&num(s.seed,0,4294967295)&&validSchedule(s)&&num(s.time,0,s.shiftLength)&&Number.isInteger(s.shift)&&s.shift>0&&Number.isInteger(s.rank)&&s.rank>=0&&s.rank<RANKS.length&&num(s.xp)&&num(s.budget)&&num(s.trust,0,100)&&num(s.resolved)&&num(s.missed)&&num(s.nextIncident,-1000,10000)&&Number.isInteger(s.nextId)&&typeof s.ended==='boolean'&&Array.isArray(s.units)&&s.units.length<=6&&new Set(s.units.map(u=>u.id)).size===s.units.length&&s.units.every((u,k)=>Number.isInteger(u.id)&&u.id>0&&str(u.name)&&Array.isArray(u.people)&&u.people.length>=1&&u.people.length<=2&&u.people.every(str)&&pointInMap(u)&&num(u.fatigue,0,100)&&(u.pursuing===undefined||typeof u.pursuing==='boolean')&&typeof u.auto==='boolean'&&typeof u.cross==='boolean'&&['all','west','east'].includes(u.zone)&&['patrol','idle','responding','decision','working','returning','resting','transporting','handover','servicing','briefing','break','reports'].includes(u.status)&&(u.transport===undefined||u.transport===null||Number.isInteger(u.transport.from)&&typeof u.transport.label==='string'&&u.transport.label.length<120&&typeof u.transport.district==='string')&&(u.handover===undefined||num(u.handover,0,100))&&(u.incident===null||Number.isInteger(u.incident))&&Array.isArray(u.route)&&u.route.length<3000&&u.route.every(pointInMap))&&Array.isArray(s.incidents)&&s.incidents.length<30&&s.incidents.every(i=>Number.isInteger(i.id)&&Number.isInteger(i.type)&&TYPES[i.type]&&validVariant(i)&&(s.mapId===MAP_ID?atNode(i):s.mapId==='parnumaa-1'?Number.isFinite(i.x)&&Number.isFinite(i.y):Number.isInteger(i.x)&&Number.isInteger(i.y))&&pointInMap(i)&&num(i.age)&&num(i.progress)&&['waiting','assigned','onscene','resolved','missed'].includes(i.state)&&Array.isArray(i.units)&&i.units.every(id=>Number.isInteger(id)&&id>0))&&Array.isArray(s.logs)&&s.logs.length<=45&&s.logs.every(l=>num(l.time)&&str(l.text))&&Array.isArray(s.history)&&s.history.length<=50&&s.history.every(h=>num(h.id)&&str(h.name)&&num(h.time)&&typeof h.success==='boolean');
+  if(!valid||s.mapId&&!['parnumaa-1',MAP_ID].includes(s.mapId))throw Error('Несовместимое сохранение');ensureDepartment(s);for(const u of s.units)if(u.currentSpeedKmh!==undefined&&(!Number.isFinite(u.currentSpeedKmh)||u.currentSpeedKmh<0||u.currentSpeedKmh>200))u.currentSpeedKmh=0;
+  const usedOfficers=s.units.flatMap(u=>u.officerIds??[]),usedVehicles=s.units.map(u=>u.vehicleId);
+  if(!Array.isArray(s.officers)||!s.officers.every(o=>Number.isInteger(o.id)&&str(o.name)&&str(o.specialty)&&num(o.skill,0,1)&&num(o.salary))||!Array.isArray(s.vehicles)||s.vehicles.length>6||!s.vehicles.every(v=>Number.isInteger(v.id)&&str(v.name)&&validVehicleState(v))||!Array.isArray(s.candidates)||!s.candidates.every(c=>Number.isInteger(c.id)&&str(c.name)&&str(c.specialty)&&num(c.skill,0,1)&&num(c.fee)&&num(c.salary))||!['nextOfficerId','nextVehicleId','nextUnitId'].every(k=>Number.isInteger(s[k])&&s[k]>0)||typeof s.setupPending!=='boolean'||new Set(usedOfficers).size!==usedOfficers.length||new Set(usedVehicles).size!==usedVehicles.length||!s.units.every(u=>Array.isArray(u.officerIds)&&u.officerIds.length>=1&&u.officerIds.length<=2&&u.officerIds.length===u.people.length&&u.officerIds.every(id=>s.officers.some(o=>o.id===id))&&s.vehicles.some(v=>v.id===u.vehicleId)&&num(u.skill,0,1)))throw Error('Повреждены данные отделения');
+@@ -202,7 +205,7 @@
+  if(s.followUps!==undefined&&!(Array.isArray(s.followUps)&&s.followUps.length<=12&&s.followUps.every(f=>num(f.at,0,2000)&&variantById(f.variant)&&containsWorldPoint(f)&&Number.isInteger(f.from)&&typeof f.reason==='string'&&f.reason.length<200)))return false;
+  if(s.custodyDone!==undefined&&!(Number.isInteger(s.custodyDone)&&s.custodyDone>=0&&s.custodyDone<10000))return false;
+  if(!s.incidents.every(i=>(i.custodyChoice===undefined||Object.hasOwn(CUSTODY_CHOICES,i.custodyChoice))&&(i.medical===undefined||['called','treated'].includes(i.medical))&&(i.rescue===undefined||['called','working','done'].includes(i.rescue))))return false;
+- if(!validServices(s)||!validCases(s)||!validRadio(s)||!validPolicy(s)||!validLife(s))return false;
++ if(!validServices(s)||!validCases(s)||!validRadio(s)||!validPolicy(s)||!validLife(s)||!validBolo(s)||!s.incidents.every(i=>i.bolo===undefined||Number.isInteger(i.bolo)))return false;
+  return s.incidents.every(i=>i.followUp===undefined||Number.isInteger(i.followUp.from)&&typeof i.followUp.reason==='string'&&i.followUp.reason.length<200);}
+ 
+ // Weather of the current shift: derived (not stored), so old saves and the random stream are unchanged.
+@@ -254,6 +257,27 @@
+ function validServices(s){if(s.services===undefined)return true;const num=(x,min,max)=>Number.isFinite(x)&&x>=min&&x<=max;
+  return Array.isArray(s.services)&&s.services.length<=SERVICE_LIMIT&&(s.nextServiceId===undefined||Number.isInteger(s.nextServiceId))&&s.services.every(a=>Number.isInteger(a.id)&&(a.kind==='ambulance'?['responding','treating','transporting','handover']:a.kind==='rescue'?['responding','securing','working','returning']:[]).includes(a.status)&&Number.isInteger(a.incident)&&num(a.timer,-1000,1000)&&containsWorldPoint(a)&&Array.isArray(a.route)&&a.route.length<3000&&a.route.every(p=>containsWorldPoint(p)));}
+ 
++// R2 shift routine (routine.js): briefing with lookouts, vehicle acceptance, meal break, reports.
++function startRoutine(s){s.bolo=briefingFor(s.seed,s.shift);for(const u of s.units){Object.assign(u,{status:'briefing',route:[],routineLeft:ROUTINE.briefing,mealDone:false});}
++ log(s,`Инструктаж: ориентировки на смену — ${s.bolo.map(b=>b.text).join('; ')}.`);}
++function matchBolo(s,i){if(!isScheduled(s)||!Array.isArray(s.bolo))return;const b=s.bolo.find(b=>b.matched===null&&b.variant===i.variant);if(!b)return;b.matched=i.id;i.bolo=b.id;log(s,`Дежурный: вызов №${i.id} похож на ориентировку с инструктажа (${b.text}).`);}
++const crewOfficers=(s,u)=>u.officerIds.map(id=>departmentIndex(s).byOfficer.get(id)).filter(Boolean);
++function acceptVehicle(s,u,v){if(!v)return;ensureVehicle(v);const share=v.fuel/tankOf(v);
++ if(v.wear>=WEAR.slow)log(s,`${u.name}: приёмка машины — износ ${Math.round(v.wear)}%, нужен ремонт.`);
++ if(share<ROUTINE.acceptFuelShare&&!v.service){const st=nearestStation(u);u.status='servicing';v.service={kind:'fuel',left:toTicks(FUEL.refuelMinutes),cost:0,station:st.id};routeTo(u,st);log(s,`${u.name}: приёмка машины — в баке ${Math.round(v.fuel)} л, заправимся перед патрулём (${st.name}).`);}
++ else log(s,`${u.name}: машина принята (${Math.round(v.fuel)} л, износ ${Math.round(v.wear)}%), выходим в патруль.`);}
++function tickRoutine(s,u,v,dt){if(!isScheduled(s))return false;u.routineLeft=(u.routineLeft??0)-dt;
++ if(u.status==='briefing'){if(u.routineLeft>0)return true;delete u.routineLeft;u.status='patrol';acceptVehicle(s,u,v);return true;}
++ for(const o of crewOfficers(s,u))o.fatigue=Math.max(0,o.fatigue-dt*ROUTINE.mealRecovery/ROUTINE.meal);
++ const urgent=s.incidents.some(i=>i.state==='waiting'&&TYPES[i.type].severity>=3);
++ if(urgent||u.routineLeft<=0){delete u.routineLeft;u.status='patrol';u.mealDone=true;log(s,urgent?`${u.name}: обед прерван — срочный вызов.`:`${u.name}: обед окончен, снова на линии.`);return !urgent;}
++ return true;}
++function routineDue(s,u){if(u.incident!=null||u.foot||u.transport)return false;
++ if(s.time>=s.shiftLength-ROUTINE.reports){u.status='reports';routeTo(u,HQ);log(s,`${u.name}: конец смены, едем в участок писать рапорты.`);return true;}
++ if(!u.mealDone&&s.time>=ROUTINE.mealLate){u.mealDone=true;for(const o of crewOfficers(s,u))o.fatigue=Math.min(100,o.fatigue+ROUTINE.skippedMeal);log(s,`${u.name}: смена без обеда — усталость выше.`);return false;}
++ if(!u.mealDone&&s.time>=ROUTINE.mealFrom&&s.time<=ROUTINE.mealTo&&!s.incidents.some(i=>i.state==='waiting')){u.status='break';u.route=[];u.routineLeft=ROUTINE.meal;log(s,`${u.name}: обеденный перерыв.`);return true;}
++ return false;}
++
+ // R3: the career officer's time between roster shifts (life.js). Pay for the finished shift, the
+ // chosen plan for the free days, then the officer starts the next shift with sleep debt/stress.
+ function offDutyLife(s,n,plan){const life=JSON.parse(JSON.stringify(s.life)),blocks=freeBlocks(s.shift);const chosen=validPlan(plan,blocks)?plan:defaultPlan(blocks);
+--- /dev/null
++++ b/tests/routine.test.mjs
+@@ -0,0 +1,43 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,tick,nextShift,serialize,deserialize,spawnIncident,assign,unitReason} from '../dist/sim.js';
++import {ROUTINE,briefingFor} from '../dist/routine.js';
++import {NODES} from '../dist/geography.js';
++// R2 «Распорядок смены»: briefing with lookouts, vehicle acceptance, meal break, reports.
++
++const roster=()=>createGame('career',7182,{schedule:'ppa'});
++
++test('a roster shift starts with a briefing and two lookouts; legacy shifts do not',()=>{
++ const s=roster();assert.ok(s.units.every(u=>u.status==='briefing'));assert.equal(s.bolo.length,2);assert.notEqual(s.bolo[0].variant,s.bolo[1].variant);
++ assert.deepEqual(briefingFor(7182,1),briefingFor(7182,1));assert.match(unitReason(s,s.units[0]),/Инструктаж/);
++ assert.ok(s.logs.some(l=>/Инструктаж: ориентировки/.test(l.text)));
++ for(let k=0;k<ROUTINE.briefing*10+5;k++)tick(s,.1);assert.ok(s.units.every(u=>u.status!=='briefing'));
++ assert.ok(s.logs.some(l=>/машина принята|приёмка машины/.test(l.text)));
++ const legacy=createGame();assert.equal(legacy.bolo,undefined);assert.ok(legacy.units.every(u=>u.status==='patrol'));
++});
++
++test('half-empty tank at acceptance: refuel before patrol',()=>{
++ const s=roster();const v=s.vehicles.find(x=>x.id===s.units[0].vehicleId);v.fuel=20;
++ for(let k=0;k<ROUTINE.briefing*10+5;k++)tick(s,.1);assert.equal(s.units[0].status,'servicing');assert.equal(v.service.kind,'fuel');
++});
++
++test('meal break in a calm moment, interrupted by an urgent call, and reports at the end',()=>{
++ const s=roster();s.nextIncident=9000;for(let k=0;k<ROUTINE.mealFrom*10+20&&!s.units.some(u=>u.status==='break');k++)tick(s,.1);
++ const u=s.units.find(x=>x.status==='break');assert.ok(u,'someone takes the meal break');const before=Math.max(...u.officerIds.map(id=>s.officers.find(o=>o.id===id).fatigue));
++ for(let k=0;k<100;k++)tick(s,.1);const after=Math.max(...u.officerIds.map(id=>s.officers.find(o=>o.id===id).fatigue));assert.ok(after<before,'the break restores');
++ spawnIncident(s,4);tick(s,.1);assert.notEqual(u.status,'break','urgent call interrupts the meal');assert.equal(u.mealDone,true);
++ assert.doesNotThrow(()=>deserialize(serialize(s)));
++ for(let k=0;k<9700&&!s.ended;k++)tick(s,.1);assert.ok(s.logs.some(l=>/рапорты/.test(l.text))||s.units.some(x=>x.status==='reports'));
++});
++
++test('a lookout matches the first call of its kind: faster work and trust',()=>{
++ const s=roster();s.nextIncident=9000;for(let k=0;k<ROUTINE.briefing*10+5;k++)tick(s,.1);const b=s.bolo[0];const n=NODES[30];
++ const i=spawnIncident(s,null,{variant:b.variant,point:{x:n.x,y:n.y}});assert.equal(i.bolo,b.id);assert.equal(b.matched,i.id);
++ const j=spawnIncident(s,null,{variant:b.variant,point:{x:n.x,y:n.y}});assert.equal(j.bolo,undefined,'only the first matching call');
++ const bad=JSON.parse(serialize(s));bad.bolo[0].matched='x';assert.throws(()=>deserialize(JSON.stringify(bad)));
++});
++
++test('the player can interrupt the routine with a direct order',()=>{
++ const s=roster();s.nextIncident=9000;const n=NODES[25];const i=spawnIncident(s,null,{variant:'noise-flat',point:{x:n.x,y:n.y}});
++ assert.equal(s.units[0].status,'briefing');assert.equal(assign(s,1,i.id),true);assert.equal(s.units[0].incident,i.id);assert.ok(s.logs.some(l=>/прерываем инструктаж/.test(l.text)));
++ const next=nextShift((()=>{s.ended=true;return s;})());assert.ok(next.units.every(u=>u.status==='briefing'));assert.equal(next.bolo.length,2);
++});
+--- a/tests/schedule.test.mjs
++++ b/tests/schedule.test.mjs
+@@ -28,7 +28,7 @@
+ test('the roster drives the city clock across shifts and days off',()=>{
+  let s=createGame('career',7182,{schedule:'ppa'});const starts=[clock(s)];
+  for(let k=0;k<4;k++){finish(s);assert.equal(clock(s),k<2?'20:00':'08:00');assert.doesNotThrow(()=>deserialize(serialize(s)),'a finished shift saves');spawnIncident(s,4);s=nextShift(s);starts.push(clock(s));
+-  assert.equal(s.incidents.length,0,'unfinished calls go to the next team');assert.ok(s.units.every(u=>u.status==='patrol'&&!u.foot&&u.incident===null));
++  assert.equal(s.incidents.length,0,'unfinished calls go to the next team');assert.ok(s.units.every(u=>u.status==='briefing'&&!u.foot&&u.incident===null),'new shift starts with the briefing');
+   assert.doesNotThrow(()=>deserialize(serialize(s)),'residents resynced to a valid state');}
+  assert.deepEqual(starts,['08:00','08:00','20:00','20:00','08:00']);
+  assert.equal(s.shift,5);assert.equal(s.schedule,'ppa');assert.equal(s.shiftLength,960);

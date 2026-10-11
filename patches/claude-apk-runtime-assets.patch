@@ -1,0 +1,113 @@
+--- a/android/build.py
++++ b/android/build.py
+@@ -24,9 +24,17 @@
+     game = Path(os.environ.get('GAME_DIST', str(root.parent / 'dist')))
+     if not (game / 'index.html').is_file():
+         raise RuntimeError('GAME_DIST must point to the current game dist directory')
+-    for asset in sorted(game.iterdir()):
+-        if asset.is_file() and asset.suffix.lower() in {'.html', '.js', '.css', '.json', '.png', '.svg', '.woff', '.woff2', '.ogg', '.mp3'}:
+-            apk.write(asset, 'assets/game/' + asset.name)
++    # Only the files the game actually loads (index.html + its import graph); developer pages
++    # with audits/real place names stay out of the APK. MERCURY_ALL_ASSETS=1 restores the old set.
++    if os.environ.get('MERCURY_ALL_ASSETS') == '1':
++        names = [a.name for a in sorted(game.iterdir()) if a.is_file() and a.suffix.lower() in {'.html', '.js', '.css', '.json', '.png', '.svg', '.woff', '.woff2', '.ogg', '.mp3'}]
++    else:
++        import importlib.util
++        spec = importlib.util.spec_from_file_location('runtime_assets', root / 'runtime_assets.py')
++        runtime = importlib.util.module_from_spec(spec); spec.loader.exec_module(runtime)
++        names = runtime.closure(game)
++    for name in names:
++        apk.write(game / name, 'assets/game/' + name)
+     for dex in sorted(build.glob('classes*.dex')):
+         apk.write(dex, dex.name)
+ run(tools / 'zipalign', '-f', '4', build / 'unsigned.apk', build / 'aligned.apk')
+--- /dev/null
++++ b/android/runtime_assets.py
+@@ -0,0 +1,49 @@
++#!/usr/bin/env python3
++"""Runtime asset closure for the APK (Claude, 11.10.2026).
++
++The Android shell serves any file under assets/game/, but the game itself only loads
++index.html, the files it references and the static/dynamic ES-module import graph that
++starts there. Developer pages (audits, prototypes, map notes, roadmap) are not part of the
++game and some still carry real place names, which the owner does not want shipped.
++
++Usage: python3 android/runtime_assets.py [dist]   -> prints the closure, one name per line.
++"""
++import re, sys
++from pathlib import Path
++
++HTML_REF = re.compile(r'''(?:src|href)\s*=\s*["']([^"'#?]+)''')
++JS_IMPORT = re.compile(r'''(?:\bimport\b|\bexport\b)[^'"]*?\bfrom\s*['"](\./[^'"]+)['"]|\bimport\s*['"](\./[^'"]+)['"]|\bimport\(\s*['"](\./[^'"]+)['"]\s*\)''')
++CSS_URL = re.compile(r'''url\(\s*['"]?(?!data:|https?:)([^'")]+)''')
++
++
++def closure(dist):
++    dist = Path(dist)
++    seen, queue = set(), ['index.html']
++    while queue:
++        name = queue.pop()
++        if name in seen:
++            continue
++        path = dist / name
++        if not path.is_file():
++            raise FileNotFoundError(f'runtime asset referenced but missing: {name}')
++        seen.add(name)
++        text = path.read_text(encoding='utf-8', errors='replace') if path.suffix in {'.html', '.js', '.css'} else ''
++        refs = []
++        if path.suffix == '.html':
++            refs = [r for r in HTML_REF.findall(text) if not re.match(r'^(?:[a-z]+:|//)', r)]
++        elif path.suffix == '.js':
++            refs = [next(g for g in m if g) for m in JS_IMPORT.findall(text)]
++        elif path.suffix == '.css':
++            refs = CSS_URL.findall(text)
++        for ref in refs:
++            ref = ref.removeprefix('./')
++            if '/' in ref or ref.startswith('..'):
++                continue  # only flat dist/ assets are packaged
++            if (dist / ref).is_file():
++                queue.append(ref)
++    return sorted(seen)
++
++
++if __name__ == '__main__':
++    for name in closure(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / 'dist'):
++        print(name)
+--- /dev/null
++++ b/tests/deploy/test_runtime_assets.py
+@@ -0,0 +1,35 @@
++"""APK runtime asset closure (Claude, 11.10.2026)."""
++import importlib.util, re, unittest
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[2]
++spec = importlib.util.spec_from_file_location('runtime_assets', ROOT / 'android' / 'runtime_assets.py')
++runtime = importlib.util.module_from_spec(spec); spec.loader.exec_module(runtime)
++
++
++class RuntimeAssets(unittest.TestCase):
++    def setUp(self):
++        self.dist = ROOT / 'dist'
++        self.names = runtime.closure(self.dist)
++
++    def test_entry_points_and_core_modules_are_packaged(self):
++        for name in ['index.html', 'style.css', 'boot.js', 'app.js', 'sim.js', 'render.js', 'city-data.js']:
++            self.assertIn(name, self.names)
++
++    def test_every_relative_import_of_a_packaged_module_is_packaged(self):
++        pattern = re.compile(r'''(?:import|export)[^'"]*?from\s*['"]\./([^'"]+)['"]|import\(\s*['"]\./([^'"]+)['"]\s*\)''')
++        for name in self.names:
++            if name.endswith('.js'):
++                for groups in pattern.findall((self.dist / name).read_text(encoding='utf-8')):
++                    self.assertIn(next(g for g in groups if g), self.names, f'{name} imports a file outside the APK')
++
++    def test_developer_pages_with_real_names_stay_out(self):
++        for name in ['audit.html', 'map-notes.html', 'roadmap.html', 'prototype3d.html', 'police-prototype.html', 'cars-prototype.html', 'people-prototype.html', 'performance-audit.html', 'ktp-reference.html']:
++            self.assertNotIn(name, self.names)
++        for name in self.names:
++            if name.endswith('.html'):
++                self.assertNotRegex((self.dist / name).read_text(encoding='utf-8'), r'Pärnu|Пярну|OpenStreetMap')
++
++
++if __name__ == '__main__':
++    unittest.main()
