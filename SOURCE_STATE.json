@@ -1,12 +1,8 @@
 {
-  "version": "0.7.0-a",
-  "android": "0.2.4",
-  "android_version_code": 6,
-  "claude_head": "6653f9d4243ec3a4197f6cfd83ee2eb39a7b044b",
-  "base_sites_commit": "89932fc6486a2440de35f28d983060c96b0658b6",
-  "apk_sha256": "abb2c1dfcd4ca7fd710c579fbdd96e703d488a87eb2c309d306faf0b9e68fbf1",
-  "limits": "Fold6 acceptance open; website game unchanged; historical patches already integrated.",
-  "delivery_sites_commit": "e4b2d62745db8e005116cc14f47b517f37b60b50",
-  "sites_version": 87,
-  "delivery_status": "published; public APK/feed verified"
+  "gameVersion": "0.8.0-a",
+  "androidVersion": "0.2.5",
+  "versionCode": 7,
+  "base": "568c86dcc406478420e007d05e12334c71cd4aef",
+  "patchesIntegrated": 19,
+  "apkSHA256": "737491d31b9ccda6699a2edb1a80de16796ea61e3b719ee64600a263207e9065"
 }
