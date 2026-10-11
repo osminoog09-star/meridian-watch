@@ -1,0 +1,102 @@
+--- a/PLAN.md
++++ b/PLAN.md
+@@ -34,9 +34,9 @@
+ 
+ | R14 — итоги службы и награды · **сделано Claude, ветка claude/service-history** | Журнал смен (до 120): закрыто/сорвано, доверие, деньги/бюджет, опыт, работа между вызовами. Итоги каждого календарного месяца. Награды: первый месяц, благодарность префекта (месяц без сорванных вызовов, повторяемая), грамота города (доверие ≥90%), безупречная служба (3 месяца без обоснованных жалоб), знаки 100/500 вызовов, благодарность дорожной полиции (10 пьяных водителей на рейдах). Награда: +100 опыта в карьере / +500 к бюджету начальника. В отчёте смены — график по сменам и награды. Баланс R12: жалоб реже (задержание 4%, срыв 5%), обоснованы ~20% (с камерами ~5%) | Только кампании с графиком; сохранения валидируются; 4 теста |
+ 
+-Наблюдение для следующего пакета баланса: в карьере по графику доверие жителей почти всегда 100% — рост за вызов слишком щедрый при 25–35 вызовах за смену.
++| R15 — баланс доверия · **сделано Claude, ветка claude/trust-balance** | Кампании с графиком: хороший вызов добавляет доверие тем меньше, чем оно выше (×0,25·(100−доверие)/30), срыв — полностью; между сменами мнение города возвращается к нейтральным 70% (20% разницы), районы — так же мягче. Итог прогонов: безупречная служба держит 92–94%, 3 срыва за смену — 87%, тяжёлая ночь начальника (13 срывов) — 39% с восстановлением за 3–4 смены. Раньше всегда было 100% | Старые кампании: прежние +2/−4 без возврата; 2 теста |
+ 
+-Порядок: R1 → R3 → R2 → R4 → R5 → R6 → R7 → R8 → R9 → R10/R12 → R11 → R13 → R14. Каждый пакет отдельной веткой `claude/*`, интеграция и APK — Codex.
++Порядок: R1 → R3 → R2 → R4 → R5 → R6 → R7 → R8 → R9 → R10/R12 → R11 → R13 → R14 → R15. Каждый пакет отдельной веткой `claude/*`, интеграция и APK — Codex.
+ 
+ ## Автономная работа: пакет на 45–50 минут
+ Ориентир одного запуска — 45–50 минут полезной работы с запасом до следующего ежечасного запуска. Это планирование, а не гарантированный таймер: лимит среды может оказаться меньше, а внешние операции — дольше. Не ждать специально ради заполнения времени. Подтверждение пользователя между уже согласованными этапами не требуется.
+--- a/dist/sim.js
++++ b/dist/sim.js
+@@ -101,7 +101,7 @@
+ export function rest(s,uid){const u=s.units.find(u=>u.id===uid);if(!u||s.ended||!canControl(s,u)||!['patrol','idle','proactive'].includes(u.status))return false;if(u.status==='proactive')stopTask(s,u,'order');u.status='returning';routeTo(u,HQ);log(s,`${u.name}: возвращаемся на отдых.`);return true;}
+ function move(u,dt,s,v=null){advanceVehicle(u,dt,Math.min(patrolSpeed(u)*speedFactor(v)*roadWeather(s),u.trafficTargetKmh??Infinity),{obeyLimits:!urgentMovement(s,u)});}
+ function trafficItems(s){const items=[];for(const r of s.population?.residents??[])if(!['walkVisit','walkBack','visiting'].includes(r.status))items.push({entity:r,id:'resident-'+r.id,desired:30,emergency:false});for(const u of s.units)items.push({entity:u,id:'unit-'+u.id,desired:patrolSpeed(u),emergency:urgentMovement(s,u),blocking:!u.route.length&&['decision','working'].includes(u.status),scene:u.incident??null});for(const i of s.incidents)if(i.type===5&&i.scene)for(const a of i.scene.participants)items.push({entity:a,id:'actor-'+a.id,desired:a.status==='fleeing'?40:15,emergency:false});return items;}
+-function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));if(success&&i.medical==='treated')s.trust=Math.min(100,s.trust+AMBULANCE.trustBonus);if(success&&i.rescue==='done')s.trust=Math.min(100,s.trust+RESCUE_TEAM.trustBonus);if(success&&i.bolo){s.trust=Math.min(100,s.trust+ROUTINE.boloTrust);log(s,`Вызов №${i.id}: ориентировка с инструктажа подтвердилась.`);}if(success)applyPolicyCustody(s,i);recordConsequences(s,i,success);recordCase(s,i,success,outcome);investigate(s,i,success);if(isScheduled(s)){callStress(s,i,success);fileComplaint(s,i,success);}if(success)assignCustody(s,i);const rankBefore=s.rank;if(success){transact(s,isScheduled(s)?60:110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=xpGain(s,30);}s.rank=rankOf(s);if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
++function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;addTrust(s,success?2:-4);if(success&&i.medical==='treated')addTrust(s,AMBULANCE.trustBonus);if(success&&i.rescue==='done')addTrust(s,RESCUE_TEAM.trustBonus);if(success&&i.bolo){addTrust(s,ROUTINE.boloTrust);log(s,`Вызов №${i.id}: ориентировка с инструктажа подтвердилась.`);}if(success)applyPolicyCustody(s,i);recordConsequences(s,i,success);recordCase(s,i,success,outcome);investigate(s,i,success);if(isScheduled(s)){callStress(s,i,success);fileComplaint(s,i,success);}if(success)assignCustody(s,i);const rankBefore=s.rank;if(success){transact(s,isScheduled(s)?60:110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=xpGain(s,30);}s.rank=rankOf(s);if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
+  for(const id of i.units){const u=s.units.find(u=>u.id===id);if(u&&!u.transport)radio(s,success?'clear':'failed',u,i);if(returnPoliceWalk(u))continue;u.incident=null;u.status='patrol';u.pursuing=false;u.route=u.route.length?[u.route[0]]:[];}
+  const text=success?`Вызов №${i.id} завершён. ${outcome}.`:`Вызов №${i.id}: ${outcome}. Доверие снизилось.`;log(s,text);s.history.unshift({id:i.id,name:callName(i),success,time:s.time,outcome});s.history=s.history.slice(0,50);}
+ export function tick(s,dt){if(s.ended||s.setupPending)return;s.time+=dt;s.nextIncident-=dt;
+@@ -147,9 +147,9 @@
+  n.units=s.units.map(u=>activeIds.has(u.incident)||u.foot?{...u,people:[...u.people],officerIds:[...u.officerIds],route:u.route.map(p=>({...p})),...(u.foot?{foot:JSON.parse(JSON.stringify(u.foot))}:{})}:{...u,people:[...u.people],officerIds:[...u.officerIds],x:HQ.x,y:HQ.y,route:[],incident:null,status:'patrol',fatigue:8});
+  for(const k of ['officers','candidates'])n[k]=s[k].map(x=>({...x}));if(s.mode==='chief'&&has(s,'training'))for(const o of n.officers)if(o.skill<UPGRADE_EFFECT.skillCap)o.skill=Math.min(UPGRADE_EFFECT.skillCap,Math.round((o.skill+UPGRADE_EFFECT.skill)*1000)/1000);n.vehicles=JSON.parse(JSON.stringify(s.vehicles));overnightGarage(n,s.time);for(const k of ['nextUnitId','nextOfficerId','nextVehicleId','setupPending','nextId'])n[k]=s[k];
+  // A custody still in progress at shift end is completed off-screen and credited.
+- for(const u of n.units)if(!activeIds.has(u.incident)&&!u.foot&&(u.transport||u.handover!==undefined)){if(u.transport){n.trust=Math.min(100,n.trust+CUSTODY_REWARD.trust);if(n.districts?.[u.transport.district]!==undefined)n.districts[u.transport.district]=Math.min(100,n.districts[u.transport.district]+CUSTODY_REWARD.district);if(u.id===1||n.mode==='chief'){n.xp+=CUSTODY_REWARD.xp;n.rank=rankOf(n);}}delete u.transport;delete u.handover;}
++ for(const u of n.units)if(!activeIds.has(u.incident)&&!u.foot&&(u.transport||u.handover!==undefined)){if(u.transport){addTrust(n,CUSTODY_REWARD.trust);if(n.districts?.[u.transport.district]!==undefined)addDistrictTrust(n,u.transport.district,CUSTODY_REWARD.district);if(u.id===1||n.mode==='chief'){n.xp+=CUSTODY_REWARD.xp;n.rank=rankOf(n);}}delete u.transport;delete u.handover;}
+  prepareStaffShift(n,activeIds);
+- n.population=JSON.parse(JSON.stringify(ensurePopulation(s)));if(isScheduled(s)){n.schedule=s.schedule;n.shiftLength=s.shiftLength;resyncPopulation(n,shiftStartElapsed(n.shift-1));for(const u of n.units){delete u.foot;delete u.task;delete u.tasksToday;Object.assign(u,{x:HQ.x,y:HQ.y,route:[],incident:null,status:'patrol',pursuing:false});}prepareStaffShift(n,new Set());if(s.mode==='career'&&s.life)offDutyLife(s,n,options.plan);if(s.mode==='chief')rosterBetweenShifts(s,n);carryInvestigations(s,n);reviewComplaints(s,n);serviceHistory(s,n);startRoutine(n);}n.training=JSON.parse(JSON.stringify(ensureTraining(s)));n.service=JSON.parse(JSON.stringify(ensureService(s)));
++ n.population=JSON.parse(JSON.stringify(ensurePopulation(s)));if(isScheduled(s)){n.schedule=s.schedule;n.shiftLength=s.shiftLength;resyncPopulation(n,shiftStartElapsed(n.shift-1));for(const u of n.units){delete u.foot;delete u.task;delete u.tasksToday;Object.assign(u,{x:HQ.x,y:HQ.y,route:[],incident:null,status:'patrol',pursuing:false});}prepareStaffShift(n,new Set());if(s.mode==='career'&&s.life)offDutyLife(s,n,options.plan);if(s.mode==='chief')rosterBetweenShifts(s,n);carryInvestigations(s,n);reviewComplaints(s,n);trustDrift(n);serviceHistory(s,n);startRoutine(n);}n.training=JSON.parse(JSON.stringify(ensureTraining(s)));n.service=JSON.parse(JSON.stringify(ensureService(s)));
+  n.finance={opening:n.budget,entries:[],legacy:false};n.previousReport={shift:s.shift,resolved:s.resolved,missed:s.missed,carried:n.incidents.length,finance:financialSummary(closed)};
+  log(n,`Новая смена. Расходы: ${cost}.${support?' Субсидия: '+support+'.':''} ${isScheduled(n)?' Смена начинается с инструктажа в участке.':` Продолжаем вызовы: ${n.incidents.length}. Занятые экипажи остаются на месте.`}`);return n;
+ }
+@@ -207,7 +207,7 @@
+ // Read-only view for UI: never mutates the campaign.
+ export const districtTrust=(s,id)=>s.districts?.[id]??s.trust;
+ export function ensureDistricts(s){if(!s.districts)s.districts=Object.fromEntries(DISTRICT_IDS.map(id=>[id,s.trust]));if(!Array.isArray(s.followUps))s.followUps=[];return s.districts;}
+-function recordConsequences(s,i,success){const districts=ensureDistricts(s),d=districtOf(i);districts[d]=Math.max(0,Math.min(100,districts[d]+(success?DISTRICT_TRUST_STEP.success+(priorityOf(s)===d?PRIORITY_RULES.districtBonus:0):DISTRICT_TRUST_STEP.failure)));
++function recordConsequences(s,i,success){const districts=ensureDistricts(s),d=districtOf(i);addDistrictTrust(s,d,success?DISTRICT_TRUST_STEP.success+(priorityOf(s)===d?PRIORITY_RULES.districtBonus:0):DISTRICT_TRUST_STEP.failure);
+  const rule=FOLLOW_UPS[i.variant];if(!rule||s.followUps.length>=12)return;const choice=success?custodyDecision(i):null,chance=Math.min(.9,followUpChance(i.variant,success,i.decision,districts[d])*(choice?CUSTODY_FOLLOW_UP[choice]:1)*policyOf(s).followUp);if(rng(s)>=chance)return;
+  const [a,b]=FOLLOW_UP_DELAY;s.followUps.push({at:s.time+a+rng(s)*(b-a),variant:rule.next,x:i.x,y:i.y,from:i.id,reason:rule.reason});}
+ function releaseFollowUps(s){if(!s.followUps?.length)return;const active=()=>s.incidents.filter(i=>!['resolved','missed'].includes(i.state)).length;for(const f of [...s.followUps]){if(s.time<f.at||active()>=6)continue;s.followUps=s.followUps.filter(x=>x!==f);const i=spawnIncident(s,null,{variant:f.variant,point:{x:f.x,y:f.y},followUp:{from:f.from,reason:f.reason}});log(s,f.variant==='suspect-found'?`Диспетчер: вызов №${i.id} — ${f.reason}`:`Диспетчер: повторный вызов №${i.id} — ${f.reason}`);}}
+@@ -231,7 +231,7 @@
+  if(u.status==='patrol'&&u.transport&&!u.foot&&u.incident===null){u.status='transporting';routeTo(u,HQ);radio(s,'transport',u,null);log(s,`${u.name}: задержанный в машине, везём в участок (вызов №${u.transport.from}).`);return true;}
+  if(u.status==='transporting'){if(!u.route.length){u.status='handover';u.handover=HANDOVER_TIME;log(s,`${u.name}: в участке, передаём задержанного дежурному.`);}return true;}
+  if(u.status==='handover'){u.handover-=dt;if(u.handover>0)return true;const t=u.transport;u.status='patrol';u.transport=null;delete u.handover;
+-  s.trust=Math.min(100,s.trust+CUSTODY_REWARD.trust);const d=ensureDistricts(s);if(t&&d[t.district]!==undefined)d[t.district]=Math.min(100,d[t.district]+CUSTODY_REWARD.district);if(u.id===1||s.mode==='chief')s.xp+=xpGain(s,CUSTODY_REWARD.xp);s.rank=rankOf(s);s.custodyDone=(s.custodyDone??0)+1;
++  addTrust(s,CUSTODY_REWARD.trust);const d=ensureDistricts(s);if(t&&d[t.district]!==undefined)d[t.district]=Math.min(100,d[t.district]+CUSTODY_REWARD.district);if(u.id===1||s.mode==='chief')s.xp+=xpGain(s,CUSTODY_REWARD.xp);s.rank=rankOf(s);s.custodyDone=(s.custodyDone??0)+1;
+   const file=(s.cases??[]).find(c=>c.id===t?.from);if(file)file.status='Передано дежурному';radio(s,'handover',u,null);log(s,`${u.name}: рапорт по вызову №${t?.from} составлен, дело передано. Возвращаемся к патрулю.`);return true;}
+  return false;}
+ 
+@@ -431,7 +431,7 @@
+  if(t.phase==='moving'){if(u.route.length)return true;t.phase='working';log(s,`${u.name}: на месте, ${TASKS[t.id].short}.`);return true;}
+  t.left=Math.max(0,t.left-dt);if(t.left>0)return true;
+  const result=taskResult(t.id,{seed:s.seed,shift:s.shift,unit:u.id,start:t.start,busy:loadNow(s)}),r=taskReward(t.id,result),d=districtOf(u);
+- s.trust=Math.min(100,s.trust+r.trust);if(s.districts?.[d]!==undefined)s.districts[d]=Math.min(100,s.districts[d]+r.district);if(u.id===1||s.mode==='chief'){s.xp+=xpGain(s,r.xp);s.rank=rankOf(s);}
++ addTrust(s,r.trust);if(s.districts?.[d]!==undefined)addDistrictTrust(s,d,r.district);if(u.id===1||s.mode==='chief'){s.xp+=xpGain(s,r.xp);s.rank=rankOf(s);}
+  if(!Array.isArray(s.prevention))s.prevention=[];s.prevention=s.prevention.filter(p=>p.until>s.time);s.prevention.push({task:t.id,until:s.time+TASK_RULES.prevention});if(s.prevention.length>TASK_RULES.preventionLimit)s.prevention.splice(0,s.prevention.length-TASK_RULES.preventionLimit);
+  delete u.task;u.status='patrol';recordTask(s,u,t,result);log(s,`${u.name}: ${TASKS[t.id].label} — ${result.text}. Доверие района +${r.district}.`);pushRadio(s,callsign(u),`Закончили: ${result.text}. Свободны.`);return false;}
+ function autoTaskDue(s,u){return isScheduled(s)&&u.auto&&u.incident==null&&loadNow(s)<TASK_RULES.autoMaxLoad&&!s.incidents.some(i=>!['resolved','missed'].includes(i.state)&&!i.units.length)&&!u.foot&&!u.transport&&(u.tasksToday??0)<TASK_RULES.autoPerShift&&s.time<s.shiftLength-ROUTINE.reports-ticks60()&&autoTaskRoll(s.seed,s.shift,u.id,s.time)&&!crewNeedsRest(s,u);}
+@@ -448,3 +448,13 @@
+  for(const a of fresh){n.awards.push({id:a.id,shift:s.shift,...(summary?{month:summary.label}:{})});if(n.mode==='career')n.xp+=AWARD_REWARD.xp;else n.budget+=AWARD_REWARD.budget;log(n,`Награда: ${a.label}. ${a.about}`);}
+  if(n.awards.length>AWARD_LIMIT)n.awards.splice(0,n.awards.length-AWARD_LIMIT);n.rank=rankOf(n);
+  if(summary){n.monthReport={...summary,shift:n.shift,awards:fresh.map(a=>a.id)};log(n,`Итоги месяца (${summary.label}): смен ${summary.shifts}, закрыто ${summary.resolved}, сорвано ${summary.missed} — ${summary.rate}% успеха.`);}}
++
++// R15 trust balance (Claude, 11.10.2026). With 25–35 calls in a 12-hour roster shift, +2 per call kept
++// public trust pinned at 100%. In roster campaigns a good call now adds less the higher trust already
++// is, failures cost in full, and between shifts opinion drifts back toward a neutral 70%. Flawless
++// service holds trust in the low 90s, a missed call or two per shift brings it down to the 80s.
++// Legacy campaigns keep the old +2/−4 rule.
++export const TRUST_BALANCE=Object.freeze({gain:.25,span:30,neutral:70,drift:.2,districtGain:.5,districtDrift:.1});
++function addTrust(s,d){if(!Number.isFinite(d)||!d)return;if(isScheduled(s)&&d>0)d*=TRUST_BALANCE.gain*Math.max(0,100-s.trust)/TRUST_BALANCE.span;s.trust=Math.max(0,Math.min(100,s.trust+d));}
++function trustDrift(n){n.trust=Math.round((n.trust+(TRUST_BALANCE.neutral-n.trust)*TRUST_BALANCE.drift)*10)/10;if(n.districts)for(const k of Object.keys(n.districts))n.districts[k]=Math.round((n.districts[k]+(TRUST_BALANCE.neutral-n.districts[k])*TRUST_BALANCE.districtDrift)*10)/10;}
++function addDistrictTrust(s,id,d){if(!s.districts||s.districts[id]===undefined||!Number.isFinite(d)||!d)return;const v=s.districts[id];if(isScheduled(s)&&d>0)d*=TRUST_BALANCE.districtGain*Math.max(0,100-v)/TRUST_BALANCE.span;s.districts[id]=Math.max(0,Math.min(100,v+d));}
+--- /dev/null
++++ b/tests/trust-balance.test.mjs
+@@ -0,0 +1,21 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,tick,nextShift,spawnIncident,TRUST_BALANCE} from '../dist/sim.js';
++import {NODES} from '../dist/geography.js';
++// R15 «Баланс доверия» (Claude, 11.10.2026): trust no longer sticks at 100% in 12-hour roster shifts.
++function resolveOne(s){for(const u of s.units)u.tasksToday=99;s.nextIncident=9000;const n=NODES[(s.seed*7)%NODES.length];const i=spawnIncident(s,null,{variant:'animal-road',point:{x:n.x,y:n.y}});
++ for(let k=0;k<20000&&!['resolved','missed'].includes(i.state);k++)tick(s,.1);return i;}
++
++test('a good call adds less the higher trust is (roster); legacy keeps +2',()=>{
++ const gain=(trust,opt)=>{for(let seed=1;seed<40;seed++){const s=createGame('career',seed,opt);s.trust=trust;const before=s.trust;const i=resolveOne(s);if(i.state==='resolved'&&!i.medical&&!i.rescue&&!i.bolo)return s.trust-before;}return null;};
++ const low=gain(60,{schedule:'ppa'}),high=gain(95,{schedule:'ppa'}),legacy=gain(60,{});
++ assert.ok(low>0&&high>0&&high<low/3,`${low} ${high}`);assert.equal(legacy,2);
++ assert.ok(low<=2*TRUST_BALANCE.gain*40/TRUST_BALANCE.span+1e-9);
++});
++
++test('between roster shifts trust drifts toward neutral; legacy does not drift',()=>{
++ const s=createGame('career',7182,{schedule:'ppa'});s.trust=100;s.ended=true;const n=nextShift(s);
++ assert.equal(n.trust,100+(TRUST_BALANCE.neutral-100)*TRUST_BALANCE.drift);
++ const d=Object.keys(s.districts??{})[0];if(d){const t=createGame('career',7182,{schedule:'ppa'});t.districts[d]=100;t.ended=true;assert.ok(nextShift(t).districts[d]<100);}
++ const low=createGame('career',7182,{schedule:'ppa'});low.trust=40;low.ended=true;assert.ok(nextShift(low).trust>40,'bad opinion also fades');
++ const legacy=createGame('career',7182);legacy.trust=100;legacy.ended=true;assert.equal(nextShift(legacy).trust,100);
++});
