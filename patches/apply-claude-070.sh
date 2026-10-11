@@ -1,12 +1,12 @@
 #!/bin/sh
 # Claude's packages on top of the released 0.7.0-a / APK 0.2.4 source (codex/android-024-claude-review).
 # Usage: python3 -I source-import.py && sh patches/apply-claude-070.sh [last]
-#   last = rescue | radio | policy | radio-ticker | investigation (default: investigation)
+#   last = rescue | radio | policy | radio-ticker | investigation | garage (default: garage)
 # The old chain patches/apply-claude.sh is already inside 0.7.0-a: do not run it again.
 set -e
 cd "$(dirname "$0")/.."
-steps="rescue:claude-rescue radio:claude-radio policy:claude-policy radio-ticker:claude-radio-ticker investigation:claude-investigation"
-last="${1:-investigation}"
+steps="rescue:claude-rescue radio:claude-radio policy:claude-policy radio-ticker:claude-radio-ticker investigation:claude-investigation garage:claude-garage"
+last="${1:-garage}"
 case " $(echo "$steps" | sed 's/:[^ ]*//g') " in *" $last "*) ;; *) echo "Unknown patch stage: $last" >&2; exit 2 ;; esac
 for step in $steps; do
   name="${step%%:*}"; file="patches/${step#*:}.patch"
