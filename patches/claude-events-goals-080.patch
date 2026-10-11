@@ -1,0 +1,338 @@
+--- a/PLAN.md
++++ b/PLAN.md
+@@ -39,7 +39,11 @@
+ | R16 — напарник · **сделано Claude, ветка claude/partner-news** | Первый месяц (12 смен) и звание «Патрульный» — стажировка с наставником Морозовым, затем постоянный напарник с характером: переговорщик / водитель-ас / глазастый / по инструкции (+10% к своим вызовам или −30% жалоб). Связь пары: растёт от закрытых вызовов (медленнее у вершины), падает от срывов и обоснованных жалоб; ≥75% — экипаж на 6% быстрее, <25% — на 6% медленнее, две смены ниже 15% — напарник просит перевода. Новое занятие «Время с напарником» (+12). Карточка в личном деле | Только карьера по графику; сохранения валидируются |
+ | R17 — «Город пишет» · **сделано Claude, ветка claude/partner-news** | Новости города от 4 вымышленных СМИ: заметные вызовы (поиск детей и пожилых, мошенники, драки, пьяные водители, лёд, пожар), провалы, рейды, обоснованные жалобы, праздники, награды. Не больше 4 хороших историй за смену, провалы — всегда. В отчёте смены и журнале; переносится между сменами (16) | Только атмосфера, доверие не дублируется; 5 тестов на R16+R17 |
+ 
+-Порядок: R1 → R3 → R2 → R4 → R5 → R6 → R7 → R8 → R9 → R10/R12 → R11 → R13 → R14 → R15 → R16/R17. Каждый пакет отдельной веткой `claude/*`, интеграция и APK — Codex.
++| R18 — крупные события смены · **сделано Claude, ветка claude/events-goals** | Кроме праздников: шторм (осень/зима, погода — ветер; упавшие деревья со спасателями, оборванные провода), футбольный матч (дневные смены выходных, драки болельщиков), концерт (лето/май, пт–сб, потерявшиеся подростки), отключение света (зима, сигнализации, ДТП). ~12% смен; свои вызовы только в событие; поток вызовов ×1,2–1,3; новости и инструктаж | Детерминированно по номеру смены, как погода; старые кампании без изменений |
++| R19 — план на месяц · **сделано Claude, ветка claude/events-goals** | Три цели в начале месяца: сорванных не больше N, доверие самого слабого района, плюс одна из: закрыть N вызовов / 6 пьяных водителей на рейдах / без обоснованных жалоб / доверие города ≥88%. Прогресс в отчёте; итог в «Итогах месяца»; за цель +600 бюджета (начальник) или 80 € и +60 опыта (карьера) | Только кампании с графиком; сохранения валидируются |
++| R20 — экран инструктажа · **сделано Claude, ветка claude/events-goals** | В начале каждой смены по графику — карточка: дата, день недели, дневная/ночная, погода и ожидаемая нагрузка, событие города, ориентировки, напарник, итоги свободных дней, главная новость, план месяца. Кнопка «На смену» | Только интерфейс; 4 теста на R18–R19 |
++
++Порядок: R1 → R3 → R2 → R4 → R5 → R6 → R7 → R8 → R9 → R10/R12 → R11 → R13 → R14 → R15 → R16/R17 → R18–R20. Каждый пакет отдельной веткой `claude/*`, интеграция и APK — Codex.
+ 
+ ## Автономная работа: пакет на 45–50 минут
+ Ориентир одного запуска — 45–50 минут полезной работы с запасом до следующего ежечасного запуска. Это планирование, а не гарантированный таймер: лимит среды может оказаться меньше, а внешние операции — дольше. Не ждать специально ради заполнения времени. Подтверждение пользователя между уже согласованными этапами не требуется.
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -4,6 +4,7 @@
+ import {TASKS,TASK_IDS} from './patrolwork.js';
+ import {awardInfo} from './history.js';
+ import {TRAITS,BOND} from './partner.js';
++import {GOALS,GOAL_REWARD,goalLabel,goalValue,goalMet} from './goals.js';
+ import {isScheduled,nextShiftInfo,SHIFT_LABEL,shiftKind} from './schedule.js';
+ import {officerView,ROSTER} from './roster.js';
+ import {ACTIVITIES,ACTIVITY_IDS,COURSES,COURSE_IDS,courseValid,shiftNet,startFatigue,RANK_XP,ROLES,ROLE_IDS,roleBlocker,LEAVE,canTakeVacation} from './life.js';
+@@ -88,7 +89,20 @@
+ $('units').onclick=e=>{const b=e.target.closest('[data-unit]');if(b){selectedUnit=+b.dataset.unit;refresh(true);}};$('calls').onclick=e=>{const b=e.target.closest('[data-call]');if(b){selectedCall=+b.dataset.call;refresh(true);}};$('callDetail').onclick=e=>{const c=e.target.closest('[data-custody]');if(c){if(setCustodyChoice(state,+c.dataset.uid,c.dataset.custody)){toast(c.dataset.custody==='arrest'?'Участник будет задержан':'Отпустим с предупреждением');refresh(true);}return;}const b=e.target.closest('[data-decision]');if(b&&decide(state,+b.dataset.uid,b.dataset.decision)){toast('Команда принята');refresh(true);}};
+ $('pauseBtn').onclick=()=>{paused=!paused;diagnostics.event('pause',String(paused));if(!paused)audio.unlock();else audio.pause();refresh();};document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{speed=+b.dataset.speed;diagnostics.event('speed',String(speed));diagnostics.resetFrames();document.querySelectorAll('[data-speed]').forEach(x=>x.classList.toggle('active',x===b));refresh();});$('zoomIn').onclick=()=>renderer.zoom(.2);$('zoomOut').onclick=()=>renderer.zoom(-.2);$('resetView').onclick=renderer.reset;$('cityView').onclick=renderer.city;$('followUnit').onclick=()=>{renderer.follow(state.units.find(u=>u.id===selectedUnit));setTab('map');};$('saveBtn').onclick=()=>save(true);
+ // R3 «Между сменами»: plan the free time before the next roster shift (career only).
+-function startNextShift(plan,extra={}){state=nextShift(state,plan?{plan,...extra}:{...extra});reportShown=false;selectedCall=null;simulationClock.reset();close();save();refresh(true);if(state.life?.last)toast(state.life.last.lines.slice(0,2).join(' · '));}
++function startNextShift(plan,extra={}){state=nextShift(state,plan?{plan,...extra}:{...extra});reportShown=false;selectedCall=null;simulationClock.reset();close();save();refresh(true);if(isScheduled(state))briefingCard();else if(state.life?.last)toast(state.life.last.lines.slice(0,2).join(' · '));}
++// R20 briefing card at the start of a roster shift: everything the crew hears at the morning/evening
++// briefing in one screen — date, weather and city event, lookouts, partner, monthly plan, news.
++function briefingCard(){const w=shiftWeather(state),info=WEATHER[w.kind],ev=w.event,kind=shiftKind(state.shift-1),p=state.life?.partner,last=state.life?.last,top=(state.news??[]).find(n=>n.shift===state.shift-1);
++ const busy=ev?'Много вызовов: '+ev.label.toLowerCase():kind==='night'&&/пятниц|суббот/.test(weekdayNow(state)??'')?'Ночь выходного дня — бары, компании, пьяные водители':kind==='night'?'Обычная ночь: пик до 2 часов, к утру тише':'Обычный день: пик вечером';
++ modal(`<span class="eyebrow">ИНСТРУКТАЖ · ${escapeHtml(shiftDateOf(state).label)} · ${escapeHtml(weekdayNow(state)??'')} · ${SHIFT_LABEL[kind].toUpperCase()} СМЕНА</span><h2>Смена ${state.shift}</h2><div class="briefing">
++ <div class="brief-row"><b>${info.icon} ${w.temp>0?'+':''}${w.temp}° · ${escapeHtml(info.label)}</b><small>${escapeHtml(busy)}</small></div>
++ ${ev?`<div class="brief-row event"><b>⚠ ${escapeHtml(ev.label)}</b><small>${escapeHtml(ev.about??'Праздник: вызовов больше обычного.')}</small></div>`:''}
++ ${(state.bolo??[]).length?`<div class="brief-row"><b>Ориентировки</b>${state.bolo.map(b=>`<small>• ${escapeHtml(b.text)}</small>`).join('')}</div>`:''}
++ ${p?`<div class="brief-row"><b>Напарник: ${escapeHtml(p.name)}</b><small>${escapeHtml(TRAITS[p.trait].label)} · связь ${Math.round(p.bond)}%</small></div>`:''}
++ ${state.mode==='chief'?`<div class="brief-row"><b>Отделение</b><small>Экипажей на линии: ${state.units.length} · бюджет ${state.budget} · доверие ${Math.round(state.trust)}%</small></div>`:''}
++ ${last?.lines?.length?`<div class="brief-row"><b>Между сменами</b>${last.lines.slice(0,4).map(l=>`<small>${escapeHtml(l)}</small>`).join('')}</div>`:''}
++ ${top?`<div class="brief-row"><b>Город пишет</b><small>${escapeHtml(top.media)}: ${escapeHtml(top.title)}</small></div>`:''}
++ </div>${goalsMarkup()}<div class="modal-actions"><button id="toShiftBtn" class="primary">На смену</button></div>`);$('toShiftBtn').onclick=close;}
+ function offDutyPlanner(){const blocks=offDuty(state),life=state.life??{sleepDebt:0,stress:10,fitness:55,money:0,courses:{},progress:{}},n=nextShiftInfo(state.shift),plan=Array.from({length:blocks.days},()=>({activity:'rest'}));
+  const strain={sleep:shiftKind(state.shift-1)==='night'?25:12,stress:3+state.missed*2},after={sleepDebt:Math.min(100,life.sleepDebt+strain.sleep),stress:Math.min(100,life.stress+strain.stress),fitness:life.fitness};
+  const bar=(label,v,warn)=>`<div class="life-stat"><span>${label}</span>${meter(v,warn)}<b>${Math.round(v)}</b></div>`;
+@@ -119,9 +133,11 @@
+  const bars=list.map((r,k)=>{const x=k*bw+bw*.15,w=bw*.7;return `<rect x="${x.toFixed(1)}" y="${y(r.resolved).toFixed(1)}" width="${w.toFixed(1)}" height="${(base-y(r.resolved)).toFixed(1)}" rx="1.5" fill="var(--cyan)" opacity="${r.kind==='night'?.6:.95}"><title>Смена ${r.shift} · ${r.date}: закрыто ${r.resolved}, сорвано ${r.missed}</title></rect>${r.missed?`<rect x="${x.toFixed(1)}" y="${y(r.resolved+r.missed).toFixed(1)}" width="${w.toFixed(1)}" height="${(y(r.resolved)-y(r.resolved+r.missed)).toFixed(1)}" rx="1.5" fill="var(--orange)"/>`:''}`;}).join('');
+  const line=list.map((r,k)=>`${k?'L':'M'}${(k*bw+bw/2).toFixed(1)} ${ty(r.trust).toFixed(1)}`).join(' ');
+  return `<svg class="history-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Закрытые и сорванные вызовы по сменам, доверие жителей"><line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="var(--line)"/>${bars}<path d="${line}" fill="none" stroke="var(--text)" stroke-width="1.6" stroke-linejoin="round" opacity=".8"/><text x="0" y="${H-4}" fill="var(--muted)" font-size="10">${escapeHtml(list[0]?.date??'')}</text><text x="${W}" y="${H-4}" fill="var(--muted)" font-size="10" text-anchor="end">${escapeHtml(list.at(-1)?.date??'')}</text></svg><p class="history-legend"><span class="sw ok"></span>закрыто <span class="sw bad"></span>сорвано <span class="sw line"></span>доверие, % · бледнее — ночные смены</p>`;}
+-function historySection(){const log=state.shiftLog??[],awards=state.awards??[],m=state.monthReport;if(!log.length&&!awards.length)return '';
+- const month=m&&m.shift===state.shift?`<div class="month-report"><b>Итоги месяца · ${escapeHtml(m.label)}</b><p>Смен: ${m.shifts} · закрыто ${m.resolved} · сорвано ${m.missed} · <b>${m.rate}%</b> успеха. Доверие ${m.trustFrom}% → ${m.trustTo}%. Работа между вызовами: ${m.tasks}${m.drunk?`, пьяных водителей снято: ${m.drunk}`:''}. Лучшая смена — ${escapeHtml(m.best.date)}: ${m.best.resolved} вызовов.</p></div>`:'';
+- return `<details class="finance-box history-box" open><summary>История службы · ${log.length} смен</summary>${month}${log.length?historyChart(log):''}${awards.length?`<div class="awards">${awards.slice().reverse().map(a=>{const i=awardInfo(a.id);return `<span class="award" title="${escapeHtml(i?.about??'')}">★ ${escapeHtml(i?.label??a.id)}${a.month?` · ${escapeHtml(a.month)}`:''}</span>`;}).join('')}</div>`:'<p class="fine-print">Награды выдаются по итогам месяца и за вехи службы.</p>'}</details>`;}
++// R19 monthly plan with live progress.
++function goalsMarkup(){const g=state.goals;if(!g)return '';return `<div class="goals"><b>План на ${escapeHtml(g.label)}</b>${g.list.map(x=>{const v=goalValue(state,x,g.month),ok=goalMet(x,v),lower=GOALS[x.id].lower||x.id==='clean',pct=lower?(ok?100:0):Math.min(100,Math.round(v/Math.max(1,x.target)*100));return `<div class="goal ${ok?'ok':''}"><span>${escapeHtml(goalLabel(x))}</span><small>${x.id==='clean'?(v?`обоснованных жалоб: ${v}`:'пока ни одной'):`сейчас ${v}`}${ok?' ✓':''}</small><div class="bond"><span style="width:${pct}%"></span></div></div>`;}).join('')}<small class="fine-print">Выполненная цель — ${state.mode==='chief'?`+${GOAL_REWARD.budget} к бюджету`:`премия ${GOAL_REWARD.money} € и +${GOAL_REWARD.xp} опыта`} в конце месяца.</small></div>`;}
++function historySection(){const log=state.shiftLog??[],awards=state.awards??[],m=state.monthReport;if(!log.length&&!awards.length&&!state.goals)return '';
++ const month=m&&m.shift===state.shift?`<div class="month-report"><b>Итоги месяца · ${escapeHtml(m.label)}</b>${m.goals?`<p>План: ${m.goals.map(x=>`${x.met?'✓':'✗'} ${escapeHtml(x.label)} (${x.id==='clean'?(x.value?'жалоб '+x.value:'ни одной'):x.value})`).join(' · ')}</p>`:''}<p>Смен: ${m.shifts} · закрыто ${m.resolved} · сорвано ${m.missed} · <b>${m.rate}%</b> успеха. Доверие ${m.trustFrom}% → ${m.trustTo}%. Работа между вызовами: ${m.tasks}${m.drunk?`, пьяных водителей снято: ${m.drunk}`:''}. Лучшая смена — ${escapeHtml(m.best.date)}: ${m.best.resolved} вызовов.</p></div>`:'';
++ return `<details class="finance-box history-box" open><summary>История службы · ${log.length} смен</summary>${month}${goalsMarkup()}${log.length?historyChart(log):''}${awards.length?`<div class="awards">${awards.slice().reverse().map(a=>{const i=awardInfo(a.id);return `<span class="award" title="${escapeHtml(i?.about??'')}">★ ${escapeHtml(i?.label??a.id)}${a.month?` · ${escapeHtml(a.month)}`:''}</span>`;}).join('')}</div>`:'<p class="fine-print">Награды выдаются по итогам месяца и за вехи службы.</p>'}</details>`;}
+ // R16 partner card in the personal file (career roster).
+ function partnerCard(){const p=state.life?.partner;if(!p)return '';const t=TRAITS[p.trait],b=Math.round(p.bond),mood=b>=BOND.strong?'сработались: экипаж на 6% быстрее':b<BOND.weak?'отношения натянуты: экипаж на 6% медленнее':'рабочие отношения';
+  return `<div class="partner-card"><b>Напарник: ${escapeHtml(p.name)}</b><small>${escapeHtml(t.label)} — ${escapeHtml(t.about)}</small><div class="bond"><span style="width:${b}%"></span></div><small>Связь ${b}% · ${mood}. ${p.trait==='mentor'?'Стажировка: первый месяц и звание «Патрульный».':'В экипаже со смены '+p.since+'.'} Укрепить — «Время с напарником» в свободные дни.</small></div>`;}
+@@ -130,7 +146,7 @@
+ function report(){const fin=financialSummary(state),unfinished=state.incidents.filter(i=>!['resolved','missed'].includes(i.state)).length;modal(`<span class="eyebrow">${state.ended?'СМЕНА ЗАВЕРШЕНА':'ТЕКУЩАЯ СМЕНА'} / ${String(state.shift).padStart(2,'0')}${isScheduled(state)?' · '+SHIFT_LABEL[shiftKind(state.shift-1)].toUpperCase()+' · 12 Ч · '+shiftDateOf(state).label:''}</span><h2>${state.ended?'Город говорит спасибо.':'Результаты вашей работы'}</h2>${(d=>`<div class="debrief"><p class="eyebrow">РАЗБОР СМЕНЫ · ${escapeHtml(d.weather)}</p><ul>${d.good.map(t=>`<li class="ok">${escapeHtml(t)}</li>`).join('')}${d.attention.map(t=>`<li class="warn">${escapeHtml(t)}</li>`).join('')}</ul><p class="tip"><b>Наставник:</b> ${escapeHtml(d.tip)}</p></div>`)(shiftDebrief(state))}<div class="report-grid"><div>Решено<strong>${state.resolved}</strong></div><div>Пропущено<strong>${state.missed}</strong></div><div>Опыт<strong>${state.xp}</strong></div></div>${historySection()}${newsSection(6)}<p>Доверие жителей: ${state.trust}%. Ваше звание: ${state.mode==='career'?RANKS[state.rank]:'Начальник смены'}. ${state.ended?(isScheduled(state)?nextShiftLine():'Данные сохранены. Следующая смена сохранит опыт, доверие и незавершённые вызовы. Занятые экипажи останутся на месте.'):''}</p><p>Незавершённых вызовов: <b>${unfinished}</b>. Они продолжатся в следующей смене.</p><details class="finance-box"><summary>Доверие по районам</summary>${DISTRICT_IDS.map(id=>[id,districtTrust(state,id)]).sort((a,b)=>a[1]-b[1]).map(([id,v])=>`<div class="finance-row"><span>${districtName(id)}</span><b>${Math.round(v)}%</b></div>`).join('')}<p>Где доверие ниже, жители чаще звонят повторно. Ожидают повторных вызовов: ${state.followUps?.length??0}.</p></details><details class="finance-box" open><summary>Финансы этой смены</summary><div class="finance-row"><span>Остаток на начало учёта</span><b>${fin.opening}</b></div><div class="finance-row"><span>Доходы</span><b>+${fin.income}</b></div><div class="finance-row"><span>Расходы</span><b>−${fin.expenses}</b></div><div class="finance-row"><span>Сейчас в бюджете</span><b>${fin.balance}</b></div><div class="finance-row"><span>К списанию за содержание</span><b>−${fin.pending}</b></div>${(g=>`<div class="finance-row"><span>Мэрия на следующую смену</span><b>${g.total>=0?'+':''}${g.total}</b></div><p class="fine-print">${g.lines.map(escapeHtml).join(' · ')}</p>`)(cityGrant(state))}${fin.support?`<p>При переходе смены будет учтена субсидия ${fin.support}. В прототипе она покрывает дефицит содержания.</p>`:''}<p>После расчёта: <b>${Math.max(0,fin.balance+fin.grant-fin.pending)}</b>. ${fin.legacy?'Для старого сохранения подробный учёт начат с момента обновления.':''}</p>${fin.entries.slice().reverse().map(e=>`<div class="logrow"><small>${clock(e.time)}</small>${escapeHtml(e.label)} <b>${e.amount>0?'+':''}${e.amount}</b></div>`).join('')||'<p>Операций пока нет.</p>'}</details>${trainingMarkup()}${state.mode==='career'?'<button id="reportService">Личное дело и разбор решений</button>':''}${state.previousReport?`<details class="finance-box"><summary>Итоги предыдущей смены ${state.previousReport.shift}</summary><p>Решено: ${state.previousReport.resolved}. Пропущено: ${state.previousReport.missed}. Перенесено: ${state.previousReport.carried}.</p><p>Начало: ${state.previousReport.finance.opening} + доходы ${state.previousReport.finance.income} − расходы ${state.previousReport.finance.expenses} = остаток ${state.previousReport.finance.balance}.</p></details>`:''}<div class="modal-actions">${state.ended?'<button id="nextShiftBtn" class="primary">Следующая смена →</button>':'<button id="resumeBtn" class="primary">Вернуться к игре</button>'}<button id="exportBtn">Экспорт сохранения</button></div><p style="font-size:10px">Сохранение хранится только в этом браузере. Экспорт позволяет перенести кампанию на другое устройство.</p><label style="font-size:12px">Загрузить сохранение <input id="importFile" type="file" accept="application/json,.json" style="display:block;margin-top:8px;max-width:100%"></label><div style="margin-top:20px">${state.history.slice(0,8).map(h=>`<div class="logrow">${h.success?'✓':'—'} ${escapeHtml(h.name)} <small>№${h.id}</small>${h.outcome?'<p>'+escapeHtml(h.outcome)+'</p>':''}</div>`).join('')}</div>`);if($('reportService'))$('reportService').onclick=servicePanel;if($('nextShiftBtn'))$('nextShiftBtn').onclick=()=>{if(offDuty(state)){offDutyPlanner();return;}startNextShift();};if($('resumeBtn'))$('resumeBtn').onclick=close;$('exportBtn').onclick=()=>{const a=document.createElement('a'),url=URL.createObjectURL(new Blob([serialize(state)],{type:'application/json'}));a.href=url;a.download='meridian-watch-save.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};$('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(file.size>1024*1024){toast('Файл слишком большой');return;}try{const imported=deserialize(await file.text());pendingImport=imported;modal('<h2>Загрузить кампанию?</h2><p>Текущее сохранение будет заменено данными из выбранного файла.</p><div class="modal-actions"><button id="cancelImport">Отмена</button><button id="applyImport" class="primary">Загрузить</button></div>');$('cancelImport').onclick=report;$('applyImport').onclick=()=>{state=pendingImport;pendingImport=null;reportShown=false;selectedCall=null;selectedUnit=1;save();close();refresh(true);toast('Кампания загружена');};}catch{toast('Не удалось прочитать сохранение');}};}
+ let pendingImport=null;$('reportBtn').onclick=report;
+ $('journalBtn').onclick=()=>modal(`<span class="eyebrow">РАДИОЭФИР / ЖУРНАЛ</span>${(state.cases??[]).length?`<h2>Дела смены</h2><div class="cases">${state.cases.map(c=>`<div class="case ${c.success?'ok':'bad'}"><div class="case-top"><b>№${c.id} · ${escapeHtml(c.name)}</b><small>${clock(c.time)} · ${escapeHtml(districtName(c.district))}</small></div><p>${c.decision?'Решение: '+escapeHtml(c.decision)+'. ':''}${escapeHtml(c.outcome)}${c.outcome&&!/[.!?]$/.test(c.outcome)?'.':''}</p>${c.protocol?`<p class="case-protocol">📄 ${escapeHtml(c.protocol)}</p>`:''}<span class="chip">${escapeHtml(c.status)}</span>${c.medical?'<span class="chip">✚ скорая</span>':''}${c.rescue?'<span class="chip">▲ спасатели</span>':''}${c.fromShift&&c.fromShift<state.shift?`<span class="chip">из смены ${c.fromShift}</span>`:''}${c.repeatOf?`<span class="chip">${c.lead?'розыск по делу':'повтор после'} №${c.repeatOf}</span>`:''}${c.evidence?`<span class="chip">улики: ${escapeHtml(c.evidence)}</span>`:''}</div>`).join('')}</div>`:''}${(state.news??[]).length?`<h2>Город пишет</h2>${newsSection(16)}`:''}${(state.tasksDone??[]).length?`<h2>Работа между вызовами</h2><div class="radio-log">${state.tasksDone.map(t=>`<div class="logrow"><small>${clock(t.time)}</small><b>${escapeHtml(state.units.find(u=>u.id===t.unit)?.name??'Экипаж')}:</b> ${escapeHtml(TASKS[t.task].label)}, ${escapeHtml(districtName(t.district))} — ${escapeHtml(t.text)}</div>`).join('')}</div>`:''}${(state.complaints??[]).length?`<h2>Внутренний контроль</h2><div class="cases">${state.complaints.map(c=>`<div class="case ${c.status==='обоснована'?'bad':c.status==='не подтвердилась'?'ok':''}"><div class="case-top"><b>Вызов №${c.incident}</b><small>${c.district?escapeHtml(districtName(c.district)):''}</small></div><p>${escapeHtml(c.reason)}.</p><span class="chip">${escapeHtml(c.status)}</span></div>`).join('')}</div>`:''}${(state.radio??[]).length?`<h2>Радиоэфир</h2><div class="radio-log">${state.radio.map(r=>`<div class="logrow"><small>${clock(r.time)}</small><b>${escapeHtml(r.from)}:</b> ${escapeHtml(r.text)}</div>`).join('')}</div>`:''}<h2>События смены</h2>${state.logs.map(l=>`<div class="logrow"><small>${clock(l.time)}</small>${escapeHtml(l.text)}</div>`).join('')||'<p>Событий пока нет.</p>'}`);
+-$('helpBtn').onclick=()=>modal(`<span class="eyebrow">КРАТКИЙ ИНСТРУКТАЖ</span><h2>Добро пожаловать на службу.</h2><ol><li>Начальнику: откройте «Отделение», наймите одного или двух сотрудников и сформируйте патруль. В «Экипажах» выберите патруль. В карьере вам доступен экипаж 01 с наставником.</li><li>По умолчанию все экипажи действуют самостоятельно: принимают вызовы, выбирают действия и отдыхают.</li><li>Если хотите вмешаться, выключите автомат у своего экипажа. Тогда направляйте его на вызов и выбирайте действие по прибытии.</li><li>Настройте район патруля и разрешение покидать его. Включить автомат обратно можно в любой момент.</li><li>При усталости отправляйте экипаж на отдых. В автомате он делает это сам.</li><li>В конце восьмиминутной смены откройте отчёт. Каждые 150 опыта дают следующее звание.</li></ol><details class="dept-section"><summary><b>Как устроена служба (новая кампания)</b></summary><ul><li><b>График ППА:</b> смена 12 часов — две дневные (08–20), две ночные (20–08), затем 4 выходных. Ночью экипажи устают быстрее, тяжелее всего в 4–5 утра.</li><li><b>Смена:</b> инструктаж с ориентировками → приёмка машины (меньше половины бака — сначала на АЗС) → патруль, обед 1 час → в конце рапорты в участке.</li><li><b>Между сменами (карьера):</b> отдых, семья, спорт, хобби, обучение, доп. смена, день здоровья или отпуск. Недосып и стресс переходят в следующую смену. Повышение — только с действующими стрельбами и физподготовкой.</li><li><b>Роли:</b> ГБР, кинолог, оператор дрона — после звания и курса.</li><li><b>Напарник:</b> первый месяц — наставник, потом постоянный напарник со своим характером. Слаженная пара работает быстрее; связь укрепляет «Время с напарником».</li><li><b>Между вызовами:</b> рейд «Трезвый водитель», контроль скорости, пеший обход — в панели экипажа. Любой вызов прервёт задание.</li><li><b>Доверие и итоги:</b> доверие жителей растёт медленно и падает от срывов; итоги месяца, награды и новости города — в отчёте смены. Начальник развивает отделение покупками и следит за жалобами.</li><li><b>Машины:</b> топливо в литрах, заправка на АЗС, износ и ремонт, багажник с оснащением.</li><li><b>Город:</b> даты, времена года, снег и гололёд, праздники с наплывом вызовов, скорая и спасатели, розыск по кражам, дела и протоколы в журнале.</li><li><b>Начальник:</b> правила отделения, приоритетный район, табель с недосыпом и отпусками, ночная надбавка.</li></ul></details><p>Кнопка «Центр» приближает центр, «Город» показывает весь город, «Патруль» находит выбранный экипаж. Карту можно двигать пальцем и масштабировать двумя пальцами. Перетаскивание отключает слежение за патрулём. В карточке вызова есть кнопка показа на карте. Кнопки + и − меняют масштаб. «На весь экран» разворачивает карту; «Выйти» возвращает интерфейс. Если браузер не разрешает полный экран, карта занимает всё доступное окно. Пауза и скорость — под картой. Во время открытия окна, сворачивания или смены вкладки симуляция приостанавливается.</p><p>Звания открывают полномочия; текущие права показаны в личном деле. Участники текущих вызовов видны на карте; у них есть состояния и разные исходы. Кнопка «Жители» открывает 16 постоянных жителей центра: дом, работу и расписание поездок. Светлые цветные машины — их поездки. Имена и назначения зданий вымышлены. Конфликты и заявления о краже могут затрагивать этих жителей: распорядок приостанавливается, результат сохраняется в карточке. После отдыха человек возвращается к делам автоматически. На проверенных участках сотрудники идут от машины по пешеходным путям. Решение доступно после подхода экипажа; по завершении он возвращается в машину. В ручном режиме действие можно изменить во время работы. Оранжевая машина — цель проверки или погони.</p><button id="helpPlan" style="width:100%">Посмотреть план развития</button><h3>Источники карты</h3><p>Меридиан — вымышленный город. Внешний вид и игровая симуляция разработаны для Mercury Response.</p><p class="fine-print">Картографическая основа: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors · ODbL</a>.</p>`);$('helpBtn').addEventListener('click',()=>{$('helpPlan').onclick=showPlan;});
++$('helpBtn').onclick=()=>modal(`<span class="eyebrow">КРАТКИЙ ИНСТРУКТАЖ</span><h2>Добро пожаловать на службу.</h2><ol><li>Начальнику: откройте «Отделение», наймите одного или двух сотрудников и сформируйте патруль. В «Экипажах» выберите патруль. В карьере вам доступен экипаж 01 с наставником.</li><li>По умолчанию все экипажи действуют самостоятельно: принимают вызовы, выбирают действия и отдыхают.</li><li>Если хотите вмешаться, выключите автомат у своего экипажа. Тогда направляйте его на вызов и выбирайте действие по прибытии.</li><li>Настройте район патруля и разрешение покидать его. Включить автомат обратно можно в любой момент.</li><li>При усталости отправляйте экипаж на отдых. В автомате он делает это сам.</li><li>В конце восьмиминутной смены откройте отчёт. Каждые 150 опыта дают следующее звание.</li></ol><details class="dept-section"><summary><b>Как устроена служба (новая кампания)</b></summary><ul><li><b>График ППА:</b> смена 12 часов — две дневные (08–20), две ночные (20–08), затем 4 выходных. Ночью экипажи устают быстрее, тяжелее всего в 4–5 утра.</li><li><b>Смена:</b> инструктаж с ориентировками → приёмка машины (меньше половины бака — сначала на АЗС) → патруль, обед 1 час → в конце рапорты в участке.</li><li><b>Между сменами (карьера):</b> отдых, семья, спорт, хобби, обучение, доп. смена, день здоровья или отпуск. Недосып и стресс переходят в следующую смену. Повышение — только с действующими стрельбами и физподготовкой.</li><li><b>Роли:</b> ГБР, кинолог, оператор дрона — после звания и курса.</li><li><b>Напарник:</b> первый месяц — наставник, потом постоянный напарник со своим характером. Слаженная пара работает быстрее; связь укрепляет «Время с напарником».</li><li><b>Между вызовами:</b> рейд «Трезвый водитель», контроль скорости, пеший обход — в панели экипажа. Любой вызов прервёт задание.</li><li><b>События города:</b> шторм, футбольный матч, концерт, отключение света — свои вызовы и больше работы; всё видно на экране инструктажа перед сменой.</li><li><b>План на месяц:</b> три цели от префектуры или командира с прогрессом в отчёте; за каждую выполненную — премия.</li><li><b>Доверие и итоги:</b> доверие жителей растёт медленно и падает от срывов; итоги месяца, награды и новости города — в отчёте смены. Начальник развивает отделение покупками и следит за жалобами.</li><li><b>Машины:</b> топливо в литрах, заправка на АЗС, износ и ремонт, багажник с оснащением.</li><li><b>Город:</b> даты, времена года, снег и гололёд, праздники с наплывом вызовов, скорая и спасатели, розыск по кражам, дела и протоколы в журнале.</li><li><b>Начальник:</b> правила отделения, приоритетный район, табель с недосыпом и отпусками, ночная надбавка.</li></ul></details><p>Кнопка «Центр» приближает центр, «Город» показывает весь город, «Патруль» находит выбранный экипаж. Карту можно двигать пальцем и масштабировать двумя пальцами. Перетаскивание отключает слежение за патрулём. В карточке вызова есть кнопка показа на карте. Кнопки + и − меняют масштаб. «На весь экран» разворачивает карту; «Выйти» возвращает интерфейс. Если браузер не разрешает полный экран, карта занимает всё доступное окно. Пауза и скорость — под картой. Во время открытия окна, сворачивания или смены вкладки симуляция приостанавливается.</p><p>Звания открывают полномочия; текущие права показаны в личном деле. Участники текущих вызовов видны на карте; у них есть состояния и разные исходы. Кнопка «Жители» открывает 16 постоянных жителей центра: дом, работу и расписание поездок. Светлые цветные машины — их поездки. Имена и назначения зданий вымышлены. Конфликты и заявления о краже могут затрагивать этих жителей: распорядок приостанавливается, результат сохраняется в карточке. После отдыха человек возвращается к делам автоматически. На проверенных участках сотрудники идут от машины по пешеходным путям. Решение доступно после подхода экипажа; по завершении он возвращается в машину. В ручном режиме действие можно изменить во время работы. Оранжевая машина — цель проверки или погони.</p><button id="helpPlan" style="width:100%">Посмотреть план развития</button><h3>Источники карты</h3><p>Меридиан — вымышленный город. Внешний вид и игровая симуляция разработаны для Mercury Response.</p><p class="fine-print">Картографическая основа: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors · ODbL</a>.</p>`);$('helpBtn').addEventListener('click',()=>{$('helpPlan').onclick=showPlan;});
+ function residentsPanel(id=null){
+  const stats=populationSummary(state),r=state.population.residents.find(r=>r.id===id);
+  if(r){const profile=residentProfile(r.id),home=PLACES.get(profile.home),work=PLACES.get(profile.work),destination=visitDestination(r);
+--- a/dist/calls.js
++++ b/dist/calls.js
+@@ -44,6 +44,12 @@
+  {id:'school-speeding',type:5,name:'Превышение у школы',brief:'Родители жалуются: у школы машины едут намного быстрее 30 км/ч. Нарушитель только что проехал мимо — нужно остановить и составить протокол.',hours:'day',place:'residential',w:1,roster:true},
+  {id:'lost-child-mall',type:2,name:'Ребёнок потерялся в торговом центре',brief:'Туристка из Финляндии потеряла сына пяти лет в торговом центре. Говорит по-английски и по-фински, очень волнуется.',hours:'day',place:'centre',w:1,roster:true},
+  {id:'thin-ice',type:2,name:'Рыбаки на тонком льду',brief:'С берега видят двух рыбаков далеко на льду у устья реки, лёд трещит. Нужно найти их и вернуть на берег, спасатели предупреждены.',hours:'day',place:'any',w:1.5,roster:true,seasons:['winter']},
++ // R18: calls that only happen during a city event (`events`, events.js).
++ {id:'tree-down',type:1,name:'Дерево упало на дорогу',brief:'Ветер повалил дерево поперёк проезжей части, машины объезжают по встречной. Нужно перекрыть участок до приезда спасателей с пилой.',hours:'any',place:'road',w:6,roster:true,events:['storm']},
++ {id:'power-lines',type:1,name:'Оборван провод',brief:'На тротуар упал оборванный провод, рядом ходят люди. Нужно оцепить место и не подпускать прохожих до приезда энергетиков.',hours:'any',place:'residential',w:3,roster:true,events:['storm']},
++ {id:'fan-fight',type:4,name:'Драка болельщиков',brief:'У стадиона сцепились две группы фанатов, летят бутылки. Своими силами не справиться — нужен второй экипаж.',hours:'any',place:'centre',w:6,roster:true,events:['football']},
++ {id:'lost-at-concert',type:2,name:'Подросток потерялся на концерте',brief:'Отец не может найти дочь четырнадцати лет в толпе у сцены, телефон разряжен.',hours:'any',place:'centre',w:5,roster:true,events:['concert']},
++ {id:'alarm-burglary',type:3,name:'Сработала охранная сигнализация',brief:'Без света сработала сигнализация магазина. Охрана видит на камере человека у задней двери.',hours:'any',place:'centre',w:6,roster:true,events:['outage']},
+  {id:'beach-party',type:0,name:'Ночная вечеринка на пляже',brief:'Жильцы у пляжа жалуются: большая компания с колонкой и костром, на песке разбитые бутылки.',hours:'night',place:'any',w:2,roster:true,seasons:['summer']}
+ ]);
+ const byId=new Map(VARIANTS.map(v=>[v.id,v]));
+@@ -56,7 +62,7 @@
+ const ORDER=['day','evening','night'];
+ function hourFactor(variant,bucket){if(variant.hours==='any')return 1;const d=Math.abs(ORDER.indexOf(variant.hours)-ORDER.indexOf(bucket));return d===0?2:d===1?1:.5;}
+ // Roster-only and seasonal variants: the campaign's weather carries its season only in roster campaigns.
+-export const variantAllowed=(v,weather)=>(!v.roster||!!weather?.season)&&(!v.seasons||v.seasons.includes(weather?.season));
++export const variantAllowed=(v,weather)=>(!v.roster||!!weather?.season)&&(!v.seasons||v.seasons.includes(weather?.season))&&(!v.events||v.events.includes(weather?.event?.id));
+ export function variantWeights(minuteOfDay,weather=null){const bucket=hourBucket(minuteOfDay);return VARIANTS.map(v=>variantAllowed(v,weather)?v.w*hourFactor(v,bucket)*weatherFactor(weather,v.id):0);}
+ export function pickVariant(random,minuteOfDay,weather=null){const weights=variantWeights(minuteOfDay,weather),total=weights.reduce((a,b)=>a+b,0);let r=random*total;for(let k=0;k<VARIANTS.length;k++){r-=weights[k];if(r<0)return VARIANTS[k];}return VARIANTS.at(-1);}
+ 
+@@ -122,7 +128,7 @@
+  'street-fight':['talk','backup'],'noise-venue':['backup'],'domestic':['talk','backup'],
+  'drunk-driver':['check','chase'],'dangerous-driving':['check','chase'],'no-licence':['check','chase'],
+  'shoplift':['check','talk'],'car-break':['check'],'bike-theft':['check'],'suspect-found':['check','talk'],
+- 'restraining-order':['talk','backup'],'phone-scam':['check','talk'],'fuel-driveoff':['check'],'school-speeding':['chase']
++ 'restraining-order':['talk','backup'],'phone-scam':['check','talk'],'fan-fight':['backup'],'alarm-burglary':['check'],'fuel-driveoff':['check'],'school-speeding':['chase']
+ });
+ export const custodyFor=(variantId,decision)=>!!CUSTODY[variantId]?.includes(decision);
+ // 0.7.0 step 2: at the scene the player may arrest or release with a warning. Without an explicit
+@@ -150,10 +156,10 @@
+ // 0.7.2 v1 «Спасатели» (Claude, 11.10.2026): second service. A fire call alerts rescuers at once
+ // (112 is shared); a crash with a trapped driver alerts them when police reach the scene. Rescuers
+ // set up a safe zone, work (faster while police hold the cordon), then return to their station.
+-export const RESCUE=Object.freeze({'fire-smoke':'Возгорание в квартире',crash:'Водителя зажало в машине','thin-ice':'Люди на тонком льду'});
++export const RESCUE=Object.freeze({'fire-smoke':'Возгорание в квартире',crash:'Водителя зажало в машине','thin-ice':'Люди на тонком льду','tree-down':'Дерево на дороге, нужна пила'});
+ // Every fire needs rescuers; a deterministic third of crashes (no RNG draw: campaign seeds unchanged).
+-export const needsRescue=i=>i?.variant==='fire-smoke'||i?.variant==='thin-ice'||(i?.variant==='crash'&&Number.isInteger(i.id)&&i.id%3===0);
+-export const RESCUE_TEAM=Object.freeze({secureTime:3,workTime:{'fire-smoke':14,crash:9,'thin-ice':10},cordonSpeed:1.5,maxActive:2,kmh:55,trustBonus:1,paint:'#c23a2c',lights:'blue'});
++export const needsRescue=i=>i?.variant==='fire-smoke'||i?.variant==='thin-ice'||i?.variant==='tree-down'||(i?.variant==='crash'&&Number.isInteger(i.id)&&i.id%3===0);
++export const RESCUE_TEAM=Object.freeze({secureTime:3,workTime:{'fire-smoke':14,crash:9,'thin-ice':10,'tree-down':8},cordonSpeed:1.5,maxActive:2,kmh:55,trustBonus:1,paint:'#c23a2c',lights:'blue'});
+ export const SERVICE_LIMIT=AMBULANCE.maxActive+RESCUE_TEAM.maxActive;
+ 
+ // 0.7.0 step 3 «Дела смены» (Claude, 11.10.2026): every closed call becomes a short case record.
+@@ -162,7 +168,7 @@
+ // 0.7.0 step 4 «Розыск» (Claude, 11.10.2026): an unsolved theft stays open as a case. Evidence the
+ // crew collected (decision before the failure) raises the chance that the suspect is spotted later;
+ // then a «Подозреваемый замечен» call appears. All rolls are hashes of the call id, not rng().
+-export const THEFTS=Object.freeze(['shoplift','bike-theft','car-break','phone-scam','fuel-driveoff']);
++export const THEFTS=Object.freeze(['shoplift','bike-theft','car-break','phone-scam','fuel-driveoff','alarm-burglary']);
+ export const EVIDENCE=Object.freeze({check:'записи камер и следы на месте',talk:'приметы со слов свидетеля'});
+ export const LEAD_RULES=Object.freeze({base:.35,evidence:.35,delay:[50,100]});
+ export const leadHash=(id,salt=0)=>{let h=Math.imul((id|0)+97,2246822519)^Math.imul(salt+13,3266489917);h^=h>>>13;h=Math.imul(h,1274126177);return ((h^h>>>16)>>>0)/4294967296;};
+@@ -200,6 +206,11 @@
+  'school-speeding':P('Протокол о превышении скорости в школьной зоне','Водитель отстранён, протокол и материалы об опасной езде'),
+  'lost-child-mall':P('Ребёнок найден и передан матери, рапорт'),
+  'thin-ice':P('Рыбаки выведены на берег, предупреждение о запрете выхода на лёд'),
+- 'beach-party':P('Протокол о распитии и разведении костра на пляже','Доставлен, протокол о нарушении порядка')
++ 'beach-party':P('Протокол о распитии и разведении костра на пляже','Доставлен, протокол о нарушении порядка'),
++ 'tree-down':P('Участок перекрыт, дерево убрано спасателями, сообщение службе дорог'),
++ 'power-lines':P('Место оцеплено, сведения переданы энергетикам'),
++ 'fan-fight':P('Объяснения участников, протокол о нарушении порядка','Задержаны зачинщики, материалы о хулиганстве'),
++ 'lost-at-concert':P('Подросток найден и передан отцу, рапорт'),
++ 'alarm-burglary':P('Объект осмотрен, следы проникновения зафиксированы','Задержан на месте, материалы о краже со взломом')
+ });
+ export const protocolFor=(variant,custody)=>PROTOCOLS[variant]?.(custody)??null;
+--- a/dist/news.js
++++ b/dist/news.js
+@@ -21,7 +21,11 @@
+  'school-speeding':{good:['У школы ({d}) остановлен водитель, превысивший скорость: родители довольны']},
+  'beach-party':{good:['Ночная вечеринка с костром на пляже прекращена после жалоб жильцов']},
+  'fire-smoke':{good:['Дым в жилом доме ({d}): полиция оцепила подъезд, спасатели вывели жильцов']},
+- 'crash':{bad:['ДТП на перекрёстке ({d}): место происшествия долго не было оцеплено']}
++ 'crash':{bad:['ДТП на перекрёстке ({d}): место происшествия долго не было оцеплено']},
++ 'fan-fight':{good:['Драку болельщиков у стадиона остановили два экипажа полиции'],bad:['После матча фанаты дрались у стадиона — полиция не успела']},
++ 'tree-down':{good:['Шторм: упавшее дерево ({d}) убрано, полиция перекрывала дорогу']},
++ 'alarm-burglary':{good:['Без света, но не без полиции: взломщик задержан у магазина ({d})'],bad:['Пока не было света, магазин ({d}) обокрали']},
++ 'lost-at-concert':{good:['На концерте потерялась девочка-подросток — полиция нашла её за {m} мин']}
+ });
+ export function callNews(i,success,{district='городе',minutes=0}={}){const set=CALLS[i?.variant];const list=set?.[success?'good':'bad'];if(!list)return null;
+  // Ordinary good outcomes make the news only sometimes; failures and rare calls always.
+--- a/dist/sim.js
++++ b/dist/sim.js
+@@ -8,6 +8,8 @@
+ import {SHIFT_TICKS,ROTA,isScheduled,validSchedule,shiftStartElapsed,nightFatigueFactor,shiftKind,restBefore} from './schedule.js';
+ import {ROUTINE,STATUS_TEXT,briefingFor,validBolo,validRoutine} from './routine.js';
+ import {TASKS,taskTicks,taskResult,taskReward,autoTaskFor,autoTaskRoll,preventionMods,validTask,validPatrolWork,TASK_RULES} from './patrolwork.js';
++import {specialEvent} from './events.js';
++import {makeGoals,goalLabel,goalValue,goalMet,validGoals,GOAL_REWARD} from './goals.js';
+ import {newsRoom,callNews,checkpointNews,complaintNews,holidayNews,awardNews,pushNews,validNews} from './news.js';
+ import {ensurePartner,nextPartner,partnerPace,partnerComplaints,bondAfterShift,BOND,TRAITS} from './partner.js';
+ import {HISTORY_LIMIT,AWARD_LIMIT,AWARD_REWARD,shiftRecord,monthOf,monthSummary,newAwards,emptyStats,validHistory} from './history.js';
+@@ -218,11 +220,11 @@
+  if(s.followUps!==undefined&&!(Array.isArray(s.followUps)&&s.followUps.length<=12&&s.followUps.every(f=>num(f.at,0,2000)&&variantById(f.variant)&&containsWorldPoint(f)&&Number.isInteger(f.from)&&typeof f.reason==='string'&&f.reason.length<200)))return false;
+  if(s.custodyDone!==undefined&&!(Number.isInteger(s.custodyDone)&&s.custodyDone>=0&&s.custodyDone<10000))return false;
+  if(!s.incidents.every(i=>(i.custodyChoice===undefined||Object.hasOwn(CUSTODY_CHOICES,i.custodyChoice))&&(i.medical===undefined||['called','treated'].includes(i.medical))&&(i.rescue===undefined||['called','working','done'].includes(i.rescue))))return false;
+- if(!validServices(s)||!validCases(s)||!validRadio(s)||!validPolicy(s)||!validLife(s)||!validBolo(s)||!validRoutine(s)||!validUpgrades(s)||!validComplaints(s)||!validPatrolWork(s)||!validHistory(s)||!validNews(s)||!s.incidents.every(i=>i.bolo===undefined||Number.isInteger(i.bolo)))return false;
++ if(!validServices(s)||!validCases(s)||!validRadio(s)||!validPolicy(s)||!validLife(s)||!validBolo(s)||!validRoutine(s)||!validUpgrades(s)||!validComplaints(s)||!validPatrolWork(s)||!validHistory(s)||!validNews(s)||!validGoals(s)||!s.incidents.every(i=>i.bolo===undefined||Number.isInteger(i.bolo)))return false;
+  return s.incidents.every(i=>i.followUp===undefined||Number.isInteger(i.followUp.from)&&typeof i.followUp.reason==='string'&&i.followUp.reason.length<200);}
+ 
+ // Weather of the current shift: derived (not stored), so old saves and the random stream are unchanged.
+-export const shiftWeather=s=>isScheduled(s)?{...weatherFor(7182,s.shift,seasonOf(shiftDate(s.shift-1).month)),event:shiftEvent(s.shift-1,shiftKind(s.shift-1)==='night')}:weatherFor(7182,s.shift);
++export const shiftWeather=s=>{if(!isScheduled(s))return weatherFor(7182,s.shift);const night=shiftKind(s.shift-1)==='night',event=shiftEvent(s.shift-1,night)??specialEvent(s.shift-1,night),w=weatherFor(7182,s.shift,seasonOf(shiftDate(s.shift-1).month));return {...w,...(event?.weather?{kind:event.weather}:{}),event};};// R18: a storm turns the weather to wind
+ // Roster campaigns: real date of the current shift and the sun of that month (season.js).
+ export const shiftDateOf=s=>isScheduled(s)?shiftDate(s.shift-1):null;
+ export const sunOf=s=>{const d=shiftDateOf(s);return d?SUN[d.month]:null;};
+@@ -268,8 +270,8 @@
+   if(a.status==='returning'){s.services=s.services.filter(x=>x!==a);return;}
+   a.status='securing';a.timer=RESCUE_TEAM.secureTime;if(i)i.rescue='working';log(s,`Спасатели ${a.id}: на месте, ставим безопасную зону (вызов №${a.incident}).`);return;}
+  a.timer-=dt*(a.status==='working'&&open&&policeCordon(s,i)?RESCUE_TEAM.cordonSpeed:1);if(a.timer>0)return;
+- if(a.status==='securing'){a.status='working';a.timer=RESCUE_TEAM.workTime[i?.variant]??RESCUE_TEAM.workTime.crash;log(s,`Спасатели ${a.id}: ${i?.variant==='fire-smoke'?'тушим возгорание и выводим жильцов':i?.variant==='thin-ice'?'выходим на лёд со спасательными санями':'деблокируем водителя'}${open&&policeCordon(s,i)?', полиция держит оцепление':''}.`);return;}
+- if(i)i.rescue='done';a.status='returning';a.route=roadRoute(a,FIRE_STATION);log(s,`Спасатели ${a.id}: ${i?.variant==='fire-smoke'?'возгорание потушено, жильцы в безопасности':i?.variant==='thin-ice'?'рыбаки на берегу, переданы медикам':'водитель освобождён и передан медикам'}. Возвращаемся в часть.`);}
++ if(a.status==='securing'){a.status='working';a.timer=RESCUE_TEAM.workTime[i?.variant]??RESCUE_TEAM.workTime.crash;log(s,`Спасатели ${a.id}: ${i?.variant==='fire-smoke'?'тушим возгорание и выводим жильцов':i?.variant==='thin-ice'?'выходим на лёд со спасательными санями':i?.variant==='tree-down'?'распиливаем и убираем дерево':'деблокируем водителя'}${open&&policeCordon(s,i)?', полиция держит оцепление':''}.`);return;}
++ if(i)i.rescue='done';a.status='returning';a.route=roadRoute(a,FIRE_STATION);log(s,`Спасатели ${a.id}: ${i?.variant==='fire-smoke'?'возгорание потушено, жильцы в безопасности':i?.variant==='thin-ice'?'рыбаки на берегу, переданы медикам':i?.variant==='tree-down'?'дорога свободна':'водитель освобождён и передан медикам'}. Возвращаемся в часть.`);}
+ function validServices(s){if(s.services===undefined)return true;const num=(x,min,max)=>Number.isFinite(x)&&x>=min&&x<=max;
+  return Array.isArray(s.services)&&s.services.length<=SERVICE_LIMIT&&(s.nextServiceId===undefined||Number.isInteger(s.nextServiceId))&&s.services.every(a=>Number.isInteger(a.id)&&(a.kind==='ambulance'?['responding','treating','transporting','handover']:a.kind==='rescue'?['responding','securing','working','returning']:[]).includes(a.status)&&Number.isInteger(a.incident)&&num(a.timer,-1000,1000)&&containsWorldPoint(a)&&Array.isArray(a.route)&&a.route.length<3000&&a.route.every(p=>containsWorldPoint(p)));}
+ 
+@@ -279,7 +281,7 @@
+  const leads=(s.followUps??[]).filter(f=>f.variant==='suspect-found'&&open.some(c=>c.id===f.from)).map(f=>({...f,at:40+((f.from*37)%80)}));if(leads.length)n.followUps=leads;}
+ 
+ // R2 shift routine (routine.js): briefing with lookouts, vehicle acceptance, meal break, reports.
+-function startRoutine(s){s.bolo=briefingFor(s.seed,s.shift);const ev=isScheduled(s)?shiftWeather(s).event:null;if(ev){log(s,`Инструктаж: ${ev.label} — усиленный режим, вызовов больше обычного.`);pushNews(s,holidayNews(ev.label,s.shift));}else if(isScheduled(s)&&shiftKind(s.shift-1)==='night'&&[5,6].includes(weekdayOf(cityAbsoluteMinute(s))))log(s,`Инструктаж: ночь на ${weekdayOf(cityAbsoluteMinute(s))===5?'субботу':'воскресенье'} — бары, компании, пьяные водители. Будет жарко.`);for(const u of s.units){Object.assign(u,{status:'briefing',route:[],routineLeft:ROUTINE.briefing,mealDone:false});}
++function startRoutine(s){s.bolo=briefingFor(s.seed,s.shift);if(isScheduled(s)&&(!s.goals||s.goals.month!==monthOf(s.shift-1).key)){ensureDistricts(s);s.goals=makeGoals(s,s.shift-1);log(s,`План на ${s.goals.label}: ${s.goals.list.map(goalLabel).join('; ')}.`);}const ev=isScheduled(s)?shiftWeather(s).event:null;if(ev){log(s,`Инструктаж: ${ev.label} — усиленный режим, вызовов больше обычного.${ev.about?' '+ev.about:''}`);pushNews(s,holidayNews(ev.label,s.shift));}else if(isScheduled(s)&&shiftKind(s.shift-1)==='night'&&[5,6].includes(weekdayOf(cityAbsoluteMinute(s))))log(s,`Инструктаж: ночь на ${weekdayOf(cityAbsoluteMinute(s))===5?'субботу':'воскресенье'} — бары, компании, пьяные водители. Будет жарко.`);for(const u of s.units){Object.assign(u,{status:'briefing',route:[],routineLeft:ROUTINE.briefing,mealDone:false});}
+  log(s,`Инструктаж: ориентировки на смену — ${s.bolo.map(b=>b.text).join('; ')}.`);}
+ function matchBolo(s,i){if(!isScheduled(s)||!Array.isArray(s.bolo))return;const b=s.bolo.find(b=>b.matched===null&&b.variant===i.variant);if(!b)return;b.matched=i.id;i.bolo=b.id;log(s,`Дежурный: вызов №${i.id} похож на ориентировку с инструктажа (${b.text}).`);}
+ const crewOfficers=(s,u)=>u.officerIds.map(id=>departmentIndex(s).byOfficer.get(id)).filter(Boolean);
+@@ -445,11 +447,12 @@
+  n.shiftLog=[...(s.shiftLog??[]).map(r=>({...r})),shiftRecord(s,{tasks:done.length,drunk})].slice(-HISTORY_LIMIT);
+  const st={...emptyStats(),...(s.stats??{})},founded=(n.complaints??[]).filter(c=>c.status==='обоснована').length;st.calls+=s.resolved;st.drunk+=drunk;st.founded+=founded;st.monthFounded+=founded;
+  n.awards=(s.awards??[]).map(a=>({...a}));const was=monthOf(s.shift-1),now=monthOf(n.shift-1);let summary=null;
+- if(now.key!==was.key){summary=monthSummary(n.shiftLog,was.key,was.label);st.cleanMonths=st.monthFounded===0?st.cleanMonths+1:0;st.monthFounded=0;}
++ if(s.goals)n.goals=JSON.parse(JSON.stringify(s.goals));let goals=null;
++ if(now.key!==was.key){summary=monthSummary(n.shiftLog,was.key,was.label);if(n.goals?.month===was.key)goals=closeGoals(n,st);delete n.goals;st.cleanMonths=st.monthFounded===0?st.cleanMonths+1:0;st.monthFounded=0;}
+  n.stats=st;const fresh=newAwards({s:n,stats:st,summary},n.awards);
+  for(const a of fresh){n.awards.push({id:a.id,shift:s.shift,...(summary?{month:summary.label}:{})});if(n.mode==='career')n.xp+=AWARD_REWARD.xp;else n.budget+=AWARD_REWARD.budget;log(n,`Награда: ${a.label}. ${a.about}`);pushNews(n,awardNews(a.label,n.shift));}
+  if(n.awards.length>AWARD_LIMIT)n.awards.splice(0,n.awards.length-AWARD_LIMIT);n.rank=rankOf(n);
+- if(summary){n.monthReport={...summary,shift:n.shift,awards:fresh.map(a=>a.id)};log(n,`Итоги месяца (${summary.label}): смен ${summary.shifts}, закрыто ${summary.resolved}, сорвано ${summary.missed} — ${summary.rate}% успеха.`);}}
++ if(summary){n.monthReport={...summary,shift:n.shift,awards:fresh.map(a=>a.id),...(goals?{goals}:{})};log(n,`Итоги месяца (${summary.label}): смен ${summary.shifts}, закрыто ${summary.resolved}, сорвано ${summary.missed} — ${summary.rate}% успеха.`);}}
+ 
+ // R15 trust balance (Claude, 11.10.2026). With 25–35 calls in a 12-hour roster shift, +2 per call kept
+ // public trust pinned at 100%. In roster campaigns a good call now adds less the higher trust already
+@@ -469,3 +472,9 @@
+  else if(Math.round(p.bond)!==Math.round(before))log(n,`Напарник ${p.name}: связь ${Math.round(p.bond)}% (${p.bond>before?'+':''}${Math.round(p.bond-before)}).`);}
+ function switchPartner(n,np,text){const u=n.units.find(x=>x.id===1),id=u?.officerIds?.[1],o=n.officers.find(x=>x.id===id);if(o)o.name=np.name;if(u&&u.people.length>1)u.people[1]=np.name;
+  n.life.partner={name:np.name,trait:np.trait,bond:BOND.newPartner,since:n.shift,low:0};log(n,`${text}: ${np.name} — ${TRAITS[np.trait].label.toLowerCase()}. ${TRAITS[np.trait].about}`);}
++
++// R19 monthly plan (goals.js): evaluated when the month closes, before the month counters reset.
++function closeGoals(n,st){const view={shiftLog:n.shiftLog,stats:st,districts:n.districts,trust:n.trust};let met=0;
++ const res=n.goals.list.map(g=>{const value=goalValue(view,g,n.goals.month,{live:false}),ok=goalMet(g,value);if(ok){met++;if(n.mode==='chief')n.budget+=GOAL_REWARD.budget;else{n.xp+=GOAL_REWARD.xp;if(n.life)n.life.money+=GOAL_REWARD.money;}}return {id:g.id,label:goalLabel(g),target:g.target,value,met:ok};});
++ log(n,`План на ${n.goals.label}: выполнено ${met} из ${res.length}${met?n.mode==='chief'?` — премия отделению ${met*GOAL_REWARD.budget}`:` — премия ${met*GOAL_REWARD.money} € и +${met*GOAL_REWARD.xp} опыта`:''}.`);
++ if(met===res.length)pushNews(n,{title:`Полиция Меридиана выполнила план на ${n.goals.label}`,tone:'good',media:'Вестник Меридиана'});return res;}
+--- a/dist/style.css
++++ b/dist/style.css
+@@ -63,3 +63,5 @@
+ .history-chart{width:100%;height:auto;display:block;margin:6px 0 2px}.history-legend{font-size:11px;color:var(--muted);margin:0 0 8px}.history-legend .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 3px 0 8px;vertical-align:-1px}.history-legend .sw:first-child{margin-left:0}.sw.ok{background:var(--cyan)}.sw.bad{background:var(--orange)}.sw.line{height:2px;background:var(--text);vertical-align:3px}.month-report{border:1px solid var(--cyan);border-radius:8px;padding:8px 10px;margin:6px 0}.month-report p{margin:4px 0 0;font-size:12px}.awards{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.award{font-size:11px;padding:4px 8px;border-radius:12px;background:#2b2a1c;color:#f2d98a;border:1px solid #5c5330}
+ .partner-card{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;display:grid;gap:4px}.partner-card small{color:var(--muted);font-size:11px;line-height:1.4}.bond{height:6px;border-radius:3px;background:#24343d;overflow:hidden}.bond span{display:block;height:100%;background:var(--cyan)}
+ .news{border-left:3px solid var(--line);padding:4px 0 4px 8px;margin:6px 0;display:grid;gap:2px}.news b{font-size:13px;font-weight:600;line-height:1.35}.news small{color:var(--muted);font-size:10px}.news.good{border-color:var(--cyan)}.news.bad{border-color:var(--orange)}
++.goals{display:grid;gap:6px;margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px}.goal{display:grid;gap:2px}.goal span{font-size:12px}.goal small{color:var(--muted);font-size:11px}.goal.ok span{color:var(--cyan)}
++.briefing{display:grid;gap:8px;margin:8px 0}.brief-row{display:grid;gap:3px;padding:8px 10px;border:1px solid var(--line);border-radius:8px}.brief-row small{color:#b8c8d2;font-size:12px;line-height:1.4}.brief-row.event{border-color:var(--orange);background:#2a2119}.brief-row.event b{color:var(--orange)}
+--- /dev/null
++++ b/dist/events.js
+@@ -0,0 +1,24 @@
++// R18 «Крупные события смены» (Claude, 11.10.2026). Besides calendar holidays a roster shift can bring
++// a city event that shapes the whole shift: an autumn/winter storm (fallen trees, torn wires — the
++// weather turns to wind), a football match (fans, fights, drunk people), a summer concert (crowds,
++// lost teenagers, thefts) or a winter power cut (dark crossings, burglar alarms). The event has the
++// same shape as a holiday ({id,label,intensity,mods,about}) so the briefing, call mix, call rate and
++// news handle it the same way. Chosen by a hash of the shift index (no rng): every campaign sees the
++// same city calendar, like the weather.
++import {shiftStartMinute} from './schedule.js';
++import {dateOf,seasonOf,weekdayOf} from './season.js';
++export const EVENTS=Object.freeze({
++ storm:{label:'Шторм',about:'Порывы до 25 м/с: падают деревья, рвутся провода, на дорогах завалы.',intensity:1.3,weather:'wind',mods:{'tree-down':1,'power-lines':1,'blocked-exit':2.5,crash:1.5,'animal-road':1.3,'yard-company':.3,'beach-party':.1,'noise-venue':.6}},
++ football:{label:'Футбольный матч на стадионе',about:'Тысячи болельщиков: давка у входа, драки фанатов, пьяные на улицах после игры.',intensity:1.3,mods:{'fan-fight':1,'street-fight':1.8,'drunk-person':1.7,'noise-venue':1.5,crash:1.2,shoplift:1.2}},
++ concert:{label:'Концерт под открытым небом',about:'Большая сцена в парке: толпа, потерявшиеся подростки, карманные кражи, громкие компании.',intensity:1.3,mods:{'lost-at-concert':1,'drunk-person':1.8,'noise-venue':1.6,'yard-company':1.4,shoplift:1.5,'bike-theft':1.4,'street-fight':1.3}},
++ outage:{label:'Отключение электричества',about:'Часть города без света: не работают светофоры, срабатывают охранные сигнализации.',intensity:1.2,mods:{'alarm-burglary':1,crash:1.8,'blocked-exit':1.3,'confused-person':1.5}}
++});
++export const EVENT_IDS=Object.freeze(Object.keys(EVENTS));
++const hash=index=>{let h=Math.imul((index|0)+1013,2654435761);h^=h>>>15;h=Math.imul(h,2246822519);h^=h>>>13;return (h>>>0)%1000/1000;};
++// Which special event (if any) falls on the shift with this 0-based index.
++export function specialEvent(index,night){const start=shiftStartMinute(index),d=dateOf(start),season=seasonOf(d.month),wd=weekdayOf(start),r=hash(index);let id=null;
++ if((season==='autumn'||season==='winter')&&r<.09)id='storm';
++ else if(season==='winter'&&r>=.09&&r<.15)id='outage';
++ else if(!night&&(wd===6||wd===0)&&d.month>=2&&d.month<=10&&r>=.5&&r<.8)id='football';
++ else if((season==='summer'||d.month===4)&&(wd===5||wd===6)&&r>=.2&&r<.55)id='concert';
++ return id?{id,...EVENTS[id]}:null;}
+--- /dev/null
++++ b/dist/goals.js
+@@ -0,0 +1,36 @@
++// R19 «План на месяц» (Claude, 11.10.2026). At the start of each calendar month the prefecture sets the
++// department three goals (the chief) or the commander sets them for the officer (career): keep failed
++// calls down, raise trust in the weakest district, plus one more — closed calls, drunk drivers taken off
++// the road, no founded complaints, or city-wide trust. Progress is visible during the month; each met
++// goal pays a bonus at month end (budget for the chief, experience and a premium for the officer).
++// Deterministic: the extra goal is a hash of the month. Roster campaigns only.
++import {monthOf} from './history.js';
++import {districtName} from './fiction.js';
++export const GOALS=Object.freeze({
++ missed:{label:t=>`Сорванных вызовов не больше ${t}`,lower:true},
++ district:{label:(t,d)=>`Доверие района «${districtName(d)}» — ${t}% к концу месяца`},
++ calls:{label:t=>`Закрыть не меньше ${t} вызовов`},
++ drunk:{label:t=>`Снять с дороги ${t} пьяных водителей на рейдах`},
++ clean:{label:()=>'Ни одной обоснованной жалобы',flag:true},
++ trust:{label:t=>`Доверие города не ниже ${t}% к концу месяца`}
++});
++export const GOAL_REWARD=Object.freeze({budget:600,xp:60,money:80});
++const EXTRA=['calls','drunk','clean','trust'];
++const mix=k=>{let h=Math.imul((k|0)+29,2654435761);h^=h>>>15;h=Math.imul(h,2246822519);return ((h^h>>>13)>>>0);};
++export function makeGoals(s,index){const m=monthOf(index),chief=s.mode==='chief',d=Object.entries(s.districts??{}).sort((a,b)=>a[1]-b[1])[0];
++ const list=[{id:'missed',target:chief?8:4}];if(d)list.push({id:'district',target:Math.min(90,Math.round(d[1]+8)),district:d[0]});
++ const extra=EXTRA[mix(m.key)%EXTRA.length];list.push({id:extra,target:extra==='calls'?(chief?240:260):extra==='drunk'?6:extra==='trust'?88:1});
++ return {month:m.key,label:m.label,list};}
++export const goalLabel=g=>GOALS[g.id]?.label(g.target,g.district)??g.id;
++// Current value of a goal: month records of the shift log plus the shift in progress (if `live`).
++export function goalValue(s,g,month,{live=true}={}){const recs=(s.shiftLog??[]).filter(r=>r.month===month),cur=live&&monthOf(s.shift-1).key===month;
++ const sum=k=>recs.reduce((n,r)=>n+(r[k]??0),0);
++ if(g.id==='missed')return sum('missed')+(cur?s.missed:0);
++ if(g.id==='calls')return sum('resolved')+(cur?s.resolved:0);
++ if(g.id==='drunk')return sum('drunk')+(cur?(s.tasksDone??[]).filter(t=>t.done&&t.task==='breath-check').reduce((n,t)=>n+(t.found??0),0):0);
++ if(g.id==='clean')return s.stats?.monthFounded??0;
++ if(g.id==='district')return Math.round(s.districts?.[g.district]??0);
++ if(g.id==='trust')return Math.round(s.trust);return 0;}
++export function goalMet(g,value){return g.id==='clean'?value===0:GOALS[g.id]?.lower?value<=g.target:value>=g.target;}
++const int=x=>Number.isInteger(x)&&x>=0&&x<1e7;
++export const validGoals=s=>s.goals===undefined||!!s.goals&&int(s.goals.month)&&typeof s.goals.label==='string'&&s.goals.label.length<=30&&Array.isArray(s.goals.list)&&s.goals.list.length<=4&&s.goals.list.every(g=>g&&Object.hasOwn(GOALS,g.id)&&int(g.target)&&(g.district===undefined||typeof g.district==='string'&&g.district.length<=20));
+--- /dev/null
++++ b/tests/events-goals.test.mjs
+@@ -0,0 +1,36 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,nextShift,serialize,deserialize,shiftWeather} from '../dist/sim.js';
++import {specialEvent,EVENTS,EVENT_IDS} from '../dist/events.js';
++import {VARIANTS,variantWeights,variantAllowed} from '../dist/calls.js';
++import {makeGoals,goalValue,goalMet,goalLabel,GOAL_REWARD,validGoals} from '../dist/goals.js';
++import {shiftDate,seasonOf,shiftEvent} from '../dist/season.js';
++import {shiftKind} from '../dist/schedule.js';
++// R18 «Крупные события смены» and R19 «План на месяц» (Claude, 11.10.2026).
++
++test('city events follow the calendar and are deterministic',()=>{
++ const seen={};for(let i=0;i<730;i++){const night=i%4>=2,e=specialEvent(i,night);assert.deepEqual(e,specialEvent(i,night));if(!e)continue;seen[e.id]=(seen[e.id]??0)+1;const season=seasonOf(shiftDate(i).month);
++  if(e.id==='storm')assert.ok(['autumn','winter'].includes(season));if(e.id==='outage')assert.equal(season,'winter');if(e.id==='football')assert.equal(night,false);}
++ for(const id of EVENT_IDS){assert.ok(seen[id]>0,id);assert.ok(EVENTS[id].about.length>30&&EVENTS[id].intensity>1);}
++ const share=Object.values(seen).reduce((a,b)=>a+b,0)/730;assert.ok(share>.05&&share<.2,String(share));
++});
++
++test('a storm turns the weather to wind and brings its own calls; event calls never appear otherwise',()=>{
++ let idx=0;while(specialEvent(idx,shiftKind(idx)==='night')?.id!=='storm'||shiftEvent(idx,shiftKind(idx)==='night'))idx++;const s=createGame('career',7182,{schedule:'ppa'});s.shift=idx+1;
++ const w=shiftWeather(s);assert.equal(w.event.id,'storm');assert.equal(w.kind,'wind');const k=VARIANTS.findIndex(v=>v.id==='tree-down');assert.ok(variantWeights(12*60,w)[k]>0);
++ const calm={kind:'clear',season:'autumn',event:null};for(const v of VARIANTS.filter(v=>v.events))assert.equal(variantAllowed(v,calm),false,v.id);
++ assert.equal(variantAllowed(VARIANTS.find(v=>v.id==='fan-fight'),{kind:'clear',season:'autumn',event:{id:'football'}}),true);
++});
++
++test('a monthly plan is set at the start, shows live progress and pays at month end',()=>{
++ let s=createGame('career',7182,{schedule:'ppa'});assert.ok(s.goals);assert.equal(s.goals.label,'октябрь 2026');assert.equal(s.goals.list.length,3);assert.ok(s.goals.list.every(g=>goalLabel(g).length>10));
++ assert.ok(s.logs.some(l=>/План на октябрь/.test(l.text)));const missed=s.goals.list.find(g=>g.id==='missed');s.missed=2;assert.equal(goalValue(s,missed,s.goals.month),2);assert.ok(goalMet(missed,2));assert.equal(goalMet(missed,missed.target+1),false);
++ const xp=s.xp;for(let k=0;k<12;k++){s.resolved=25;s.missed=0;s.trust=99;for(const d of Object.keys(s.districts))s.districts[d]=99;s.ended=true;s=nextShift(s);}
++ const res=s.monthReport.goals;assert.ok(res&&res.length===3);const met=res.filter(r=>r.met).length;assert.ok(met>=2,JSON.stringify(res));
++ assert.ok(s.life.money>0);assert.ok(s.xp>=xp+met*GOAL_REWARD.xp);assert.equal(s.goals.label,'ноябрь 2026','a new plan for the new month');
++ assert.doesNotThrow(()=>deserialize(serialize(s)));const bad=JSON.parse(serialize(s));bad.goals.list[0].id='world-peace';assert.throws(()=>deserialize(JSON.stringify(bad)));
++});
++
++test('the chief gets budget for met goals; old campaigns have no plan',()=>{
++ const s=createGame('chief',7182,{schedule:'ppa'});const g=makeGoals(s,0);assert.equal(g.list.find(x=>x.id==='missed').target,8);assert.ok(validGoals({goals:g}));
++ assert.equal(createGame('career',7182).goals,undefined);
++});
