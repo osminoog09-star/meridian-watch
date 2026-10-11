@@ -1,8 +1,8 @@
 {
-  "gameVersion": "0.8.0-a",
-  "androidVersion": "0.2.5",
-  "versionCode": 7,
+  "gameVersion": "0.8.0-a1",
+  "androidVersion": "0.2.6",
+  "versionCode": 8,
   "base": "568c86dcc406478420e007d05e12334c71cd4aef",
   "patchesIntegrated": 19,
-  "apkSHA256": "737491d31b9ccda6699a2edb1a80de16796ea61e3b719ee64600a263207e9065"
+  "apkSHA256": "df405f3a4ed652bb00e091693b55835aa48419a561877a1f03106b45b818ff32"
 }

@@ -1,7 +1,5 @@
-# Mercury Response
+# Mercury Response — APK 0.2.6
 
-APK 0.2.5 / игра 0.8.0-a / versionCode 7. Все 19 пакетов claude/service-sound (568c86d) интегрированы.
+Game 0.8.0-a1, versionCode 8. All 19 Claude packages through 568c86d integrated; do not rerun apply-claude scripts. Corrected routeWeight to use roadSpeed.kmh. 465/465 tests and 12/12 deploy checks pass. Native Godot checkpoint is separate and not included in this APK.
 
-`python3 -I source-import.py` восстанавливает готовую версию. **Никакие исторические apply-claude*.sh повторно не запускать.**
-
-Проверки Codex: 463/463 JS, 12/12 deploy; 77 побайтно проверенных ресурсов APK. Подпись прежняя. Канал update.json опубликован; веб-игра не обновлялась. COLLAB_LOG.md содержит подробности. Ключей и паролей здесь нет.
+Import source: python3 -I source-import.py. Native project: extract Mercury_Native_Map_Checkpoint.zip. See COLLAB_LOG.md.
