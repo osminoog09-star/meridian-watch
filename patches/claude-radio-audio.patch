@@ -1,0 +1,53 @@
+--- a/dist/audio.js
++++ b/dist/audio.js
+@@ -8,16 +8,24 @@
+ import {environmentMix} from './quarter.js';
+ // Original procedural cues, no downloaded audio and no autoplay before a gesture.
+ export const AUDIO_KEY='meridian-watch-audio-v1';
++const radioKey=s=>{const r=s.radio?.[0];return r?`${r.time}|${r.from}|${r.text}`:'';};
+ export const AUDIO_DEFAULTS=Object.freeze({enabled:false,master:.55,radio:.60,siren:.35,engine:.30,environment:.45});
+ export function audioPreferences(raw){let p={};try{p=typeof raw==='string'?JSON.parse(raw):raw??{};}catch{}return Object.fromEntries(Object.entries(AUDIO_DEFAULTS).map(([k,v])=>[k,k==='enabled'?p?.enabled===true:Number.isFinite(p?.[k])?Math.max(0,Math.min(1,p[k])):v]));}
+ export function createAudio({createContext=()=>{const C=globalThis.AudioContext??globalThis.webkitAudioContext;return C?new C():null;},preferences=AUDIO_DEFAULTS}={}){
+  let prefs=audioPreferences(preferences),ctx=null,master=null,engine=null,siren=null,baseline=null,held=true,ambient=[],motion=null,steps=null,doors=null,lastStep=-Infinity,voices=new Set();
+  const set=(param,value)=>param.setTargetAtTime(value,ctx.currentTime,.045);
+- function reset(s){if(baseline&&(baseline.shift!==s.shift||baseline.mode!==s.mode))motion=null;baseline={shift:s.shift,mode:s.mode,ids:new Set(s.incidents.map(i=>i.id)),resolved:s.resolved,rank:s.rank??0,trainingDone:s.training?.events?.filter(e=>e.kind!=='failed').length??0};}
++ function reset(s){if(baseline&&(baseline.shift!==s.shift||baseline.mode!==s.mode))motion=null;baseline={shift:s.shift,mode:s.mode,radio:radioKey(s),ids:new Set(s.incidents.map(i=>i.id)),resolved:s.resolved,rank:s.rank??0,trainingDone:s.training?.events?.filter(e=>e.kind!=='failed').length??0};}
+  function quiet(){if(!ctx)return;if(master)set(master.gain,0);if(engine)set(engine.gain.gain,0);if(siren)set(siren.gain.gain,0);for(const channel of ambient)set(channel.gain.gain,0);for(const voice of voices){try{voice.stop();}catch{}}voices.clear();}
+  function loop(type,frequency,harmonics){const osc=ctx.createOscillator(),gain=ctx.createGain();osc.type=type;if(harmonics&&ctx.createPeriodicWave&&osc.setPeriodicWave){osc.setPeriodicWave(ctx.createPeriodicWave(new Float32Array(harmonics.length),new Float32Array(harmonics)));}osc.frequency.value=frequency;gain.gain.value=0;osc.connect(gain);gain.connect(master);osc.start();return {osc,gain};}
+  function ambience(){if(!ctx.createBuffer||!ctx.createBufferSource||!ctx.createBiquadFilter)return;const rate=ctx.sampleRate||48000,samples=ambienceSamples(rate),buffer=ctx.createBuffer(1,samples.length,rate);buffer.getChannelData(0).set(samples);const source=ctx.createBufferSource();source.buffer=buffer;source.loop=true;for(const [kind,hz,level] of [['wind',230,.05],['water',1100,.055],['traffic',130,.03]]){const filter=ctx.createBiquadFilter(),gain=ctx.createGain();filter.type='lowpass';filter.frequency.value=hz;gain.gain.value=0;source.connect(filter);filter.connect(gain);gain.connect(master);ambient.push({kind,gain,level,source});}source.start();}
+  async function unlock(){if(!prefs.enabled)return false;try{if(!ctx){ctx=createContext();if(!ctx)return false;master=ctx.createGain();master.gain.value=0;if(ctx.createDynamicsCompressor){const limiter=ctx.createDynamicsCompressor();limiter.threshold.value=-12;limiter.knee.value=12;limiter.ratio.value=4;limiter.attack.value=.005;limiter.release.value=.15;master.connect(limiter);limiter.connect(ctx.destination);}else master.connect(ctx.destination);engine=loop('triangle',32,ENGINE_HARMONICS);siren=loop('sine',700,SIREN_HARMONICS);ambience();}if(ctx.state==='suspended')await ctx.resume();return ctx.state==='running';}catch{try{quiet();engine?.osc.stop();siren?.osc.stop();ctx?.close()?.catch(()=>{});}catch{}for(const channel of ambient){try{channel.source.stop();}catch{}}ambient=[];ctx=null;master=null;engine=null;siren=null;return false;}}
++ // Claude 11.10: a radio exchange line — short squelch noise and a roger beep (A6, no voice-over).
++ let squelchBuffer=null;
++ function squelch(volume){if(!volume||voices.size>=4||!ctx.createBuffer||!ctx.createBufferSource)return;
++  if(!squelchBuffer){const n=Math.floor((ctx.sampleRate||48000)*.09);squelchBuffer=ctx.createBuffer(1,n,ctx.sampleRate||48000);const d=squelchBuffer.getChannelData(0);let seed=12345;for(let k=0;k<n;k++){seed=(Math.imul(seed,1103515245)+12345)>>>0;d[k]=((seed/4294967296)*2-1)*(1-k/n);}}
++  const src=ctx.createBufferSource(),gain=ctx.createGain(),t=ctx.currentTime;src.buffer=squelchBuffer;gain.gain.setValueAtTime(.05*volume,t);gain.gain.linearRampToValueAtTime(0,t+.09);
++  let out=gain;if(ctx.createBiquadFilter){const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=1800;f.Q.value=1.2;src.connect(f);f.connect(gain);}else src.connect(gain);
++  out.connect(master);voices.add(src);src.onended=()=>{voices.delete(src);src.disconnect();gain.disconnect();};src.start(t);src.stop(t+.1);note(1250,volume*.6,.12);}
+  function note(freq,volume,delay=0){if(voices.size>=4||!volume)return;const osc=ctx.createOscillator(),gain=ctx.createGain(),t=ctx.currentTime+delay;osc.type='sine';osc.frequency.value=freq;gain.gain.setValueAtTime(0,t);gain.gain.linearRampToValueAtTime(.08*volume,t+.025);gain.gain.linearRampToValueAtTime(0,t+.19);osc.connect(gain);gain.connect(master);osc.onended=()=>{voices.delete(osc);osc.disconnect();gain.disconnect();};voices.add(osc);osc.start(t);osc.stop(t+.21);}
+  function update(s,selected,active,scene=null){
+   if(!baseline||baseline.shift!==s.shift||baseline.mode!==s.mode)reset(s);
+@@ -27,6 +35,7 @@
+   held=false;set(master.gain,prefs.master);const mix=environmentMix(scene,s.population?.residents),envelope=ambienceEnvelope(ctx.currentTime);for(const channel of ambient)set(channel.gain.gain,mix[channel.kind]*envelope[channel.kind]*channel.level*prefs.environment);
+   const fresh=s.incidents.filter(i=>!baseline.ids.has(i.id));if(s.mode==='career'&&(s.rank??0)>baseline.rank){note(660,prefs.radio*.45);note(990,prefs.radio*.35,.12);}else if(fresh.length){note(fresh.some(i=>[2,5].includes(i.type))?1100:880,prefs.radio*.7);}
+   else if(s.resolved>baseline.resolved)note(520,prefs.radio*.7);
++  else if(radioKey(s)!==baseline.radio)squelch(prefs.radio*.6);
+   else if((s.training?.events?.filter(e=>e.kind!=='failed').length??0)>baseline.trainingDone){note(640,prefs.radio*.45);note(800,prefs.radio*.35,.12);}
+   reset(s);
+   const unit=s.units.find(u=>u.id===selected),vehicle=s.vehicles?.find(v=>v.id===unit?.vehicleId);let speed=0;
+--- /dev/null
++++ b/tests/radio-audio.test.mjs
+@@ -0,0 +1,14 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createAudio} from '../dist/audio.js';
++// A new radio line plays one squelch + roger beep, once, never replayed.
++function fake(){let osc=0,src=0;const param=()=>({value:0,setTargetAtTime(v){this.value=v},setValueAtTime(v){this.value=v},linearRampToValueAtTime(v){this.value=v}});
++ return {state:'suspended',currentTime:1,sampleRate:200,destination:{},get osc(){return osc},get src(){return src},
++  createGain(){return {gain:param(),connect(){},disconnect(){}}},createOscillator(){osc++;return {frequency:param(),connect(){},disconnect(){},start(){},stop(){}}},
++  createBuffer(c,n){return {getChannelData:()=>new Float32Array(n)}},createBufferSource(){src++;return {connect(){},disconnect(){},start(){},stop(){},loop:false}},
++  createBiquadFilter(){return {type:'',frequency:param(),Q:param(),connect(){},disconnect(){}}},async resume(){this.state='running'},async suspend(){this.state='suspended'}};}
++test('radio squelch plays once per new radio line',async()=>{
++ const ctx=fake(),a=createAudio({preferences:{enabled:true},createContext:()=>ctx}),s={shift:1,mode:'career',resolved:0,incidents:[],units:[],radio:[]};
++ await a.unlock();a.reset(s);a.update(s,1,true);const src=ctx.src,osc=ctx.osc;
++ s.radio.unshift({time:1,from:'Меридиан-01',text:'Принял.'});a.update(s,1,true);assert.equal(ctx.src,src+1,'one squelch');assert.equal(ctx.osc,osc+1,'one roger beep');
++ a.update(s,1,true);assert.equal(ctx.src,src+1,'not replayed');
++});
