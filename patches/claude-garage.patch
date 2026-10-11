@@ -2,7 +2,7 @@
 +++ b/dist/app.js
 @@ -1,4 +1,5 @@
  import {POLICIES,POLICY_IDS,PRIORITY_RULES,policyCost} from './policy.js';
-+import {LIVERIES,EXTRAS,EXTRA_IDS,WEAR,FUEL,vehicleView,slotsOf,repairCost,repairTime} from './garage.js';
++import {LIVERIES,EXTRAS,EXTRA_IDS,WEAR,FUEL,CAR_SPECS,vehicleView,slotsOf,repairCost,repairMinutes,specOf,fuelShare,averagePer100,rangeKm} from './garage.js';
  import {callSpecialty,DISTRICT_IDS,WEATHER,CUSTODY_CHOICES,canChooseCustody,custodyDecision} from './calls.js';
  import {shiftDebrief} from './debrief.js';
  import {createDeviceTest,formatDeviceReport} from './device-test.js';
@@ -49,11 +49,11 @@
 -function renderFleet(){$('fleetRows').innerHTML=state.vehicles.map(v=>`<div class="person-row"><strong>${escapeHtml(v.name)}</strong><small>${escapeHtml(state.units.find(u=>u.vehicleId===v.id)?.name??'Свободна')} · содержание 30/смена</small><button id="edit-car-${v.id}">Настроить машину</button></div>`).join('');for(const v of state.vehicles)$('edit-car-'+v.id).onclick=()=>vehicleEditor(v.id);}
 +// 0.6.1 garage: fuel, wear, km, trunk equipment, repair and history.
 +const meter=(value,warn)=>`<div class="meter${warn?' warn':''}"><i style="width:${Math.max(0,Math.min(100,Math.round(value)))}%"></i></div>`;
-+function carLine(raw){if(!raw)return '';const v=vehicleView(raw);const service=v.service?{fuel:'заправка',repair:'ремонт',tow:'эвакуатор'}[v.service.kind]:null;
-+ return `<div class="car-state"><span>Топливо ${meter(v.fuel,v.fuel<FUEL.low)}${Math.round(v.fuel)}%</span><span>Износ ${meter(v.wear,v.wear>=WEAR.slow)}${Math.round(v.wear)}%</span><small>${Math.round(v.km).toLocaleString('ru')} км${service?' · '+service:''}${v.wear>=WEAR.slow?' · медленнее на 10%':''}</small></div>`;}
-+function garageSection(raw,busy){const v=vehicleView(raw);const slots=slotsOf(v),cost=repairCost(v),time=repairTime(v);
-+ return `<div class="dept-section garage"><h3>Состояние и багажник</h3>${carLine(v)}<p class="fine-print">Бак хватает на ~${v.type==='suv'?135:165} км; при ${FUEL.low}% экипаж сам едет заправиться в участок. С износа ${WEAR.slow}% машина медленнее, на 100% ломается и уезжает на эвакуаторе.</p>
-+ <button id="repairCarBtn" ${busy||state.ended||v.service||v.wear<1?'disabled':''}>${v.service?'Машина на обслуживании':v.wear<1?'Ремонт не нужен':`Ремонт · ${cost} · ~${time} мин`}</button>
++function carLine(raw){if(!raw)return '';const v=vehicleView(raw),spec=specOf(v),share=fuelShare(v)*100,service=v.service?{fuel:'заправка',repair:'ремонт',tow:'эвакуатор',canister:'ждёт канистру'}[v.service.kind]:null;
++ return `<div class="car-state"><span>Топливо ${meter(share,share<FUEL.lowShare*100)}${Math.round(v.fuel)} л</span><span>Износ ${meter(v.wear,v.wear>=WEAR.slow)}${Math.round(v.wear)}%</span><small>${Math.round(v.km).toLocaleString('ru')} км · ${averagePer100(v).toFixed(1)} л/100 · запас ~${Math.round(rangeKm(v))} км${service?' · '+service:''}${v.wear>=WEAR.slow?' · медленнее на 10%':''}</small></div>`;}
++function garageSection(raw,busy){const v=vehicleView(raw),spec=specOf(v),slots=slotsOf(v),cost=repairCost(v),minutes=repairMinutes(v);
++ return `<div class="dept-section garage"><h3>Состояние и багажник</h3>${carLine(v)}<p class="fine-print">${escapeHtml(spec.label)}: бак ${spec.tank} л, в городе ~${spec.per100} л/100 км, на холостом ходу ~${spec.idlePerHour} л/ч (на месте вызова двигатель работает). Срочный выезд — расход +30%, погоня — +60%. При четверти бака экипаж сам едет на ближайшую АЗС; дизель ${FUEL.pricePerLitre} за литр. Износ шин и тормозов: ~5000 км обычного патруля до 100%; с ${WEAR.slow}% машина медленнее, на 100% ломается и уезжает на эвакуаторе.</p>
++ <button id="repairCarBtn" ${busy||state.ended||v.service||v.wear<1?'disabled':''}>${v.service?'Машина на обслуживании':v.wear<1?'Ремонт не нужен':`Ремонт · ${cost} · ~${minutes} мин`}</button>
 + <h3>Багажник · мест ${slots}</h3><div class="extras">${EXTRA_IDS.map(id=>{const e=EXTRAS[id],on=v.extras.includes(id);return `<div class="extra${on?' on':''}"><div><b>${escapeHtml(e.label)}</b><small>${escapeHtml(e.about)}</small></div><button data-extra="${id}" data-on="${on?0:1}" ${busy||state.ended||(!on&&v.extras.length>=slots)?'disabled':''}>${on?'Снять':'Установить · '+e.price}</button></div>`;}).join('')}</div>
 + ${v.history.length?`<h3>История машины</h3><div class="car-history">${v.history.map(h=>`<div class="logrow"><small>${clock(h.time)}</small>${escapeHtml(h.text)}</div>`).join('')}</div>`:''}</div>`;}
 +function bindGarage(v){$('repairCarBtn').onclick=()=>{const r=repairVehicle(state,v.id);toast(r.message);if(r.ok){save();refresh(true);vehicleEditor(v.id);}};
@@ -69,17 +69,30 @@
  const nav=document.createElement('nav');nav.className='mobile-nav';nav.innerHTML='<button data-tab-button="map" class="active">⌖ Карта</button><button data-tab-button="units">▣ Экипажи</button><button id="mobileCalls" data-tab-button="calls">Вызовы</button><button id="mobileSettings">⚙ Настройки</button><button id="mobileMenu">☰ Меню</button>';document.body.append(nav);$('mobileSettings').onclick=audioPanel;document.querySelectorAll('[data-tab-button]').forEach(b=>b.onclick=()=>setTab(b.dataset.tabButton));$('mobileMenu').onclick=()=>modal('<span class="eyebrow">MERCURY RESPONSE</span><h2>Меню смены</h2><div class="menu-actions"><button id="menuAudio">Настройки · звук и графика</button><button id="menuGraphics">Графика и модели</button><button id="menuResidents">Жители центра</button><button id="menuService">Личное дело и развитие</button><button id="menuTraining">Учебная смена</button><button id="menuHelp">Как играть</button><button id="menuPlan">План развития</button><button id="menuDepartment">Отделение · найм и автопарк</button><button id="menuReport">Отчёт и сохранение</button><button id="menuJournal">Радиожурнал</button><button id="menuCareer">Новая карьера</button><button id="menuChief">Новая игра за начальника</button></div><p>Друг может открыть эту же ссылку и начать собственную кампанию. Общего города пока нет.</p>');$('mobileMenu').addEventListener('click',()=>{$('menuService').hidden=state.mode!=='career';$('menuService').onclick=servicePanel;$('menuTraining').onclick=trainingPanel;$('menuAudio').onclick=audioPanel;$('menuGraphics').onclick=graphicsPanel;$('menuResidents').onclick=()=>residentsPanel();$('menuDepartment').hidden=state.mode!=='chief';$('menuDepartment').onclick=department;$('menuHelp').onclick=()=>$('helpBtn').click();$('menuPlan').onclick=showPlan;$('menuReport').onclick=report;$('menuJournal').onclick=()=>$('journalBtn').click();$('menuCareer').onclick=()=>{switchMode('career',true);};$('menuChief').onclick=()=>{switchMode('chief',true);};});
 --- /dev/null
 +++ b/dist/garage.js
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,75 @@
 +// 0.6.1 «Гараж» (Claude, 11.10.2026): fuel, wear, repair, trunk equipment and liveries.
 +// Pure rules + vehicle bookkeeping; sim.js drives it from the real distance a car covers.
 +// No rng(): every rule is deterministic, so campaign seeds keep their meaning.
-+//   · A sedan tank lasts ~165 km, an SUV ~135 km: a busy patrol refuels about once per shift.
-+//   · Wear grows with distance (faster on urgent runs and pursuits). From 70% the car is slower;
-+//     at 100% it breaks down and is towed. Repair costs money and keeps the car in the garage.
-+//   · Trunk slots hold extra equipment with a concrete effect on matching calls.
-+export const FUEL=Object.freeze({perKm:{sedan:.6,suv:.75},low:20,refuelTime:4,pricePerPercent:1.5,emptyKmh:20});
-+export const WEAR=Object.freeze({perKm:.1,urgent:1.5,pursuit:2.5,slow:70,slowFactor:.9,broken:100,towTime:15});
-+export const REPAIR=Object.freeze({pricePerPercent:6,baseTime:15,timePerPercent:.25,shiftService:40});
++// Realistic figures (owner request 11.10): fuel is kept in litres.
++//   · Sedan (diesel, Octavia/Passat class): 55 l tank, ~7.8 l/100 km in town, ~0.8 l/h idling.
++//   · SUV (Tiguan/RAV4 class): 70 l tank, ~10.8 l/100 km in town, ~1.2 l/h idling.
++//   · Hard emergency driving costs ~30% more, a pursuit ~60% more. Police cars idle at scenes
++//     (lights, radio, heating), so a stopped car with the crew on duty still burns fuel.
++//   · Crews refuel at a filling station at a quarter tank (common fleet rule); a full tank
++//     lasts ~600–700 km, i.e. several shifts. Diesel ~1.65 per litre.
++//   · Wear (tyres, brakes, suspension): ~5000 km of normal patrol to 100%; urgent runs ×2,
++//     pursuits ×5. From 70% the car is slower; at 100% it breaks down and is towed.
++// Times are in world minutes (1 tick unit = 0.75 world minute); sim converts with toTicks().
++import {WORLD_SECONDS_PER_TICK_SECOND} from './transport.js';
++export const toTicks=minutes=>minutes*60/WORLD_SECONDS_PER_TICK_SECOND;
++export const toMinutes=ticks=>ticks*WORLD_SECONDS_PER_TICK_SECOND/60;
++export const CAR_SPECS=Object.freeze({
++ sedan:Object.freeze({label:'Седан, дизель',tank:55,per100:7.8,idlePerHour:.8}),
++ suv:Object.freeze({label:'Внедорожник, дизель',tank:70,per100:10.8,idlePerHour:1.2})
++});
++export const FUEL=Object.freeze({lowShare:.25,refuelMinutes:6,pricePerLitre:1.65,urgent:1.3,pursuit:1.6,canisterMinutes:25,canisterLitres:10});
++export const WEAR=Object.freeze({perKm:.02,urgent:2,pursuit:5,slow:70,slowFactor:.9,broken:100,towMinutes:35});
++export const REPAIR=Object.freeze({pricePerPercent:10,baseMinutes:30,minutesPerPercent:.9,shiftService:40});
 +export const SLOTS=Object.freeze({sedan:1,suv:2});
 +export const EXTRAS=Object.freeze({
 + medkit:{label:'Аптечка',price:90,about:'Первая помощь до приезда скорой: ДТП, драка, человеку плохо — работа на 15% быстрее.',variants:['crash','street-fight','drunk-person'],bonus:1.15},
@@ -98,27 +111,38 @@
 +});
 +export const HISTORY_LIMIT=8;
 +const typeOf=v=>v?.type==='suv'?'suv':'sedan';
-+export function ensureVehicle(v){if(!v)return v;if(!Number.isFinite(v.km))v.km=0;if(!Number.isFinite(v.fuel))v.fuel=100;if(!Number.isFinite(v.wear))v.wear=(v.id*7)%20;if(!Array.isArray(v.extras))v.extras=[];if(!Array.isArray(v.history))v.history=[];if(v.service===undefined)v.service=null;return v;}
++export const specOf=v=>CAR_SPECS[typeOf(v)];
++export function ensureVehicle(v){if(!v)return v;if(!Number.isFinite(v.km))v.km=0;if(!Number.isFinite(v.fuel))v.fuel=specOf(v).tank;if(!Number.isFinite(v.litres))v.litres=0;if(!Number.isFinite(v.wear))v.wear=(v.id*7)%20;if(!Array.isArray(v.extras))v.extras=[];if(!Array.isArray(v.history))v.history=[];if(v.service===undefined)v.service=null;return v;}
 +// Read-only view with defaults (UI must not mutate the campaign while drawing).
-+export const vehicleView=v=>({...v,km:Number.isFinite(v?.km)?v.km:0,fuel:Number.isFinite(v?.fuel)?v.fuel:100,wear:Number.isFinite(v?.wear)?v.wear:((v?.id??0)*7)%20,extras:v?.extras??[],history:v?.history??[],service:v?.service??null});
++export const vehicleView=v=>({...v,km:Number.isFinite(v?.km)?v.km:0,fuel:Number.isFinite(v?.fuel)?v.fuel:specOf(v).tank,litres:Number.isFinite(v?.litres)?v.litres:0,wear:Number.isFinite(v?.wear)?v.wear:((v?.id??0)*7)%20,extras:v?.extras??[],history:v?.history??[],service:v?.service??null});
 +export function addHistory(v,time,text){ensureVehicle(v);v.history.unshift({time,text:String(text).slice(0,120)});if(v.history.length>HISTORY_LIMIT)v.history.length=HISTORY_LIMIT;}
 +export const slotsOf=v=>SLOTS[typeOf(v)];
-+// Distance driven this tick → fuel and wear.
-+export function consume(v,km,{urgent=false,pursuit=false}={}){if(!(km>0))return;ensureVehicle(v);v.km+=km;v.fuel=Math.max(0,v.fuel-km*FUEL.perKm[typeOf(v)]);v.wear=Math.min(WEAR.broken,v.wear+km*WEAR.perKm*(pursuit?WEAR.pursuit:urgent?WEAR.urgent:1));}
++// Distance driven (km) and idling time (hours) this tick → litres and wear.
++export function consume(v,km,{urgent=false,pursuit=false,idleHours=0}={}){ensureVehicle(v);const spec=specOf(v),mode=pursuit?FUEL.pursuit:urgent?FUEL.urgent:1;
++ const litres=(km>0?km*spec.per100/100*mode:0)+(idleHours>0?idleHours*spec.idlePerHour:0);if(!(litres>0))return 0;
++ if(km>0){v.km+=km;v.trackKm=(Number.isFinite(v.trackKm)?v.trackKm:0)+km;v.wear=Math.min(WEAR.broken,v.wear+km*WEAR.perKm*(pursuit?WEAR.pursuit:urgent?WEAR.urgent:1));}
++ const used=Math.min(v.fuel,litres);v.fuel-=used;v.litres+=used;return used;}
++export const tankOf=v=>specOf(v).tank;
++export const fuelShare=v=>(v?.fuel??tankOf(v))/tankOf(v);
++// Average over the distance actually tracked (older cars may have km from before fuel tracking).
++export const averagePer100=v=>v?.trackKm>=20&&v?.litres>0?v.litres/v.trackKm*100:specOf(v).per100;
++export const rangeKm=v=>Math.max(0,(v?.fuel??tankOf(v))/averagePer100(v)*100);
 +export function speedFactor(v){if(!v)return 1;let f=1;if(v.wear>=WEAR.slow)f*=WEAR.slowFactor;return f;}
 +export const emptyTank=v=>!!v&&v.fuel<=0;
-+export const needsFuel=v=>!!v&&v.fuel<FUEL.low;
++export const needsFuel=v=>!!v&&fuelShare(v)<FUEL.lowShare;
 +export const broken=v=>!!v&&v.wear>=WEAR.broken;
-+export const refuelCost=v=>Math.round((100-(v?.fuel??100))*FUEL.pricePerPercent);
++export const refuelLitres=v=>Math.max(0,tankOf(v)-(v?.fuel??tankOf(v)));
++export const refuelCost=v=>Math.round(refuelLitres(v)*FUEL.pricePerLitre);
 +export const repairCost=v=>Math.round((v?.wear??0)*REPAIR.pricePerPercent);
-+export const repairTime=v=>Math.round(REPAIR.baseTime+(v?.wear??0)*REPAIR.timePerPercent);
++export const repairMinutes=v=>Math.round(REPAIR.baseMinutes+(v?.wear??0)*REPAIR.minutesPerPercent);
++export const repairTime=v=>toTicks(repairMinutes(v));
 +// Progress bonus of trunk equipment for a call variant (best single item; no stacking).
 +export function extraBonus(v,variant){let best=1;for(const id of v?.extras??[]){const e=EXTRAS[id];if(e&&e.variants.includes(variant))best=Math.max(best,e.bonus);}return best;}
 +export function validVehicleState(v){const num=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
-+ if(v.km!==undefined&&!num(v.km,0,1e7))return false;if(v.fuel!==undefined&&!num(v.fuel,0,100))return false;if(v.wear!==undefined&&!num(v.wear,0,100))return false;
++ if(v.km!==undefined&&!num(v.km,0,1e7))return false;if(v.fuel!==undefined&&!num(v.fuel,0,tankOf(v)))return false;if(v.litres!==undefined&&!num(v.litres,0,1e8))return false;if(v.trackKm!==undefined&&!num(v.trackKm,0,1e7))return false;if(v.wear!==undefined&&!num(v.wear,0,100))return false;
 + if(v.extras!==undefined&&!(Array.isArray(v.extras)&&v.extras.length<=SLOTS.suv&&new Set(v.extras).size===v.extras.length&&v.extras.every(id=>Object.hasOwn(EXTRAS,id))&&v.extras.length<=slotsOf(v)))return false;
 + if(v.history!==undefined&&!(Array.isArray(v.history)&&v.history.length<=HISTORY_LIMIT&&v.history.every(h=>h&&Number.isFinite(h.time)&&typeof h.text==='string'&&h.text.length<=120)))return false;
-+ if(v.service!==undefined&&v.service!==null&&!(['fuel','repair','tow'].includes(v.service.kind)&&num(v.service.left,0,1000)&&num(v.service.cost??0,0,100000)))return false;
++ if(v.service!==undefined&&v.service!==null&&!(['fuel','repair','tow','canister'].includes(v.service.kind)&&num(v.service.left,0,1000)&&(v.service.station===undefined||Number.isInteger(v.service.station))&&num(v.service.cost??0,0,100000)))return false;
 + if(v.paint!==undefined&&!Object.hasOwn(LIVERIES,v.paint))return false;
 + return true;}
 --- a/dist/models.js
@@ -145,11 +169,12 @@
   if(s.mode!=='chief'||s.ended)return {ok:false,message:'Создание патруля доступно начальнику во время смены.'};
 --- a/dist/radio.js
 +++ b/dist/radio.js
-@@ -16,6 +16,10 @@
+@@ -16,6 +16,11 @@
   failed:[()=>'На месте никого, вызов не отработан.',()=>'Опоздали, участники ушли.',()=>'Не успели, возвращаемся к патрулю.'],
   transport:[()=>'Везём задержанного в участок.',()=>'Задержанный в машине, следуем в участок.',()=>'Едем в участок с задержанным.'],
   handover:[()=>'Задержанного передали дежурному, рапорт сдан.',()=>'В участке, задержанный передан. Свободны.'],
 + fuel:[()=>'Топливо на исходе, едем на заправку.',()=>'Бак почти пустой, заедем в участок заправиться.'],
++ empty:[()=>'Встали, кончилось топливо. Нужна канистра.',()=>'Бак пустой, стоим. Пришлите топливо.'],
 + refueled:[()=>'Заправились, снова на линии.',()=>'Бак полный, продолжаем патруль.'],
 + breakdown:[()=>'Машина встала, нужна эвакуация.',()=>'Поломка, дальше не едем. Вызываем эвакуатор.'],
 + repaired:[()=>'Машину починили, выходим на линию.',()=>'Ремонт закончен, мы снова в строю.'],
@@ -158,10 +183,12 @@
  });
 --- a/dist/render.js
 +++ b/dist/render.js
-@@ -25,6 +25,7 @@
+@@ -24,7 +24,8 @@
+ import {PLACES,residentProfile,residentPosition,cityMinute} from './population.js';
  import {sceneAnchor} from './scenes.js';
  import {createCamera} from './camera.js';
- import {PAINTS} from './sim.js';
+-import {PAINTS} from './sim.js';
++import {PAINTS,FUEL_STATIONS} from './sim.js';
 +import {LIVERIES} from './garage.js';
  import {departmentIndex} from './staff.js';
  import {NODES,byId,project} from './geography.js';
@@ -177,7 +204,7 @@
    const shape=(points,fill)=>{ctx.beginPath();points.forEach(([x,y],k)=>{const a=q.x+x*Math.cos(angle)-y*Math.sin(angle),b=q.y+(x*Math.sin(angle)+y*Math.cos(angle))*CITY_VIEW.tilt;k?ctx.lineTo(a,b):ctx.moveTo(a,b);});ctx.closePath();ctx.fillStyle=fill;ctx.fill();};
    const length=suv?9:8,w=suv?4.5:3.5;
    shape([[-length+1,-w+2],[length+2,-w+2],[length+2,w+3],[-length+1,w+3]],'#1b2727');
-@@ -152,7 +153,7 @@
+@@ -152,13 +153,14 @@
   for(const r of residents){if(WALK_STATUSES.includes(r.status)){const destination=visitDestination(r),access=visitAccess(r);if(!destination||!access)continue;const q=p(r),park=p(access);car(park,0,residentProfile(r.id).color);person(q,residentProfile(r.id).color,false,r.status==='visiting'?0:Math.sin(cosmeticTime*9)*1.5,r.heading);hits.push({x:q.x,y:q.y,id:r.id,kind:'resident'});if(r.status==='visiting')text(q.x,q.y+20,destination.kind==='entrance'?'У музея':'На прогулке','#ffe3a0',10);continue;}if(r.status==='recovering'){const q=p(r);person({x:q.x+12,y:q.y},residentProfile(r.id).color);text(q.x+12,q.y+17,'Отдых','#e2c7f8',9);hits.push({x:q.x,y:q.y,id:r.id,kind:'resident'});continue;}if(!r.route.length||r.status==='incident')continue;const q=p(r);if(q.x<-25||q.y<-25||q.x>width+25||q.y>height+25)continue;headlights(q,r.heading);car(q,r.heading,residentProfile(r.id).color);hits.push({x:q.x,y:q.y,id:r.id,kind:'resident'});}
   const chosen=units.find(u=>u.id===selected);if(chosen?.route.length){ctx.setLineDash([5,4]);path([chosen,...chosen.route],'#83f2d0',2.5);ctx.setLineDash([]);}
   for(const i of incidents){if(['resolved','missed'].includes(i.state))continue;for(const [k,a] of (i.scene?.participants??[]).entries()){if(!a.visible)continue;const q=p(a),dx=i.type===5?0:12+k*9;if(!onScreen({x:q.x+dx,y:q.y}))continue;ctx.fillStyle=i.type===5?'#e3b477':k===0?'#ddbd9b':'#bda5df';if(i.type===5){const direction=vehicleHeading(headings,'a'+a.id,a,dt);headlights(q,direction);car(q,direction,'#e3b477');}else{person({x:q.x+dx,y:q.y},k===0?'#b78d70':'#9485b4');}if(a.residentId){ctx.beginPath();ctx.arc(q.x+dx,q.y,9,0,7);ctx.strokeStyle=residentProfile(a.residentId).color;ctx.lineWidth=a.residentId===selectedResident?3:1.5;ctx.stroke();hits.push({x:q.x+dx,y:q.y,id:a.residentId,kind:'resident'});}if(zoom>6)text(q.x+dx,q.y+17,a.name,'#ead8b9',9);}}
@@ -186,6 +213,13 @@
   // 0.7.1 v1: ambulances (white-yellow SUV, blue beacons while driving with a patient or to a call).
   for(const a of services){const q=p(a);if(!onScreen(q))continue;const rescue=a.kind==='rescue',look=rescue?RESCUE_TEAM:AMBULANCE,urgent=a.status==='responding'||a.status==='transporting'||(rescue&&a.status!=='returning');car(q,a.renderHeading,look.paint,{suv:true,lights:look.lights,flash:lightEffects&&urgent&&cosmeticTime%1<.5,beaconActive:lightEffects&&urgent});text(q.x,q.y-16,rescue?'▲':'✚',rescue?'#ffcf9e':'#ffd5d0',12);}
   // 0.7.2 v1: limited smoke over an unresolved fire until rescuers finish (four soft puffs, no particles state).
+  for(const i of incidents){if(i.variant!=='fire-smoke'||i.rescue==='done'||['missed','resolved'].includes(i.state))continue;const q=p(sceneAnchor(i));if(!onScreen(q))continue;const sz=Math.min(1.6,Math.max(.7,zoom/6));ctx.save();for(let k=0;k<4;k++){const f=(cosmeticTime*.35+k/4)%1;ctx.globalAlpha=.55*(1-f);ctx.fillStyle=k%2?'#a29d97':'#7d7873';ctx.beginPath();ctx.arc(q.x+18*sz+Math.sin(f*5+k)*5*sz,q.y-6-f*46*sz,(6+f*13)*sz,0,7);ctx.fill();}ctx.restore();}
+  for(const i of incidents){if(['missed','resolved'].includes(i.state))continue;const q=p(sceneAnchor(i));q.y-=24;if(!onScreen(q))continue;ctx.beginPath();ctx.arc(q.x,q.y,11,0,7);ctx.fillStyle=i.id===selectedCall?'#efbc87':'#543e2c';ctx.fill();ctx.strokeStyle='#efbc87';ctx.lineWidth=1.5;ctx.stroke();text(q.x,q.y+4,'!','#fff0d0',13);hits.push({x:q.x,y:q.y,id:i.id,kind:'incident'});}
+  const h=p(byId('centre'));text(h.x,h.y+23,'◆ Игровая база','#a9efdb',10);
++ for(const st of FUEL_STATIONS){const q=p(st);if(onScreen(q))text(q.x,q.y+20,'⛽ '+st.name,'#f2d58f',9);}
+  ctx.font='10px system-ui';ctx.textAlign='left';ctx.fillStyle='#d5e1d7';ctx.fillText(light.name+' · N ↖',12,height-35);if(backgroundJob)ctx.fillText('Обновление карты…',12,height-18);
+  }
+  const local=e=>{const r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};};
 --- a/dist/sim.js
 +++ b/dist/sim.js
 @@ -2,7 +2,8 @@
@@ -194,7 +228,7 @@
  import {ensureService,careerPermission,serviceEvent,validService} from './career.js';
 -import {advanceVehicle,patrolSpeed} from './transport.js';
 +import {advanceVehicle,patrolSpeed,WORLD_SECONDS_PER_TICK_SECOND} from './transport.js';
-+import {LIVERIES,EXTRAS,SLOTS,FUEL,WEAR,REPAIR,ensureVehicle,addHistory,consume,speedFactor,emptyTank,needsFuel,broken,refuelCost,repairCost,repairTime,extraBonus,slotsOf,validVehicleState} from './garage.js';
++import {LIVERIES,EXTRAS,SLOTS,FUEL,WEAR,REPAIR,ensureVehicle,addHistory,consume,speedFactor,emptyTank,needsFuel,broken,refuelCost,refuelLitres,repairCost,repairTime,repairMinutes,extraBonus,slotsOf,validVehicleState,toTicks,toMinutes,tankOf} from './garage.js';
  import {ensurePopulation,tickPopulation,validatePopulation,linkResident,releaseResidents,validateResidentLinks} from './population.js';
  import {ensureScene,autoChoice,explainChoice,prepareScenes,sceneStep,closeScene,validateScene} from './scenes.js';
  import {MAP_ID,NODES,byId,nearest,point,roadRoute,atNode,migrateMap} from './geography.js';
@@ -208,12 +242,12 @@
  export function transact(s,amount,category,label){ensureFinance(s);if(!Number.isFinite(amount)||s.budget+amount<0)throw Error('Некорректная операция');s.budget+=amount;s.finance.entries.push({time:s.time,amount,category,label});}
  export function financialSummary(s){ensureFinance(s);const income=s.finance.entries.filter(e=>e.amount>0).reduce((n,e)=>n+e.amount,0),expenses=-s.finance.entries.filter(e=>e.amount<0).reduce((n,e)=>n+e.amount,0);const grant=Math.max(-s.budget,cityGrant(s).total);return {opening:s.finance.opening,income,expenses,balance:s.budget,pending:shiftCost(s),grant,support:Math.max(0,shiftCost(s)-s.budget-grant),legacy:s.finance.legacy,entries:s.finance.entries.map(e=>({...e}))};}
 -export function unitReason(s,u){if(!u)return 'Выберите экипаж.';const foot=policeWalkReason(u);if(foot)return foot;const incident=s.incidents.find(i=>i.id===u.incident);if(u.status==='resting')return 'Восстанавливаем силы в участке. Вернёмся к патрулю после отдыха.';if(u.status==='returning')return 'Едем в участок на отдых.';if(u.status==='transporting')return `Везём задержанного в участок (вызов №${u.transport?.from}).`;if(u.status==='handover')return 'Передаём задержанного дежурному и пишем рапорт.';if(u.status==='responding')return `Едем на вызов №${u.incident}. Приоритет: ${TYPES[incident?.type??0].severity}.`;if(u.status==='decision')return 'Ручной режим: ждём вашу команду в карточке вызова.';if(u.status==='working'&&incident?.scene)return incident.scene.reason;if(u.status==='working')return incident?.backupRequested&&incident.units.length<2?'Работаем осторожно, пока второй экипаж в пути или недоступен.':'На месте: выполняем выбранное действие. Навык, усталость и оснащение влияют на скорость.';return u.auto?`Патрулируем ${u.zone==='west'?'западную часть города':u.zone==='east'?'восточную часть города':'город'}. Принимаем доступные вызовы, сначала наиболее срочные.`:'Ручной режим: назначьте вызов или включите автомат.';}
-+export function unitReason(s,u){if(!u)return 'Выберите экипаж.';const foot=policeWalkReason(u);if(foot)return foot;const incident=s.incidents.find(i=>i.id===u.incident);if(u.status==='servicing'){const v=departmentIndex(s).byVehicle.get(u.vehicleId),k=v?.service?.kind;return k==='tow'?'Машина сломалась: ждём эвакуатор.':k==='repair'?`Машина в ремонте, ещё ~${Math.ceil(v.service.left)} мин.`:u.route.length?'Едем в участок на заправку.':'Заправляемся в участке.';}if(u.status==='resting')return 'Восстанавливаем силы в участке. Вернёмся к патрулю после отдыха.';if(u.status==='returning')return 'Едем в участок на отдых.';if(u.status==='transporting')return `Везём задержанного в участок (вызов №${u.transport?.from}).`;if(u.status==='handover')return 'Передаём задержанного дежурному и пишем рапорт.';if(u.status==='responding')return `Едем на вызов №${u.incident}. Приоритет: ${TYPES[incident?.type??0].severity}.`;if(u.status==='decision')return 'Ручной режим: ждём вашу команду в карточке вызова.';if(u.status==='working'&&incident?.scene)return incident.scene.reason;if(u.status==='working')return incident?.backupRequested&&incident.units.length<2?'Работаем осторожно, пока второй экипаж в пути или недоступен.':'На месте: выполняем выбранное действие. Навык, усталость и оснащение влияют на скорость.';return u.auto?`Патрулируем ${u.zone==='west'?'западную часть города':u.zone==='east'?'восточную часть города':'город'}. Принимаем доступные вызовы, сначала наиболее срочные.`:'Ручной режим: назначьте вызов или включите автомат.';}
++export function unitReason(s,u){if(!u)return 'Выберите экипаж.';const foot=policeWalkReason(u);if(foot)return foot;const incident=s.incidents.find(i=>i.id===u.incident);if(u.status==='servicing'){const v=departmentIndex(s).byVehicle.get(u.vehicleId),k=v?.service?.kind;const st=FUEL_STATIONS[v?.service?.station];return k==='tow'?'Машина сломалась: ждём эвакуатор.':k==='canister'?'Кончилось топливо: ждём канистру.':k==='repair'?`Машина в ремонте, ещё ~${Math.ceil(toMinutes(v.service.left))} мин.`:u.route.length?`Едем на заправку: ${st?.name??'АЗС'}.`:`Заправляемся: ${st?.name??'АЗС'}.`;}if(u.status==='resting')return 'Восстанавливаем силы в участке. Вернёмся к патрулю после отдыха.';if(u.status==='returning')return 'Едем в участок на отдых.';if(u.status==='transporting')return `Везём задержанного в участок (вызов №${u.transport?.from}).`;if(u.status==='handover')return 'Передаём задержанного дежурному и пишем рапорт.';if(u.status==='responding')return `Едем на вызов №${u.incident}. Приоритет: ${TYPES[incident?.type??0].severity}.`;if(u.status==='decision')return 'Ручной режим: ждём вашу команду в карточке вызова.';if(u.status==='working'&&incident?.scene)return incident.scene.reason;if(u.status==='working')return incident?.backupRequested&&incident.units.length<2?'Работаем осторожно, пока второй экипаж в пути или недоступен.':'На месте: выполняем выбранное действие. Навык, усталость и оснащение влияют на скорость.';return u.auto?`Патрулируем ${u.zone==='west'?'западную часть города':u.zone==='east'?'восточную часть города':'город'}. Принимаем доступные вызовы, сначала наиболее срочные.`:'Ручной режим: назначьте вызов или включите автомат.';}
  export function hireOfficer(s,cid){if(s.mode!=='chief'||s.ended)return {ok:false,message:'Найм доступен начальнику во время смены.'};const c=s.candidates.find(c=>c.id===cid);if(!c)return {ok:false,message:'Кандидат уже нанят.'};if(s.budget<c.fee)return {ok:false,message:'Недостаточно бюджета для найма.'};transact(s,-c.fee,'hire','Найм: '+c.name);const {fee,...person}=c;s.officers.push({...person,id:s.nextOfficerId++,staffVersion:1,fatigue:0});s.candidates=s.candidates.filter(c=>c.id!==cid);log(s,`В отделение принят сотрудник: ${c.name}. Расходы: ${fee}.`);return {ok:true,message:'Сотрудник принят в отделение'};}
  function hiringReserve(s){return s.setupPending?s.candidates.map(c=>c.fee).sort((a,b)=>a-b).slice(0,Math.max(0,1-s.officers.length)).reduce((n,v)=>n+v,0):0;}
 -export function buyVehicle(s,type='sedan'){const price=type==='suv'?1200:800;if(!['sedan','suv'].includes(type))return {ok:false,message:'Неизвестная модель.'};if(s.mode!=='chief'||s.ended)return {ok:false,message:'Покупка недоступна.'};if(s.budget<price)return {ok:false,message:'Недостаточно бюджета: нужно '+price+'.'};if(s.budget-price<hiringReserve(s))return {ok:false,message:'Сначала наймите хотя бы одного сотрудника: оставьте бюджет на первый патруль.'};if(s.vehicles.length>=6)return {ok:false,message:'В гараже максимум 6 машин.'};const id=s.nextVehicleId++;s.vehicles.push({id,name:(type==='suv'?'Внедорожник ':'Седан ')+String(id).padStart(2,'0'),type,paint:'white',lights:'redblue',kit:'base'});transact(s,-price,'vehicle','Покупка: '+(type==='suv'?'внедорожник':'седан'));return {ok:true,message:'Машина доставлена в гараж'};}
 -export const PAINTS={white:'#e0e6df',navy:'#6d8eaf',black:'#48535b'};
-+export function buyVehicle(s,type='sedan'){const price=type==='suv'?1200:800;if(!['sedan','suv'].includes(type))return {ok:false,message:'Неизвестная модель.'};if(s.mode!=='chief'||s.ended)return {ok:false,message:'Покупка недоступна.'};if(s.budget<price)return {ok:false,message:'Недостаточно бюджета: нужно '+price+'.'};if(s.budget-price<hiringReserve(s))return {ok:false,message:'Сначала наймите хотя бы одного сотрудника: оставьте бюджет на первый патруль.'};if(s.vehicles.length>=6)return {ok:false,message:'В гараже максимум 6 машин.'};const id=s.nextVehicleId++;const bought={id,name:(type==='suv'?'Внедорожник ':'Седан ')+String(id).padStart(2,'0'),type,paint:'white',lights:'redblue',kit:'base',km:0,fuel:100,wear:0,extras:[],history:[],service:null};addHistory(bought,s.time,'Новая машина поступила в гараж');s.vehicles.push(bought);transact(s,-price,'vehicle','Покупка: '+(type==='suv'?'внедорожник':'седан'));return {ok:true,message:'Машина доставлена в гараж'};}
++export function buyVehicle(s,type='sedan'){const price=type==='suv'?1200:800;if(!['sedan','suv'].includes(type))return {ok:false,message:'Неизвестная модель.'};if(s.mode!=='chief'||s.ended)return {ok:false,message:'Покупка недоступна.'};if(s.budget<price)return {ok:false,message:'Недостаточно бюджета: нужно '+price+'.'};if(s.budget-price<hiringReserve(s))return {ok:false,message:'Сначала наймите хотя бы одного сотрудника: оставьте бюджет на первый патруль.'};if(s.vehicles.length>=6)return {ok:false,message:'В гараже максимум 6 машин.'};const id=s.nextVehicleId++;const bought={id,name:(type==='suv'?'Внедорожник ':'Седан ')+String(id).padStart(2,'0'),type,paint:'white',lights:'redblue',kit:'base',km:0,wear:0,extras:[],history:[],service:null};ensureVehicle(bought);addHistory(bought,s.time,'Новая машина поступила в гараж');s.vehicles.push(bought);transact(s,-price,'vehicle','Покупка: '+(type==='suv'?'внедорожник':'седан'));return {ok:true,message:'Машина доставлена в гараж'};}
 +export const PAINTS=Object.freeze(Object.fromEntries(Object.entries(LIVERIES).map(([k,v])=>[k,v.paint])));
  export function configureVehicle(s,id,config){const v=s.vehicles.find(v=>v.id===id);if(s.mode!=='chief'||!v||s.ended)return {ok:false,message:'Настройка недоступна.'};const u=s.units.find(u=>u.vehicleId===id);if(u&&!['patrol','idle','resting'].includes(u.status))return {ok:false,message:'Дождитесь завершения вызова.'};if(typeof config.name!=='string'||config.name.trim().length<1||config.name.length>30||!Object.hasOwn(PAINTS,config.paint)||!['redblue','blue'].includes(config.lights)||!['base','aid','search'].includes(config.kit))return {ok:false,message:'Проверьте настройки машины.'};const price=config.kit!==(v.kit??'base')&&config.kit!=='base'?150:0;if(s.budget<price)return {ok:false,message:'Комплект стоит 150. Недостаточно бюджета.'};if(s.budget-price<hiringReserve(s))return {ok:false,message:'Сначала наймите хотя бы одного сотрудника.'};if(price)transact(s,-price,'equipment','Оснащение: '+v.name);Object.assign(v,{name:config.name.trim(),paint:config.paint,lights:config.lights,kit:config.kit});return {ok:true,message:price?'Машина настроена. Комплект: 150.':'Машина настроена'};}
 -export function createPatrol(s,first,second,vehicleId,area='all'){if(s.mode!=='chief'||s.ended)return {ok:false,message:'Создание патруля недоступно.'};const ids=second==null||second===0?[first]:[first,second];const people=ids.map(id=>s.officers.find(o=>o.id===id));if(new Set(ids).size!==ids.length||people.some(p=>!p))return {ok:false,message:'Выберите сотрудника и, при желании, другого напарника.'};if(s.units.some(u=>u.officerIds.some(id=>id===first||id===second)))return {ok:false,message:'Один из сотрудников уже в экипаже.'};if(!s.vehicles.some(v=>v.id===vehicleId)||s.units.some(u=>u.vehicleId===vehicleId))return {ok:false,message:'Выберите свободную машину.'};if(!['all','west','east'].includes(area))return {ok:false,message:'Выберите зону патруля.'};const id=s.nextUnitId++;s.units.push({id,name:'Патруль '+String(id).padStart(2,'0'),people:people.map(o=>o.name),officerIds:ids,vehicleId,role:'Создан начальником',x:HQ.x,y:HQ.y,route:[],status:'patrol',auto:true,zone:area,cross:area==='all',fatigue:0,skill:people.reduce((sum,o)=>sum+o.skill,0)/people.length,incident:null,work:0});syncCrew(s,s.units.at(-1));s.setupPending=false;log(s,`Патруль ${id} сформирован и приступает к службе.`);return {ok:true,message:'Патруль создан. Автомат включён.',unitId:id};}
@@ -226,7 +260,7 @@
   i.decision=choice;explainChoice(i);recordAssessment(s,i,true);if(s.mode==='career'&&u.id===1)trainingEvent(s,'decision',i,true,choice);if(choice==='backup'){i.backupRequested=true;i.backupAt=s.time;radio(s,'backup',u,i);log(s,`${u.name}: запрашиваем подкрепление.`);}u.status='working';return true;}
  export function rest(s,uid){const u=s.units.find(u=>u.id===uid);if(!u||s.ended||!canControl(s,u)||!['patrol','idle'].includes(u.status))return false;u.status='returning';routeTo(u,HQ);log(s,`${u.name}: возвращаемся на отдых.`);return true;}
 -function move(u,dt,s){advanceVehicle(u,dt,Math.min(patrolSpeed(u),u.trafficTargetKmh??Infinity),{obeyLimits:!urgentMovement(s,u)});}
-+function move(u,dt,s,v=null){const cap=v?(emptyTank(v)?FUEL.emptyKmh:Infinity):Infinity;advanceVehicle(u,dt,Math.min(patrolSpeed(u)*speedFactor(v),u.trafficTargetKmh??Infinity,cap),{obeyLimits:!urgentMovement(s,u)});}
++function move(u,dt,s,v=null){advanceVehicle(u,dt,Math.min(patrolSpeed(u)*speedFactor(v),u.trafficTargetKmh??Infinity),{obeyLimits:!urgentMovement(s,u)});}
  function trafficItems(s){const items=[];for(const r of s.population?.residents??[])if(!['walkVisit','walkBack','visiting'].includes(r.status))items.push({entity:r,id:'resident-'+r.id,desired:30,emergency:false});for(const u of s.units)items.push({entity:u,id:'unit-'+u.id,desired:patrolSpeed(u),emergency:urgentMovement(s,u),blocking:!u.route.length&&['decision','working'].includes(u.status)});for(const i of s.incidents)if(i.type===5&&i.scene)for(const a of i.scene.participants)items.push({entity:a,id:'actor-'+a.id,desired:a.status==='fleeing'?40:15,emergency:false});return items;}
  function finish(s,i,success,failure){if(s.mode==='career'&&i.units.includes(1))trainingEvent(s,success?'resolved':'failed',i,false);completeAssessment(s,i,success);const outcome=closeScene(i,success,failure);releaseResidents(s,i,success,outcome);i.state=success?'resolved':'missed';i.finished=s.time;s[success?'resolved':'missed']++;s.trust=Math.max(0,Math.min(100,s.trust+(success?2:-4)));if(success&&i.medical==='treated')s.trust=Math.min(100,s.trust+AMBULANCE.trustBonus);if(success&&i.rescue==='done')s.trust=Math.min(100,s.trust+RESCUE_TEAM.trustBonus);if(success)applyPolicyCustody(s,i);recordConsequences(s,i,success);recordCase(s,i,success,outcome);investigate(s,i,success);if(success)assignCustody(s,i);const rankBefore=s.rank;if(success){transact(s,110,'incident',`Завершён вызов №${i.id}`);if(i.units.includes(1)||s.mode==='chief')s.xp+=30;}s.rank=Math.min(RANKS.length-1,Math.floor(s.xp/150));if(s.mode==='career'&&i.units.includes(1))serviceEvent(s,i,callName(i),success,rankBefore);
   for(const id of i.units){const u=s.units.find(u=>u.id===id);if(u&&!u.transport)radio(s,success?'clear':'failed',u,i);if(returnPoliceWalk(u))continue;u.incident=null;u.status='patrol';u.pursuing=false;u.route=u.route.length?[u.route[0]]:[];}
@@ -278,31 +312,39 @@
   const live=s.incidents.filter(i=>!['resolved','missed'].includes(i.state));
   if(new Set(s.officers.map(o=>o.id)).size!==s.officers.length||new Set(s.vehicles.map(v=>v.id)).size!==s.vehicles.length||s.nextOfficerId<=Math.max(0,...s.officers.map(o=>o.id))||s.nextVehicleId<=Math.max(0,...s.vehicles.map(v=>v.id))||s.nextUnitId<=Math.max(0,...s.units.map(u=>u.id))||new Set(s.incidents.map(i=>i.id)).size!==s.incidents.length||s.nextId<=Math.max(0,...s.incidents.map(i=>i.id))||!s.units.every(u=>u.incident===null||live.some(i=>i.id===u.incident&&i.units.includes(u.id)))||!live.every(i=>i.units.every(id=>s.units.some(u=>u.id===id&&u.incident===i.id))))throw Error('Нарушены связи вызовов и экипажей');
   ensureFinance(s);const f=s.finance;
-@@ -244,6 +246,34 @@
+@@ -244,6 +246,42 @@
  function validServices(s){if(s.services===undefined)return true;const num=(x,min,max)=>Number.isFinite(x)&&x>=min&&x<=max;
   return Array.isArray(s.services)&&s.services.length<=SERVICE_LIMIT&&(s.nextServiceId===undefined||Number.isInteger(s.nextServiceId))&&s.services.every(a=>Number.isInteger(a.id)&&(a.kind==='ambulance'?['responding','treating','transporting','handover']:a.kind==='rescue'?['responding','securing','working','returning']:[]).includes(a.status)&&Number.isInteger(a.incident)&&num(a.timer,-1000,1000)&&containsWorldPoint(a)&&Array.isArray(a.route)&&a.route.length<3000&&a.route.every(p=>containsWorldPoint(p)));}
  
-+// 0.6.1 garage (garage.js): fuel, wear, breakdown/tow, refuel and repair at the station.
++// 0.6.1 garage (garage.js): realistic fuel in litres, idling, filling stations, wear, breakdown/tow, repair.
++// Filling stations: the nearest main-road node to three districts (fictional names).
++const STATION_ROADS=new Set(['primary','secondary','tertiary','trunk']);
++export const FUEL_STATIONS=Object.freeze([['raama','АЗС «Северная»'],['mai','АЗС «Восточная»'],['vana','АЗС «Западная»']].map(([anchor,name],k)=>{const a=byId(anchor);const road=NODES.filter(n=>STATION_ROADS.has(n.kind));const n=(road.length?road:NODES).reduce((b,n)=>Math.hypot(n.x-a.x,n.y-a.y)<Math.hypot(b.x-a.x,b.y-a.y)?n:b);return Object.freeze({id:k,name,x:n.x,y:n.y});}));
++export const nearestStation=p=>FUEL_STATIONS.reduce((b,st)=>Math.hypot(st.x-p.x,st.y-p.y)<Math.hypot(b.x-p.x,b.y-p.y)?st:b);
++const ENGINE_ON=new Set(['patrol','idle','responding','decision','working','transporting']);
 +function chargeGarage(s,cost,category,label){const amount=Math.min(Math.max(0,Math.round(cost)),Math.max(0,s.budget));if(s.mode==='chief'&&amount>0)transact(s,-amount,category,label);return amount;}
-+function wearAndFuel(s,u,v,dt){ensureVehicle(v);const km=(u.currentSpeedKmh||0)*dt*WORLD_SECONDS_PER_TICK_SECOND/3600;consume(v,km,{urgent:urgentMovement(s,u),pursuit:!!u.pursuing});
++function leaveCall(s,u){const old=s.incidents.find(x=>x.id===u.incident);if(old){old.units=old.units.filter(id=>id!==u.id);if(!old.units.length&&['assigned','onscene'].includes(old.state))old.state='waiting';}u.incident=null;u.pursuing=false;u.route=[];u.status='servicing';}
++function wearAndFuel(s,u,v,dt){ensureVehicle(v);const hours=toMinutes(dt)/60,speed=u.currentSpeedKmh||0,km=speed*hours,idle=speed<1&&ENGINE_ON.has(u.status)?hours:0;
++ consume(v,km,{urgent:urgentMovement(s,u),pursuit:!!u.pursuing,idleHours:idle});
 + if(v.service||u.foot||u.transport)return;
-+ if(broken(v)){const old=s.incidents.find(x=>x.id===u.incident);if(old){old.units=old.units.filter(id=>id!==u.id);if(!old.units.length&&['assigned','onscene'].includes(old.state))old.state='waiting';}u.incident=null;u.pursuing=false;u.route=[];u.status='servicing';v.service={kind:'tow',left:WEAR.towTime,cost:0};addHistory(v,s.time,`Поломка на ${Math.round(v.km)} км, вызван эвакуатор`);log(s,`${u.name}: машина сломалась, ждём эвакуатор.`);radio(s,'breakdown',u,null);return;}
-+ if(needsFuel(v)&&['patrol','idle'].includes(u.status)&&u.incident==null){u.status='servicing';v.service={kind:'fuel',left:FUEL.refuelTime,cost:0};routeTo(u,HQ);log(s,`${u.name}: топливо ${Math.round(v.fuel)}%, едем на заправку.`);radio(s,'fuel',u,null);}}
-+function finishService(s,u,v){const k=v.service.kind;v.service=null;
-+ if(k==='fuel'){const cost=chargeGarage(s,refuelCost(v),'fuel','Топливо: '+v.name);v.fuel=100;addHistory(v,s.time,`Заправка${cost?` · ${cost}`:''}`);if(u){log(s,`${u.name}: заправились, продолжаем патруль.`);radio(s,'refueled',u,null);}}
++ if(broken(v)){leaveCall(s,u);v.service={kind:'tow',left:toTicks(WEAR.towMinutes),cost:0};addHistory(v,s.time,`Поломка на ${Math.round(v.km)} км, вызван эвакуатор`);log(s,`${u.name}: машина сломалась, ждём эвакуатор.`);radio(s,'breakdown',u,null);return;}
++ if(emptyTank(v)){leaveCall(s,u);v.service={kind:'canister',left:toTicks(FUEL.canisterMinutes),cost:0};addHistory(v,s.time,'Кончилось топливо, ждём канистру');log(s,`${u.name}: кончилось топливо, ждём доставку канистры.`);radio(s,'empty',u,null);return;}
++ if(needsFuel(v)&&['patrol','idle'].includes(u.status)&&u.incident==null){const st=nearestStation(u);u.status='servicing';v.service={kind:'fuel',left:toTicks(FUEL.refuelMinutes),cost:0,station:st.id};routeTo(u,st);log(s,`${u.name}: в баке ${Math.round(v.fuel)} л из ${tankOf(v)}, едем на ${st.name}.`);radio(s,'fuel',u,null);}}
++function finishService(s,u,v){const k=v.service.kind,station=FUEL_STATIONS[v.service.station]??null;v.service=null;
++ if(k==='fuel'){const litres=refuelLitres(v),cost=chargeGarage(s,refuelCost(v),'fuel','Топливо: '+v.name);v.fuel=tankOf(v);addHistory(v,s.time,`Заправка ${litres.toFixed(1)} л${cost?` · ${cost}`:''}${station?` · ${station.name}`:''}`);if(u){log(s,`${u.name}: заправились (${litres.toFixed(0)} л), продолжаем патруль.`);radio(s,'refueled',u,null);}}
++ else if(k==='canister'){v.fuel=Math.min(tankOf(v),FUEL.canisterLitres);addHistory(v,s.time,`Канистра: ${FUEL.canisterLitres} л`);if(u)log(s,`${u.name}: залили канистру, едем на заправку.`);}
 + else{v.wear=0;addHistory(v,s.time,'Ремонт завершён');if(u){log(s,`${u.name}: ремонт завершён, машина в строю.`);radio(s,'repaired',u,null);}else log(s,`Гараж: ${v.name} отремонтирована.`);}
 + if(u){u.status='patrol';u.route=[];}}
 +function tickServicing(s,u,v,dt){if(!v){u.status='patrol';return false;}ensureVehicle(v);if(!v.service){u.status='patrol';return false;}
-+ if(v.service.kind==='tow'){v.service.left-=dt;if(v.service.left>0)return true;Object.assign(u,point(HQ));u.route=[];const time=repairTime(v),cost=chargeGarage(s,repairCost(v),'repair','Ремонт после поломки: '+v.name);v.service={kind:'repair',left:time,cost};addHistory(v,s.time,`Эвакуатор доставил в гараж, ремонт${cost?` · ${cost}`:''}`);log(s,`${u.name}: машина в гараже, ремонт ~${time} мин.`);return true;}
-+ if(u.route.length){move(u,dt,s,v);wearAndFuelDistance(s,u,v,dt);return true;}
++ if(v.service.kind==='tow'){v.service.left-=dt;if(v.service.left>0)return true;Object.assign(u,point(HQ));u.route=[];const time=repairTime(v),cost=chargeGarage(s,repairCost(v),'repair','Ремонт после поломки: '+v.name);v.service={kind:'repair',left:time,cost};addHistory(v,s.time,`Эвакуатор доставил в гараж, ремонт${cost?` · ${cost}`:''}`);log(s,`${u.name}: машина в гараже, ремонт ~${Math.round(toMinutes(time))} мин.`);return true;}
++ if(u.route.length){move(u,dt,s,v);consume(v,(u.currentSpeedKmh||0)*toMinutes(dt)/60);return true;}
 + v.service.left-=dt;if(v.service.left<=0)finishService(s,u,v);return true;}
-+const wearAndFuelDistance=(s,u,v,dt)=>consume(v,(u.currentSpeedKmh||0)*dt*WORLD_SECONDS_PER_TICK_SECOND/3600);
 +// Cars without a crew can still be in repair.
 +function tickParkedService(s,dt){for(const v of s.vehicles){if(!v.service||s.units.some(u=>u.vehicleId===v.id))continue;v.service.left-=dt;if(v.service.left<=0)finishService(s,null,v);}}
-+function overnightGarage(n,time){for(const v of n.vehicles){ensureVehicle(v);if(v.service){if(v.service.kind!=='fuel')v.wear=0;v.service=null;addHistory(v,0,'Обслуживание завершено между сменами');}v.fuel=100;if(n.mode!=='chief')v.wear=Math.max(0,v.wear-REPAIR.shiftService);}for(const u of n.units)if(u.status==='servicing'){u.status='patrol';u.route=[];}}
++function overnightGarage(n,time){for(const v of n.vehicles){ensureVehicle(v);if(v.service){if(['repair','tow'].includes(v.service.kind))v.wear=0;v.service=null;addHistory(v,0,'Обслуживание завершено между сменами');}if(n.mode!=='chief')v.wear=Math.max(0,v.wear-REPAIR.shiftService);}for(const u of n.units)if(u.status==='servicing'){u.status='patrol';u.route=[];}}
 +export function repairVehicle(s,id){const v=s.vehicles.find(x=>x.id===id);if(s.mode!=='chief'||s.ended||!v)return {ok:false,message:'Ремонт недоступен.'};ensureVehicle(v);if(v.service)return {ok:false,message:'Машина уже на обслуживании.'};if(v.wear<1)return {ok:false,message:'Машина исправна.'};
 + const u=s.units.find(x=>x.vehicleId===id);if(u&&!['patrol','idle','resting'].includes(u.status))return {ok:false,message:'Дождитесь завершения вызова.'};const cost=repairCost(v),time=repairTime(v);if(s.budget<cost)return {ok:false,message:`Ремонт стоит ${cost}. Недостаточно бюджета.`};
-+ transact(s,-cost,'repair','Ремонт: '+v.name);v.service={kind:'repair',left:time,cost};addHistory(v,s.time,`Плановый ремонт · ${cost}`);if(u){u.status='servicing';routeTo(u,HQ);}log(s,`Гараж: ${v.name} — ремонт ${time} мин, ${cost}.`);return {ok:true,message:`Ремонт начат: ~${time} мин`};}
++ transact(s,-cost,'repair','Ремонт: '+v.name);v.service={kind:'repair',left:time,cost};addHistory(v,s.time,`Плановый ремонт · ${cost}`);if(u){u.status='servicing';routeTo(u,HQ);}const minutes=repairMinutes(v);log(s,`Гараж: ${v.name} — ремонт ~${minutes} мин, ${cost}.`);return {ok:true,message:`Ремонт начат: ~${minutes} мин`};}
 +export function setVehicleExtra(s,id,extra,on){const v=s.vehicles.find(x=>x.id===id);if(s.mode!=='chief'||s.ended||!v||!Object.hasOwn(EXTRAS,extra))return {ok:false,message:'Оснащение недоступно.'};ensureVehicle(v);
 + const u=s.units.find(x=>x.vehicleId===id);if(u&&!['patrol','idle','resting'].includes(u.status))return {ok:false,message:'Дождитесь завершения вызова.'};
 + if(!on){if(!v.extras.includes(extra))return {ok:false,message:'Этого нет в багажнике.'};v.extras=v.extras.filter(x=>x!==extra);addHistory(v,s.time,'Снято: '+EXTRAS[extra].label);return {ok:true,message:'Снято без возврата денег'};}
@@ -340,10 +382,10 @@
 +.garage h3{margin-top:14px}.extras{display:grid;gap:8px}.extra{display:flex;gap:10px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#12262c}.extra.on{border-color:var(--cyan)}.extra small{display:block;color:#b8c8d2;font-size:11px;line-height:1.35}.extra button{flex:none;font-size:11px}.car-history{max-height:180px;overflow:auto}
 --- /dev/null
 +++ b/tests/garage.test.mjs
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,92 @@
 +import test from 'node:test';import assert from 'node:assert/strict';
-+import {createGame,hireOfficer,createPatrol,tick,nextShift,serialize,deserialize,spawnIncident,repairVehicle,setVehicleExtra,PAINTS,HQ,unitReason} from '../dist/sim.js';
-+import {FUEL,WEAR,EXTRAS,LIVERIES,SLOTS,consume,speedFactor,extraBonus,ensureVehicle,validVehicleState,repairCost,repairTime,vehicleView} from '../dist/garage.js';
++import {createGame,hireOfficer,createPatrol,tick,nextShift,serialize,deserialize,spawnIncident,repairVehicle,setVehicleExtra,PAINTS,HQ,unitReason,FUEL_STATIONS,buyVehicle} from '../dist/sim.js';
++import {FUEL,WEAR,EXTRAS,LIVERIES,SLOTS,CAR_SPECS,consume,speedFactor,extraBonus,ensureVehicle,validVehicleState,repairCost,repairTime,vehicleView,rangeKm,averagePer100,toTicks} from '../dist/garage.js';
 +import {NODES} from '../dist/geography.js';
 +// 0.6.1 «Гараж»: fuel, wear, breakdown/tow, repair, trunk equipment, liveries, history.
 +
@@ -351,25 +393,41 @@
 +function chief(){const s=createGame('chief');const a=hire(s,1),b=hire(s,2);assert.equal(createPatrol(s,a,b,1).ok,true);s.setupPending=false;s.nextIncident=9000;s.budget+=3000;s.finance.opening+=3000;return s;}
 +const near=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y)<.02;
 +
-+test('rules: consumption, wear, slow-down, equipment bonus, liveries',()=>{
-+ const v=ensureVehicle({id:1,type:'sedan'});const w0=v.wear;consume(v,10);assert.equal(v.km,10);assert.equal(v.fuel,100-10*FUEL.perKm.sedan);assert.ok(Math.abs(v.wear-(w0+10*WEAR.perKm))<1e-9);
-+ const suv=ensureVehicle({id:2,type:'suv'});consume(suv,10,{pursuit:true});assert.equal(suv.fuel,100-10*FUEL.perKm.suv);assert.ok(suv.wear>=(suv.id*7)%20+10*WEAR.perKm*WEAR.pursuit-1e-9);
++test('rules: realistic tanks and consumption, idling, wear, equipment, liveries',()=>{
++ // Real-world class figures: sedan 55 l / 7.8 l per 100 km, SUV 70 l / 10.8 l per 100 km.
++ assert.equal(CAR_SPECS.sedan.tank,55);assert.equal(CAR_SPECS.suv.tank,70);assert.ok(CAR_SPECS.sedan.per100>=6&&CAR_SPECS.sedan.per100<=9);assert.ok(CAR_SPECS.suv.per100>=9&&CAR_SPECS.suv.per100<=13);
++ const v=ensureVehicle({id:1,type:'sedan'});assert.equal(v.fuel,55);const w0=v.wear;consume(v,100);assert.equal(v.km,100);assert.ok(Math.abs(v.fuel-(55-7.8))<1e-9);assert.ok(Math.abs(v.wear-(w0+100*WEAR.perKm))<1e-9);
++ assert.ok(Math.abs(averagePer100(v)-7.8)<1e-9);assert.equal(averagePer100({id:9,km:800,litres:2,trackKm:5}),CAR_SPECS.sedan.per100,'too little tracked distance → spec');assert.ok(Math.abs(rangeKm(v)-(55-7.8)/7.8*100)<1e-6,'full tank ~700 km');
++ consume(v,0,{idleHours:2});assert.ok(Math.abs(v.fuel-(55-7.8-2*CAR_SPECS.sedan.idlePerHour))<1e-9,'idling burns fuel');assert.equal(v.km,100);
++ const suv=ensureVehicle({id:2,type:'suv'});assert.equal(suv.fuel,70);consume(suv,10,{pursuit:true});assert.ok(Math.abs(suv.fuel-(70-10*10.8/100*FUEL.pursuit))<1e-9);
++ assert.ok(suv.wear>=(suv.id*7)%20+10*WEAR.perKm*WEAR.pursuit-1e-9);
 + assert.equal(speedFactor({wear:WEAR.slow-1}),1);assert.equal(speedFactor({wear:WEAR.slow}),WEAR.slowFactor);
 + assert.equal(extraBonus({extras:['medkit']},'crash'),EXTRAS.medkit.bonus);assert.equal(extraBonus({extras:['medkit','cones']},'crash'),EXTRAS.medkit.bonus,'best item, no stacking');assert.equal(extraBonus({extras:['medkit']},'noise-flat'),1);
 + for(const [k,l] of Object.entries(LIVERIES))assert.equal(PAINTS[k],l.paint);
 + assert.equal(validVehicleState({id:1,type:'sedan',extras:['medkit','cones']}),false,'sedan has one slot');assert.equal(validVehicleState({id:1,type:'suv',extras:['medkit','cones']}),true);
-+ assert.equal(validVehicleState({id:1,fuel:120}),false);assert.equal(validVehicleState({id:1,paint:'pink'}),false);assert.equal(validVehicleState({id:1,service:{kind:'wash',left:1}}),false);
++ assert.equal(validVehicleState({id:1,fuel:60}),false,'over a 55 l tank');assert.equal(validVehicleState({id:1,type:'suv',fuel:60}),true);assert.equal(validVehicleState({id:1,paint:'pink'}),false);assert.equal(validVehicleState({id:1,service:{kind:'wash',left:1}}),false);
 + assert.equal(SLOTS.suv,2);assert.ok(repairCost({wear:50})>0&&repairTime({wear:50})>repairTime({wear:0}));
-+ const raw={id:3};const view=vehicleView(raw);assert.equal(view.fuel,100);assert.deepEqual(raw,{id:3},'view does not mutate');
++ const raw={id:3};const view=vehicleView(raw);assert.equal(view.fuel,55);assert.deepEqual(raw,{id:3},'view does not mutate');
++ const s=createGame('chief');s.budget+=5000;s.finance.opening+=5000;hireOfficer(s,1);assert.equal(buyVehicle(s,'suv').ok,true);assert.equal(s.vehicles.at(-1).fuel,70);
++ assert.equal(FUEL_STATIONS.length,3);for(const st of FUEL_STATIONS)assert.match(st.name,/^АЗС «/);
 +});
 +
-+test('low fuel: crew drives to the station, refuels, pays and returns to patrol',()=>{
-+ const s=chief(),u=s.units[0],v=s.vehicles.find(x=>x.id===u.vehicleId);v.fuel=FUEL.low-1;const budget=s.budget;
-+ tick(s,.1);assert.equal(u.status,'servicing');assert.equal(v.service.kind,'fuel');assert.match(unitReason(s,u),/заправ/i);
++test('quarter tank: crew drives to the nearest filling station, pays per litre and returns to patrol',()=>{
++ const s=chief(),u=s.units[0],v=s.vehicles.find(x=>x.id===u.vehicleId);v.fuel=55*FUEL.lowShare-1;const budget=s.budget;
++ tick(s,.1);assert.equal(u.status,'servicing');assert.equal(v.service.kind,'fuel');const st=FUEL_STATIONS[v.service.station];assert.ok(st);assert.match(unitReason(s,u),/АЗС/);
++ for(let k=0;k<4000&&u.status==='servicing'&&u.route.length;k++)tick(s,.1);assert.ok(near(u,st),'at the station');
 + for(let k=0;k<4000&&u.status==='servicing';k++)tick(s,.1);
-+ assert.equal(u.status,'patrol');assert.equal(v.fuel,100);assert.equal(v.service,null);assert.ok(s.budget<budget,'fuel was paid');
-+ assert.ok(s.finance.entries.some(e=>e.category==='fuel'));assert.match(v.history[0].text,/Заправка/);
-+ assert.ok(s.radio.some(r=>/заправ|Бак/.test(r.text)));
++ assert.equal(u.status,'patrol');assert.equal(v.fuel,55);assert.equal(v.service,null);assert.ok(s.budget<budget,'fuel was paid');
++ const paid=s.finance.entries.find(e=>e.category==='fuel');assert.ok(paid&&-paid.amount>=Math.round(41*FUEL.pricePerLitre*.9),'about 41 litres paid');assert.match(v.history[0].text,/Заправка \d+\.\d л/);
++ assert.ok(s.radio.some(r=>/заправ|Бак|топлив/i.test(r.text)));
++});
++
++test('an empty tank stops the car until a canister arrives',()=>{
++ const s=chief(),u=s.units[0],v=s.vehicles.find(x=>x.id===u.vehicleId);const n=NODES[(NODES.length/3)|0];
++ const i=spawnIncident(s,null,{variant:'blocked-exit',point:{x:n.x,y:n.y}});for(let k=0;k<20&&u.incident!==i.id;k++)tick(s,.1);v.fuel=.0001;
++ for(let k=0;k<200&&u.status!=='servicing';k++)tick(s,.1);assert.equal(v.service.kind,'canister');assert.equal(u.incident,null);
++ for(let k=0;k<toTicks(FUEL.canisterMinutes)*10+20&&v.service?.kind==='canister';k++)tick(s,.1);assert.ok(v.fuel>0);
++ for(let k=0;k<20&&!(v.service?.kind==='fuel');k++)tick(s,.1);assert.equal(v.service?.kind,'fuel','goes on to refuel');
 +});
 +
 +test('breakdown: the crew leaves the call, the car is towed, repaired and returns',()=>{
@@ -377,7 +435,7 @@
 + const i=spawnIncident(s,null,{variant:'blocked-exit',point:{x:n.x,y:n.y}});for(let k=0;k<20&&u.incident!==i.id;k++)tick(s,.1);assert.equal(u.incident,i.id);
 + v.wear=WEAR.broken-.001;for(let k=0;k<200&&u.status!=='servicing';k++)tick(s,.1);
 + assert.equal(u.status,'servicing');assert.equal(v.service.kind,'tow');assert.equal(u.incident,null);assert.ok(!i.units.includes(u.id));
-+ for(let k=0;k<WEAR.towTime*10+5&&v.service?.kind==='tow';k++)tick(s,.1);assert.equal(v.service.kind,'repair');assert.ok(near(u,HQ),'towed to the station');
++ for(let k=0;k<toTicks(WEAR.towMinutes)*10+20&&v.service?.kind==='tow';k++)tick(s,.1);assert.equal(v.service.kind,'repair');assert.ok(near(u,HQ),'towed to the station');
 + assert.ok(s.finance.entries.some(e=>e.category==='repair'));
 + for(let k=0;k<3000&&u.status==='servicing';k++)tick(s,.1);assert.equal(u.status,'patrol');assert.equal(v.wear,0);
 + assert.ok(v.history.some(h=>/Поломка/.test(h.text)));
@@ -401,11 +459,11 @@
 +});
 +
 +test('garage state is saved, validated and carried between shifts',()=>{
-+ const s=chief(),v=s.vehicles[0];v.km=500;v.wear=60;v.fuel=30;v.extras=['cones'];
++ const s=chief(),v=s.vehicles[0];v.km=500;v.wear=60;v.fuel=30;v.litres=40;v.extras=['cones'];
 + const n=deserialize(serialize(s));assert.deepEqual(n.vehicles,s.vehicles);
 + const bad=JSON.parse(serialize(s));bad.vehicles[0].wear=-5;assert.throws(()=>deserialize(JSON.stringify(bad)));
 + const old=JSON.parse(serialize(s));for(const x of old.vehicles){delete x.km;delete x.fuel;delete x.wear;delete x.extras;delete x.history;delete x.service;}assert.doesNotThrow(()=>deserialize(JSON.stringify(old)));
-+ s.ended=true;const next=nextShift(s),nv=next.vehicles.find(x=>x.id===v.id);assert.equal(nv.km,500);assert.equal(nv.wear,60,'chief: wear stays until repaired');assert.equal(nv.fuel,100,'refuelled overnight');
++ s.ended=true;const next=nextShift(s),nv=next.vehicles.find(x=>x.id===v.id);assert.equal(nv.km,500);assert.equal(nv.wear,60,'chief: wear stays until repaired');assert.equal(nv.fuel,30,'fuel is not refilled for free between shifts');
 + nv.extras.push('medkit');assert.deepEqual(v.extras,['cones'],'deep copy between shifts');
 + const c=createGame();c.vehicles[0].wear=70;c.ended=true;assert.equal(nextShift(c).vehicles[0].wear,30,'career: department service between shifts');
 +});
