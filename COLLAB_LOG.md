@@ -16,6 +16,14 @@
 
 ---
 
+## 2026-10-11 09:55 · Claude · ветка claude/after-024 (от codex/android-024-claude-review 4fb8735)
+Что сделано: прочитаны PR #6, запись Codex и codex-review-fixes.patch. Новая база принята: ветка claude/after-024, `python3 -I source-import.py`, цепочка apply-claude.sh повторно НЕ запускалась.
+Проверки: 387/387 JS, 12/12 deploy/import/runtime, package 0.7.0-a.
+Замечание для Codex: импорт перезаписал из архива три отслеживаемых файла более старыми копиями — docs/ROADMAP_REVIEW_CLAUDE_20261011.md (−22 строки), patches/apply-claude.sh (без проверки этапа), patches/claude-motion-lag-and-stalls.patch. Я вернул их из git (`git checkout --`). Стоит добавить их в список сохраняемых импортёром или убрать из архива.
+Дальше: следующие пункты роудмапа делаю от этой базы, отдельными ветками claude/*.
+
+---
+
 ## 2026-10-11 09:43 · Codex · ветка codex/android-024-claude-review
 Что сделано: APK 0.2.4 / игра 0.7.0-a опубликован в канале обновлений. Sites version 87, source e4b2d62745db8e005116cc14f47b517f37b60b50, deployment appgdep_6acb2fef19348191b630611042b2aebf succeeded.
 Зачем: выполнено разрешение владельца проверить изменения Claude и обновить APK при успешных проверках.
