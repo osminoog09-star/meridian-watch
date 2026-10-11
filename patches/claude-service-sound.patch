@@ -1,0 +1,177 @@
+--- a/PLAN.md
++++ b/PLAN.md
+@@ -28,7 +28,7 @@
+ 
+ | R12 — внутренний контроль · **сделано Claude, ветка claude/department-upgrades** | Новые кампании с графиком: после задержания или сорванного вызова возможна жалоба (стресс >60 и «нулевая терпимость» повышают шанс, камеры снижают); проверка между сменами: обоснована → доверие −2, район −3, стресс экипажа/игрока +10, игрок −30 опыта; журнал «Внутренний контроль» | Детерминированно по seed и номеру вызова; старые кампании без жалоб; сохранение валидируется |
+ 
+-| R11 — звук службы · следующий пакет Claude | Звук погоды (дождь, ветер, снег приглушает город), режимы сирены (вой/йелп у пересечений), салют в новогоднюю ночь | Только процедурный звук, без файлов; громкость в существующих настройках |
++| R11 — звук службы · **сделано Claude, ветка claude/service-sound** | Звук погоды (шум дождя отдельным каналом, порывы в ветер, снег и лёд приглушают город), режимы сирены (вой на трассе, йелп в погоне и последние 200 м до вызова), салют в новогоднюю ночь 23:45–01:30 | Только процедурный звук, без файлов; громкость «Окружение» в настройках; 4 теста |
+ 
+ Порядок: R1 → R3 → R2 → R4 → R5 → R6 → R7 → R8 → R9 → R10/R12 → R11. Каждый пакет отдельной веткой `claude/*`, интеграция и APK — Codex.
+ 
+--- a/dist/app.js
++++ b/dist/app.js
+@@ -1,5 +1,6 @@
+ import {POLICIES,POLICY_IDS,PRIORITY_RULES,policyCost} from './policy.js';
+ import {UPGRADES,UPGRADE_IDS,upgradesUpkeep} from './upgrades.js';
++import {dateOf} from './season.js';
+ import {isScheduled,nextShiftInfo,SHIFT_LABEL,shiftKind} from './schedule.js';
+ import {officerView,ROSTER} from './roster.js';
+ import {ACTIVITIES,ACTIVITY_IDS,COURSES,COURSE_IDS,courseValid,shiftNet,startFatigue,RANK_XP,ROLES,ROLE_IDS,roleBlocker,LEAVE,canTakeVacation} from './life.js';
+@@ -25,7 +26,7 @@
+ import {residentProfile,residentPosition,PLACES,RESIDENT_STATUS,populationSummary,cityMinute,formatMinute} from './population.js';
+ import {PHASES,sceneAnchor} from './scenes.js';
+ import {nearest,nearestRoad} from './geography.js';
+-import {weekdayNow,shiftDateOf,setRole,grantLeave,offDuty,setPolicy,setPriorityDistrict,buyUpgrade,repairVehicle,setVehicleExtra,vehicleOf,createGame,tick,assign,decide,rest,nextShift,serialize,deserialize,TYPES,RANKS,canControl,controlReason,setUnitAutomation,configurePatrolArea,log,zone,hireOfficer,buyVehicle,createPatrol,disbandPatrol,callName,callBrief,districtOf,districtTrust,shiftWeather,setCustodyChoice,serviceStatus,canRedirect,unitFitsCall,changeCrew,crewChangeReason,reserveOfficers,shiftCost,configureVehicle,PAINTS,financialSummary,unitReason} from './sim.js';
++import {weekdayNow,shiftDateOf,setRole,grantLeave,offDuty,setPolicy,setPriorityDistrict,buyUpgrade,cityAbsoluteMinute,repairVehicle,setVehicleExtra,vehicleOf,createGame,tick,assign,decide,rest,nextShift,serialize,deserialize,TYPES,RANKS,canControl,controlReason,setUnitAutomation,configurePatrolArea,log,zone,hireOfficer,buyVehicle,createPatrol,disbandPatrol,callName,callBrief,districtOf,districtTrust,shiftWeather,setCustodyChoice,serviceStatus,canRedirect,unitFitsCall,changeCrew,crewChangeReason,reserveOfficers,shiftCost,configureVehicle,PAINTS,financialSummary,unitReason} from './sim.js';
+ import {serviceSummary,CAREER_PERMISSIONS} from './career.js';
+ import {loadGame,saveGame} from './storage.js';
+ import {createRenderer} from './render.js';
+@@ -169,6 +170,9 @@
+ // R10 department upgrades: one-time price + upkeep per shift (upgrades.js).
+ function upgradesSection(){const own=state.upgrades??[];
+  return `<section class="dept-section dept-upgrades"><h3>Развитие отделения</h3><p class="rule-hint">Покупка разовая, обслуживание списывается каждую смену${upgradesUpkeep(state)?` (сейчас ${upgradesUpkeep(state)})`:''}.</p><div class="rule-list">${UPGRADE_IDS.map(id=>{const u=UPGRADES[id],got=own.includes(id);return `<div class="rule upgrade${got?' active':''}"><b>${escapeHtml(u.label)}</b><small>${escapeHtml(u.about)}</small><small>${got?'Есть':'Цена '+u.price}${u.upkeep?' · обслуживание '+u.upkeep+'/смена':''}</small>${got?'':`<button data-upgrade="${id}" ${state.budget<u.price||state.ended?'disabled':''}>Купить · ${u.price}</button>`}</div>`;}).join('')}</div></section>`;}
++// R11: weather and calendar for the sound (weather changes once per shift).
++let soundWeather=null;
++function soundEnv(){if(soundWeather?.shift!==state.shift||soundWeather?.mode!==state.mode)soundWeather={shift:state.shift,mode:state.mode,kind:shiftWeather(state).kind};const abs=cityAbsoluteMinute(state);return {weather:soundWeather.kind,date:isScheduled(state)?{...dateOf(abs),minute:((abs%1440)+1440)%1440}:null};}
+ function department(){if(state.mode!=='chief')return;
+  const free=state.officers.filter(o=>!state.units.some(u=>u.officerIds.includes(o.id))),cars=state.vehicles.filter(v=>!state.units.some(u=>u.vehicleId===v.id)&&!v.service);
+  const opts=free.map(o=>`<option value="${o.id}">${escapeHtml(o.name)} · ${Math.round(o.skill*100)}%</option>`).join('');
+@@ -206,7 +210,7 @@
+ setTab('map');document.addEventListener('visibilitychange',()=>{diagnostics.event('visibility',document.hidden?'hidden':'visible');diagnostics.resetFrames();if(document.hidden){if(deviceTest.active()){deviceTest.cancel();finishDeviceTest(null);}audio.pause();renderer.cancel();activePointers.clear();interactionActive=false;if(started){save();paused=true;}}last=performance.now();simulationClock.reset();});window.addEventListener('pagehide',()=>{if(deviceTest.active()){deviceTest.cancel();finishDeviceTest(null);}audio.pause();if(started)save();});document.addEventListener('keydown',e=>{if(e.code==='Escape'&&fullscreen.active&&!$('modal').open)fullscreen.exit();if(e.code==='Space'&&!['INPUT','SELECT','BUTTON'].includes(document.activeElement.tagName)&&!$('modal').open){e.preventDefault();paused=!paused;if(!paused)audio.unlock();else audio.pause();refresh();}});
+ function frame(now){let frameSaveMs=0;const measuring=diagnostics.enabled(),frameStart=measuring?performance.now():0,frameInterval=now-last;const dt=Math.min((now-last)/1000,.1);last=now;if(document.hidden){framePacer.reset();requestAnimationFrame(frame);return;}const simulationStart=measuring?performance.now():0;if(started&&!paused&&!document.hidden&&!$('modal').open&&!state.ended){const advanced=simulationClock.advance(Math.max(0,frameInterval)/1000,speed,step=>tick(state,step));if(advanced.dropped)diagnostics.event('time-gap-dropped',advanced.dropped.toFixed(3)+' real seconds');saveTime+=dt;if(saveTime>10){frameSaveMs=save();saveTime=0;}}
+  const uiStart=measuring?performance.now():0;if(measuring){pendingSimulation+=Math.max(0,uiStart-simulationStart-frameSaveMs);pendingSave+=frameSaveMs;}uiTime+=dt;if(uiTime>.5){refresh();uiTime=0;const u=state.units.find(x=>x.id===selectedUnit);const restButton=$('restBtn');if(restButton)restButton.disabled=!canControl(state,u)||!['patrol','idle'].includes(u?.status);}
+- const audioStart=measuring?performance.now():0;if(measuring)pendingUI+=audioStart-uiStart;const drawingAllowed=!$('modal').open&&mapVisible(),drawInterval=drawingAllowed?framePacer.take(now):null;if(!drawingAllowed){renderer.suspend();framePacer.reset();pendingWork=0;pendingSimulation=0;pendingUI=0;pendingAudio=0;pendingSave=0;}audio.update(state,selectedUnit,started&&!paused&&!document.hidden&&!$('modal').open&&!state.ended&&!state.setupPending,renderer.scene());const renderStart=performance.now();if(measuring)pendingAudio+=renderStart-audioStart;if(drawInterval!==null)renderer.draw(state,selectedUnit,selectedCall,selectedResident,Math.min(.5,drawInterval/1000),simulationClock.visualScale(paused?0:speed));else if(drawingAllowed)renderer.idle?.();const renderMs=performance.now()-renderStart;if(adaptiveResolution&&drawInterval!==null){const cap=resolutionGovernor.sample(now,drawInterval,renderMs,frameRate);if(cap!==null){renderer.resolution(cap);diagnostics.event('resolution-adapted',String(cap));}}if(measuring)pendingWork+=performance.now()-frameStart;if(diagnostics.enabled()&&drawInterval!==null){const end=performance.now();diagnostics.frame(drawInterval,pendingWork,renderMs,{speed,zoom:renderer.scene().zoom,units:state.units.length,residents:state.population?.residents.length??0,calls:state.incidents.length,width:$('map').width,height:$('map').height,dpr:devicePixelRatio,quality:graphicsQuality,frameRate,worldRate,coverageId:coverage.id,coverageRegion:coverage.region,coverageWidth:coverage.world.maxX-coverage.world.minX,coverageHeight:coverage.world.maxY-coverage.world.minY,simulationMs:pendingSimulation,uiMs:pendingUI,audioMs:pendingAudio,saveMs:pendingSave,...renderer.stats()});pendingWork=0;pendingSimulation=0;pendingUI=0;pendingAudio=0;pendingSave=0;if(now-diagnosticUpdate>500){diagnosticUpdate=now;const m=diagnostics.summary();fpsHud.textContent=`${m.fps} FPS · P95 ${m.frameP95Ms} мс · время ×${worldRate*speed}`;}}if(deviceTest.active())deviceTest.frame(now,drawInterval!==null);if(state.ended&&started&&!reportShown&&!deviceTest.active()){reportShown=true;save();report();}requestAnimationFrame(frame);}
++ const audioStart=measuring?performance.now():0;if(measuring)pendingUI+=audioStart-uiStart;const drawingAllowed=!$('modal').open&&mapVisible(),drawInterval=drawingAllowed?framePacer.take(now):null;if(!drawingAllowed){renderer.suspend();framePacer.reset();pendingWork=0;pendingSimulation=0;pendingUI=0;pendingAudio=0;pendingSave=0;}audio.update(state,selectedUnit,started&&!paused&&!document.hidden&&!$('modal').open&&!state.ended&&!state.setupPending,renderer.scene(),soundEnv());const renderStart=performance.now();if(measuring)pendingAudio+=renderStart-audioStart;if(drawInterval!==null)renderer.draw(state,selectedUnit,selectedCall,selectedResident,Math.min(.5,drawInterval/1000),simulationClock.visualScale(paused?0:speed));else if(drawingAllowed)renderer.idle?.();const renderMs=performance.now()-renderStart;if(adaptiveResolution&&drawInterval!==null){const cap=resolutionGovernor.sample(now,drawInterval,renderMs,frameRate);if(cap!==null){renderer.resolution(cap);diagnostics.event('resolution-adapted',String(cap));}}if(measuring)pendingWork+=performance.now()-frameStart;if(diagnostics.enabled()&&drawInterval!==null){const end=performance.now();diagnostics.frame(drawInterval,pendingWork,renderMs,{speed,zoom:renderer.scene().zoom,units:state.units.length,residents:state.population?.residents.length??0,calls:state.incidents.length,width:$('map').width,height:$('map').height,dpr:devicePixelRatio,quality:graphicsQuality,frameRate,worldRate,coverageId:coverage.id,coverageRegion:coverage.region,coverageWidth:coverage.world.maxX-coverage.world.minX,coverageHeight:coverage.world.maxY-coverage.world.minY,simulationMs:pendingSimulation,uiMs:pendingUI,audioMs:pendingAudio,saveMs:pendingSave,...renderer.stats()});pendingWork=0;pendingSimulation=0;pendingUI=0;pendingAudio=0;pendingSave=0;if(now-diagnosticUpdate>500){diagnosticUpdate=now;const m=diagnostics.summary();fpsHud.textContent=`${m.fps} FPS · P95 ${m.frameP95Ms} мс · время ×${worldRate*speed}`;}}if(deviceTest.active())deviceTest.frame(now,drawInterval!==null);if(state.ended&&started&&!reportShown&&!deviceTest.active()){reportShown=true;save();report();}requestAnimationFrame(frame);}
+ refresh(true);welcome();requestAnimationFrame(frame);
+ 
+ function trainingMarkup(){const t=trainingSummary(state);if(!t)return '<p>Учебная смена доступна в режиме карьеры.</p>';return `<section class="training-card"><span class="eyebrow">ПАТРУЛЬ 01 · МОРОЗОВ И СТАЖЁР</span><h3>${t.completed?'Первый цикл пройден':'Учебная смена'} · ${t.done}/4</h3><p>${escapeHtml(t.hint)}</p>${t.lessons.map(l=>`<div class="training-step ${l.event?'done':''}"><b>${l.event?'✓':'○'} ${l.title}</b><small>${l.event?'Вызов №'+l.event.incident+' · смена '+l.event.shift+(l.kind==='decision'?(l.event.manual?' · ваше решение':' · решение автомата'):''):l.hint}</small></div>`).join('')}<details><summary>Журнал учебных действий</summary>${t.events.map(e=>`<p>Смена ${e.shift} · ${clock(e.time)} · вызов №${e.incident}: ${escapeHtml(({accepted:"Вызов принят",arrived:"Прибыли",decision:"Выбрано действие",resolved:"Помощь завершена",failed:"Помощь не завершена"})[e.kind])}${e.detail?" — "+escapeHtml(({talk:"разговор и деэскалация",check:"проверка обстоятельств",secure:"безопасность места",backup:"подкрепление",chase:"преследование",observe:"наблюдение"})[e.detail]??e.detail):""}${e.kind==="decision"?(e.manual?" (вручную)":" (автомат)"):""}</p>`).join("")||"<p>Событий пока нет.</p>"}</details><p>Решений вручную: ${t.manual}. В автомате: ${t.automatic}. Неудачных исходов: ${t.failed}.</p><p class="fine-print">${t.legacy?'Учёт начат после обновления; прежние действия не оценивались. ':''}Это разбор первого учебного цикла экипажа. Автоматический режим засчитывается отдельно; обучение не требует обязательных нажатий и не даёт дополнительной награды.</p></section>`;}
+--- a/dist/audio.js
++++ b/dist/audio.js
+@@ -4,7 +4,7 @@
+ import {urgentMovement} from './response-priority.js';
+ import {footstepEvent} from './footsteps.js';
+ import {ambienceSamples,ambienceEnvelope} from './ambience-design.js';
+-import {ENGINE_HARMONICS,SIREN_HARMONICS,transportTone} from './audio-design.js';
++import {ENGINE_HARMONICS,SIREN_HARMONICS,transportTone,weatherSound,RAIN_LEVEL,fireworksTime,fireworkBurst} from './audio-design.js';
+ import {environmentMix} from './quarter.js';
+ // Original procedural cues, no downloaded audio and no autoplay before a gesture.
+ export const AUDIO_KEY='meridian-watch-audio-v1';
+@@ -12,27 +12,32 @@
+ export const AUDIO_DEFAULTS=Object.freeze({enabled:false,master:.55,radio:.60,siren:.35,engine:.30,environment:.45});
+ export function audioPreferences(raw){let p={};try{p=typeof raw==='string'?JSON.parse(raw):raw??{};}catch{}return Object.fromEntries(Object.entries(AUDIO_DEFAULTS).map(([k,v])=>[k,k==='enabled'?p?.enabled===true:Number.isFinite(p?.[k])?Math.max(0,Math.min(1,p[k])):v]));}
+ export function createAudio({createContext=()=>{const C=globalThis.AudioContext??globalThis.webkitAudioContext;return C?new C():null;},preferences=AUDIO_DEFAULTS}={}){
+- let prefs=audioPreferences(preferences),ctx=null,master=null,engine=null,siren=null,baseline=null,held=true,ambient=[],motion=null,steps=null,doors=null,lastStep=-Infinity,voices=new Set();
++ let noise=null,rain=null,bursts=0,nextBurst=0,prefs=audioPreferences(preferences),ctx=null,master=null,engine=null,siren=null,baseline=null,held=true,ambient=[],motion=null,steps=null,doors=null,lastStep=-Infinity,voices=new Set();
+  const set=(param,value)=>param.setTargetAtTime(value,ctx.currentTime,.045);
+  function reset(s){if(baseline&&(baseline.shift!==s.shift||baseline.mode!==s.mode))motion=null;baseline={shift:s.shift,mode:s.mode,radio:radioKey(s),ids:new Set(s.incidents.map(i=>i.id)),resolved:s.resolved,rank:s.rank??0,trainingDone:s.training?.events?.filter(e=>e.kind!=='failed').length??0};}
+  function quiet(){if(!ctx)return;if(master)set(master.gain,0);if(engine)set(engine.gain.gain,0);if(siren)set(siren.gain.gain,0);for(const channel of ambient)set(channel.gain.gain,0);for(const voice of voices){try{voice.stop();}catch{}}voices.clear();}
+  function loop(type,frequency,harmonics){const osc=ctx.createOscillator(),gain=ctx.createGain();osc.type=type;if(harmonics&&ctx.createPeriodicWave&&osc.setPeriodicWave){osc.setPeriodicWave(ctx.createPeriodicWave(new Float32Array(harmonics.length),new Float32Array(harmonics)));}osc.frequency.value=frequency;gain.gain.value=0;osc.connect(gain);gain.connect(master);osc.start();return {osc,gain};}
+- function ambience(){if(!ctx.createBuffer||!ctx.createBufferSource||!ctx.createBiquadFilter)return;const rate=ctx.sampleRate||48000,samples=ambienceSamples(rate),buffer=ctx.createBuffer(1,samples.length,rate);buffer.getChannelData(0).set(samples);const source=ctx.createBufferSource();source.buffer=buffer;source.loop=true;for(const [kind,hz,level] of [['wind',230,.05],['water',1100,.055],['traffic',130,.03]]){const filter=ctx.createBiquadFilter(),gain=ctx.createGain();filter.type='lowpass';filter.frequency.value=hz;gain.gain.value=0;source.connect(filter);filter.connect(gain);gain.connect(master);ambient.push({kind,gain,level,source});}source.start();}
+- async function unlock(){if(!prefs.enabled)return false;try{if(!ctx){ctx=createContext();if(!ctx)return false;master=ctx.createGain();master.gain.value=0;if(ctx.createDynamicsCompressor){const limiter=ctx.createDynamicsCompressor();limiter.threshold.value=-12;limiter.knee.value=12;limiter.ratio.value=4;limiter.attack.value=.005;limiter.release.value=.15;master.connect(limiter);limiter.connect(ctx.destination);}else master.connect(ctx.destination);engine=loop('triangle',32,ENGINE_HARMONICS);siren=loop('sine',700,SIREN_HARMONICS);ambience();}if(ctx.state==='suspended')await ctx.resume();return ctx.state==='running';}catch{try{quiet();engine?.osc.stop();siren?.osc.stop();ctx?.close()?.catch(()=>{});}catch{}for(const channel of ambient){try{channel.source.stop();}catch{}}ambient=[];ctx=null;master=null;engine=null;siren=null;return false;}}
++ function ambience(){if(!ctx.createBuffer||!ctx.createBufferSource||!ctx.createBiquadFilter)return;const rate=ctx.sampleRate||48000,samples=ambienceSamples(rate),buffer=ctx.createBuffer(1,samples.length,rate);buffer.getChannelData(0).set(samples);const source=ctx.createBufferSource();source.buffer=buffer;source.loop=true;noise=source;for(const [kind,hz,level] of [['wind',230,.05],['water',1100,.055],['traffic',130,.03]]){const filter=ctx.createBiquadFilter(),gain=ctx.createGain();filter.type='lowpass';filter.frequency.value=hz;gain.gain.value=0;source.connect(filter);filter.connect(gain);gain.connect(master);ambient.push({kind,gain,level,source});}source.start();}
++ async function unlock(){if(!prefs.enabled)return false;try{if(!ctx){ctx=createContext();if(!ctx)return false;master=ctx.createGain();master.gain.value=0;if(ctx.createDynamicsCompressor){const limiter=ctx.createDynamicsCompressor();limiter.threshold.value=-12;limiter.knee.value=12;limiter.ratio.value=4;limiter.attack.value=.005;limiter.release.value=.15;master.connect(limiter);limiter.connect(ctx.destination);}else master.connect(ctx.destination);engine=loop('triangle',32,ENGINE_HARMONICS);siren=loop('sine',700,SIREN_HARMONICS);ambience();}if(ctx.state==='suspended')await ctx.resume();return ctx.state==='running';}catch{try{quiet();engine?.osc.stop();siren?.osc.stop();ctx?.close()?.catch(()=>{});}catch{}for(const channel of ambient){try{channel.source.stop();}catch{}}ambient=[];noise=null;rain=null;ctx=null;master=null;engine=null;siren=null;return false;}}
+  // Claude 11.10: a radio exchange line — short squelch noise and a roger beep (A6, no voice-over).
+  let squelchBuffer=null;
+- function squelch(volume){if(!volume||voices.size>=4||!ctx.createBuffer||!ctx.createBufferSource)return;
++ function squelch(volume,hz=1800,length=.09,beep=true){if(!volume||voices.size>=4||!ctx.createBuffer||!ctx.createBufferSource)return;
+   if(!squelchBuffer){const n=Math.floor((ctx.sampleRate||48000)*.09);squelchBuffer=ctx.createBuffer(1,n,ctx.sampleRate||48000);const d=squelchBuffer.getChannelData(0);let seed=12345;for(let k=0;k<n;k++){seed=(Math.imul(seed,1103515245)+12345)>>>0;d[k]=((seed/4294967296)*2-1)*(1-k/n);}}
+-  const src=ctx.createBufferSource(),gain=ctx.createGain(),t=ctx.currentTime;src.buffer=squelchBuffer;gain.gain.setValueAtTime(.05*volume,t);gain.gain.linearRampToValueAtTime(0,t+.09);
+-  let out=gain;if(ctx.createBiquadFilter){const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=1800;f.Q.value=1.2;src.connect(f);f.connect(gain);}else src.connect(gain);
+-  out.connect(master);voices.add(src);src.onended=()=>{voices.delete(src);src.disconnect();gain.disconnect();};src.start(t);src.stop(t+.1);note(1250,volume*.6,.12);}
++  const src=ctx.createBufferSource(),gain=ctx.createGain(),t=ctx.currentTime;src.buffer=squelchBuffer;gain.gain.setValueAtTime(.05*volume,t);gain.gain.linearRampToValueAtTime(0,t+length);
++  let out=gain;if(ctx.createBiquadFilter){const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=hz;f.Q.value=1.2;src.connect(f);f.connect(gain);}else src.connect(gain);
++  out.connect(master);voices.add(src);src.onended=()=>{voices.delete(src);src.disconnect();gain.disconnect();};src.loop=length>.09;src.start(t);src.stop(t+length+.01);if(beep)note(1250,volume*.6,.12);}
+  function note(freq,volume,delay=0){if(voices.size>=4||!volume)return;const osc=ctx.createOscillator(),gain=ctx.createGain(),t=ctx.currentTime+delay;osc.type='sine';osc.frequency.value=freq;gain.gain.setValueAtTime(0,t);gain.gain.linearRampToValueAtTime(.08*volume,t+.025);gain.gain.linearRampToValueAtTime(0,t+.19);osc.connect(gain);gain.connect(master);osc.onended=()=>{voices.delete(osc);osc.disconnect();gain.disconnect();};voices.add(osc);osc.start(t);osc.stop(t+.21);}
+- function update(s,selected,active,scene=null){
++ // R11: rain hiss is a fourth channel of the same noise loop, created the first time it rains.
++ function rainChannel(){if(rain||!noise||!ctx.createBiquadFilter)return rain;const filter=ctx.createBiquadFilter(),gain=ctx.createGain();filter.type='highpass';filter.frequency.value=2600;gain.gain.value=0;noise.connect(filter);filter.connect(gain);gain.connect(master);rain={kind:'rain',gain,level:RAIN_LEVEL,source:noise};ambient.push(rain);return rain;}
++ // R11: one firework — crackle of filtered noise and, every other burst, a low thump.
++ function firework(volume){const b=fireworkBurst(bursts++);nextBurst=ctx.currentTime+b.gap;if(!volume)return;squelch(volume*.9,b.hz*4,.45,false);if(b.thump)note(70,volume*.8);}
++ function update(s,selected,active,scene=null,env=null){
+   if(!baseline||baseline.shift!==s.shift||baseline.mode!==s.mode)reset(s);
+   if(!prefs.enabled||!active||!ctx||ctx.state!=='running'){steps=null;doors=null;lastStep=-Infinity;reset(s);if(!held){quiet();held=true;}return;}
+   const door=doorSoundEvent(doors,s,selected,scene);doors=door.next;if(door.event)note(95,prefs.environment*door.event.level);
+   const foot=footstepEvent(steps,s,scene);steps=foot.next;if(foot.event&&ctx.currentTime-lastStep>.36){lastStep=ctx.currentTime;note(115,prefs.environment*foot.event.level);}
+-  held=false;set(master.gain,prefs.master);const mix=environmentMix(scene,s.population?.residents),envelope=ambienceEnvelope(ctx.currentTime);for(const channel of ambient)set(channel.gain.gain,mix[channel.kind]*envelope[channel.kind]*channel.level*prefs.environment);
++  held=false;set(master.gain,prefs.master);const mix=environmentMix(scene,s.population?.residents),envelope=ambienceEnvelope(ctx.currentTime);const weather=weatherSound(env?.weather);if(weather.rain>0)rainChannel();for(const channel of ambient)set(channel.gain.gain,channel.kind==='rain'?weather.rain*channel.level*prefs.environment:Math.min(1,mix[channel.kind]*(weather[channel.kind]??1))*envelope[channel.kind]*channel.level*prefs.environment);
++  if(fireworksTime(env?.date)&&ctx.currentTime>=nextBurst)firework(prefs.environment*.7);
+   const fresh=s.incidents.filter(i=>!baseline.ids.has(i.id));if(s.mode==='career'&&(s.rank??0)>baseline.rank){note(660,prefs.radio*.45);note(990,prefs.radio*.35,.12);}else if(fresh.length){note(fresh.some(i=>[2,5].includes(i.type))?1100:880,prefs.radio*.7);}
+   else if(s.resolved>baseline.resolved)note(520,prefs.radio*.7);
+   else if(radioKey(s)!==baseline.radio)squelch(prefs.radio*.6);
+@@ -42,7 +47,8 @@
+   if(unit&&motion?.id===unit.id&&Number.isFinite(s.time)&&s.time>motion.time){speed=Math.hypot(unit.x-motion.x,unit.y-motion.y)/(s.time-motion.time)*MAP_METRES*3.6/WORLD_SECONDS_PER_TICK_SECOND;}
+   motion=unit?{id:unit.id,x:unit.x,y:unit.y,time:s.time}:null;
+   if(Number.isFinite(unit?.currentSpeedKmh))speed=unit.currentSpeedKmh;
+-  const tone=transportTone(unit,vehicle,ctx.currentTime,speed,urgentMovement(s,unit));
++  const goal=unit?.route?.at?.(-1),metresLeft=goal&&Number.isFinite(goal.x)?Math.hypot(goal.x-unit.x,goal.y-unit.y)*MAP_METRES:Infinity;
++  const tone=transportTone(unit,vehicle,ctx.currentTime,speed,urgentMovement(s,unit),metresLeft);
+   set(engine.gain.gain,tone.engineLevel*prefs.engine);set(engine.osc.frequency,tone.engineHz);
+   set(siren.gain.gain,tone.sirenLevel*prefs.siren);set(siren.osc.frequency,tone.sirenHz);
+ 
+--- a/dist/audio-design.js
++++ b/dist/audio-design.js
+@@ -1,4 +1,17 @@
+ // Original synthesis parameters. Not recordings of real vehicle models.
+ export const ENGINE_HARMONICS=Object.freeze([0,1,.46,.22,.15,.09,.05,.025]);
+ export const SIREN_HARMONICS=Object.freeze([0,1,0,.18,0,.045]);
+-export function transportTone(unit,vehicle,time,speed=0,emergency=null){const moving=!!unit?.route?.length,urgent=moving&&(emergency??(unit.status==='responding'||unit.pursuing===true)),load=Math.max(0,Math.min(1,Number.isFinite(speed)?speed/60:0));return {moving,urgent,engineHz:(32+load*34+(urgent?5:0))*(vehicle?.type==='suv'?.9:1),engineLevel:moving?.030+.014*load:0,sirenHz:700+Math.sin(time*Math.PI*2/(unit?.pursuing?1.1:3.4))*230,sirenLevel:urgent?.040:0};}
++// R11 (Claude, 11.10.2026): siren modes as crews really use them — long «wail» on open road, fast
++// «yelp» in a pursuit and over the last ~200 m to the call, where crews clear junctions and traffic.
++export const SIREN_MODES=Object.freeze({wail:{period:3.4,depth:230},yelp:{period:.34,depth:260}});
++export const YELP_METRES=200;
++export const sirenMode=(unit,metresLeft=Infinity)=>unit?.pursuing===true||metresLeft<YELP_METRES?'yelp':'wail';
++export function transportTone(unit,vehicle,time,speed=0,emergency=null,metresLeft=Infinity){const moving=!!unit?.route?.length,urgent=moving&&(emergency??(unit.status==='responding'||unit.pursuing===true)),load=Math.max(0,Math.min(1,Number.isFinite(speed)?speed/60:0)),mode=sirenMode(unit,metresLeft),m=SIREN_MODES[mode];return {moving,urgent,sirenMode:mode,engineHz:(32+load*34+(urgent?5:0))*(vehicle?.type==='suv'?.9:1),engineLevel:moving?.030+.014*load:0,sirenHz:700+Math.sin(time*Math.PI*2/m.period)*m.depth,sirenLevel:urgent?.040:0};}
++// R11 weather in sound: rain hiss, stronger gusts in wind, snow muffles the city.
++const WEATHER_SOUND=Object.freeze({rain:{rain:1,wind:1.15,traffic:1.1},wind:{rain:0,wind:2.2,traffic:1},snow:{rain:0,wind:.8,traffic:.45},ice:{rain:0,wind:1,traffic:.7},fog:{rain:0,wind:.6,traffic:.8},heat:{rain:0,wind:.5,traffic:1}});
++export function weatherSound(kind){const w=WEATHER_SOUND[kind];return {rain:w?.rain??0,wind:w?.wind??1,traffic:w?.traffic??1};}
++export const RAIN_LEVEL=.045;
++// R11 New Year: fireworks over the city from 23:45 on 31 December to 01:30 on 1 January.
++export function fireworksTime(date){if(!date)return false;const m=date.minute??0;return date.month===11&&date.dayOfMonth===31&&m>=23*60+45||date.month===0&&date.dayOfMonth===1&&m<90;}
++// Deterministic gap between bursts (seconds) and burst pitch, by burst number.
++export function fireworkBurst(n){let h=Math.imul((n|0)+97,2654435761);h^=h>>>15;const r=(h>>>0)/4294967296;return {gap:.5+r*2.2,hz:220+Math.floor(r*997)%420,thump:r<.5};}
+--- /dev/null
++++ b/tests/service-sound.test.mjs
+@@ -0,0 +1,42 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createAudio} from '../dist/audio.js';
++import {transportTone,sirenMode,SIREN_MODES,YELP_METRES,weatherSound,fireworksTime,fireworkBurst} from '../dist/audio-design.js';
++import {dateOf} from '../dist/season.js';
++// R11 «Звук службы» (Claude, 11.10.2026): siren modes, weather in sound, New Year fireworks.
++function fake(){const nodes=[];let osc=0,sources=0;const param=()=>({value:0,setTargetAtTime(v){this.value=v},setValueAtTime(v){this.value=v},linearRampToValueAtTime(v){this.value=v}});
++ return {state:'suspended',currentTime:1,sampleRate:200,destination:{},nodes,get osc(){return osc},get sources(){return sources},createGain(){const n={gain:param(),connect(){},disconnect(){}};nodes.push(n);return n},createOscillator(){osc++;return {frequency:param(),connect(){},disconnect(){},start(){},stop(){}}},createBuffer:(_,len)=>({getChannelData:()=>new Float32Array(len)}),createBiquadFilter:()=>({frequency:{value:0},Q:{value:0},connect(){}}),createBufferSource(){sources++;return {connect(){},disconnect(){},start(){},stop(){}}},async resume(){this.state='running'},async suspend(){this.state='suspended'}};}
++const state=()=>({shift:1,mode:'career',resolved:0,incidents:[],units:[{id:1,x:1.5,y:2.6,route:[{x:1.6,y:2.6}],status:'responding'}]});
++const scene={x:1.504031,y:2.608911,zoom:22};
++
++test('wail on open road, yelp in a pursuit and over the last 200 m',()=>{
++ const u={route:[{}],status:'responding'};assert.equal(sirenMode(u),'wail');assert.equal(sirenMode(u,YELP_METRES-1),'yelp');assert.equal(sirenMode({...u,pursuing:true},5000),'yelp');
++ const far=[],near=[];for(let t=0;t<1;t+=.05){far.push(transportTone(u,null,t,30,true,1000).sirenHz);near.push(transportTone(u,null,t,30,true,50).sirenHz);}
++ const swings=a=>a.slice(1).filter((v,k)=>Math.sign(v-a[k])!==Math.sign(a[k]-(a[k-1]??a[k]))).length;assert.ok(swings(near)>swings(far),'yelp sweeps faster');
++ for(const hz of near)assert.ok(hz>=700-SIREN_MODES.yelp.depth&&hz<=700+SIREN_MODES.yelp.depth);
++ assert.equal(transportTone(u,null,0,30,true).sirenMode,'wail','default without distance is wail');
++});
++
++test('weather shapes the ambience: rain adds hiss, wind gusts, snow muffles traffic',()=>{
++ assert.deepEqual(weatherSound('clear'),{rain:0,wind:1,traffic:1});assert.deepEqual(weatherSound(undefined),{rain:0,wind:1,traffic:1});
++ assert.ok(weatherSound('rain').rain>0);assert.ok(weatherSound('wind').wind>1.5);assert.ok(weatherSound('snow').traffic<.6);
++});
++
++test('a rain channel appears only when it rains and silences on pause',async()=>{
++ const ctx=fake(),a=createAudio({preferences:{enabled:true},createContext:()=>ctx}),s=state();await a.unlock();
++ a.update(s,1,true,scene,{weather:'clear'});const before=ctx.nodes.length;a.update(s,1,true,scene,{weather:'rain'});assert.equal(ctx.nodes.length,before+1,'one extra gain for rain');
++ const rain=ctx.nodes.at(-1);assert.ok(rain.gain.value>0);a.update(s,1,true,scene,{weather:'rain'});assert.equal(ctx.nodes.length,before+1,'created once');
++ a.update(s,1,true,scene,{weather:'clear'});assert.equal(rain.gain.value,0);a.pause();assert.ok(ctx.nodes.every(n=>n.gain.value===0));
++ const windy=fake(),b=createAudio({preferences:{enabled:true},createContext:()=>windy});await b.unlock();b.update(s,1,true,scene,{weather:'wind'});const clear=fake(),c=createAudio({preferences:{enabled:true},createContext:()=>clear});await c.unlock();c.update(s,1,true,scene,{weather:'clear'});
++ assert.ok(windy.nodes[3].gain.value>clear.nodes[3].gain.value*1.5,'gusts are louder in wind');
++});
++
++test('fireworks only on New Year night and bursts are bounded',async()=>{
++ const at=(m,d,min)=>({month:m,dayOfMonth:d,minute:min});
++ assert.equal(fireworksTime(at(11,31,23*60+50)),true);assert.equal(fireworksTime(at(0,1,30)),true);assert.equal(fireworksTime(at(11,31,22*60)),false);assert.equal(fireworksTime(at(0,1,120)),false);assert.equal(fireworksTime(at(6,10,23*60+50)),false);assert.equal(fireworksTime(null),false);
++ for(let n=0;n<50;n++){const b=fireworkBurst(n);assert.ok(b.gap>=.5&&b.gap<=2.7&&b.hz>=220&&b.hz<640);}assert.deepEqual(fireworkBurst(7),fireworkBurst(7));
++ const abs=1440*(2+80)+23*60+50;assert.equal(dateOf(abs).month,11);assert.equal(dateOf(abs).dayOfMonth,31,'campaign day 80 is New Year’s Eve');
++ const ctx=fake(),a=createAudio({preferences:{enabled:true},createContext:()=>ctx}),s=state();await a.unlock();const env={weather:'clear',date:at(11,31,23*60+55)};
++ const src0=ctx.sources;a.update(s,1,true,scene,env);assert.equal(ctx.sources,src0+1,'a burst');a.update(s,1,true,scene,env);assert.equal(ctx.sources,src0+1,'waits for the gap');
++ ctx.currentTime+=3;a.update(s,1,true,scene,env);assert.equal(ctx.sources,src0+2);
++ ctx.currentTime+=3;a.update(s,1,true,scene,{weather:'clear',date:at(0,2,0)});assert.equal(ctx.sources,src0+2,'quiet on 2 January');
++});
