@@ -4,7 +4,7 @@ from zipfile import ZipFile
 import hashlib,json
 
 root=Path(__file__).resolve().parent
-protected={'AGENTS.md','CLAUDE.md','COLLAB_LOG.md','CLAUDE_HANDOFF.md','docs/ROADMAP_REVIEW_CLAUDE_20261011.md','patches/apply-claude.sh','patches/claude-motion-lag-and-stalls.patch'}
+protected={'README.md','SOURCE_STATE.json','source-import-sha256.json','AGENTS.md','CLAUDE.md','COLLAB_LOG.md','CLAUDE_HANDOFF.md','docs/ROADMAP_REVIEW_CLAUDE_20261011.md','patches/apply-claude.sh','patches/claude-motion-lag-and-stalls.patch'}
 manifest=json.loads((root/'source-import-sha256.json').read_text())
 for name,expected in manifest.items():
     archive=root/name
