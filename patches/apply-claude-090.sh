@@ -1,0 +1,20 @@
+#!/bin/sh
+# Claude's releases on top of the released 0.9.0-a / APK 0.2.7 source (codex/android-027-sound-quality, b993405).
+# Usage: python3 -I source-import.py && sh patches/apply-claude-090.sh [last]
+#   last = release-b | release-c (default: the last step)
+# Steps 1–8 of patches/apply-claude-080.sh are already inside 0.9.0-a: do not run that script again.
+# release-b-090 is byte-identical to claude-release-b-080.patch (step 9 of apply-claude-080.sh); if it is
+# already applied, start from release-c: patch -p1 < patches/claude-release-c-090.patch && npm test
+set -e
+cd "$(dirname "$0")/.."
+steps="release-b:claude-release-b-090 release-c:claude-release-c-090"
+last="${1:-release-c}"
+case " $(echo "$steps" | sed 's/:[^ ]*//g') " in *" $last "*) ;; *) echo "Unknown patch stage: $last" >&2; exit 2 ;; esac
+for step in $steps; do
+  name="${step%%:*}"; file="patches/${step#*:}.patch"
+  patch -p1 --dry-run -s < "$file" >/dev/null
+  patch -p1 -s < "$file"
+  echo "applied $file"
+  [ "$name" = "$last" ] && break
+done
+npm test
