@@ -1,5 +1,5 @@
-# Mercury Response — APK 0.2.7
+# Mercury Response — APK 0.2.8
 
-Game 0.9.0-a, versionCode 9. Includes all Claude packages R1–R26 through e55a47a and Codex speed.kmh / routine validation fixes.
+Game0.9.1-a, versionCode10. Full Claude B/C/A package through195295b: call dialogues, career/department2.0, sound of place and onlookers. Native graphics migration remains incomplete, stable APK uses the complete existing game.
 
-Run python3 -I source-import.py only: all 27 patch steps are already integrated; never rerun historical apply scripts. 503 JS tests and 12 deploy tests pass. 168 old snapshots and 24 scheduled shifts validated. Real Fold6 audio/GPU/thermal checks remain open. Godot is a separate incomplete checkpoint and is not inside this stable APK.
+Run python3 -I source-import.py only. All30 historical steps already integrated: do not rerun patch chains. 525 JS,12 deploy,42 previous-release snapshots,60 randomized shifts and36 native state comparisons passed. Physical Fold6/background-audio/GPU/thermal acceptance remains open.
