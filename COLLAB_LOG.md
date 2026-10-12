@@ -1,3 +1,11 @@
+## 2026-10-12 16:04 Tallinn — Codex: bounded native weather and night ambience
+
+- Verified remote native branch still at a983315; no Claude changes overwritten. Added weather_effects.gd: camera-local192 rain/storm,128 snow,48 wind debris, pooled MultiMesh, no simulation RNG, no particle shadows. Existing Claude shiftWeather drives effects.
+- Night ambient energy lowered to0.22; day0.55. Current lighting preference disables weather as well (no separate weather preference yet). Existing road/time routes preserved.
+- Tests:6weather kinds, storm, finite transforms,192 cap and disabled effects passed. Native UI scene career/map/settings passed exit0/no script errors. Test initially ran before _ready; moved verification to deferred startup and reran passed.
+- New Android APK NOT yet built for this step: transient SDK/NDK/Gradle staging disappeared after environment restart. Existing downloadable native-test APK remains previous a983315 build and does not include this new weather. Android build environment must be restored before next signed test artifact.
+- Open: proper night street/window lights, snowfall visual acceptance, fireworks, bridges actor elevation, full UI/device acceptance. No Fold6 FPS/thermal claim. Stable feed unchanged.
+
 ## 2026-10-12 15:12 Tallinn — Codex: first signed native Android test APK
 
 - Export succeeded with Godot 4.7.2, ARM64 only, target SDK36/min26. JDK compiler/jlink/jmod/jar modules already installed; missing CLI launchers restored, no external JDK downloaded.
