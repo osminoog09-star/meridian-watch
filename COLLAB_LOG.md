@@ -1,3 +1,11 @@
+## 2026-10-12 19:28 Tallinn — Codex: restore missing gameplay controls; recovery test APK
+
+- Follow-up to 04eb2a18e7f6ebdcdbd61309ac8c0380aa39fece. Found actual missing migration UI: snapshot omitted entire unitSettings and used #tip instead of #tipCard. Render full left panel (identity, service/department, crews, auto/manual, district, rest). Restore tip card/dismissal and trust value. Tap map actor selects original unit/call/resident handler; drag/pinch does not select. Camera coordinate transform matches actors. Scroll speed row/map controls on small logical screens.
+- Tests: actual recovery button, career startup, modal isolation/restoration, projected unit tap passed in Godot; original UI Node tests and actionable serialized controls passed; QuickJS/Node36 full-state parity,12 legacy saves/backup/accelerations passed. Camera depth and road surface separation increased further.
+- Fresh official Godot4.7.2 Gradle build with new Java reader. Fixed export staging recursion (.gdignore on android; removed generated *.import under Android res). APK bundle byte-matches current JS; no duplicate ZIP entries; chunked reader present in DEX; old reader absent. SDK36.1/min26/target36/ARM64.
+- Signed APK 0.3.0-native-recovery-test, versionCode11, 85281724 bytes, SHA256 ad552b371f345d02240eaa4c0eab5b8984988cd8bc7a7481113623c863355c7b. Existing certificate retained; v2/v3 and16KiB alignment passed. Stable feed unchanged. Native release gate remains false.
+- Physical Fold6 storage/GPU/heat/audio/installer still pending. Tried software-render test; Xvfb cannot establish listening sockets in this environment. No rendered-image or device-performance claim. This fixes specific playable UI gaps, NOT completion of every native feature; bridges/night lights/fireworks and full device acceptance remain.
+
 ## 2026-10-12 19:20 Tallinn — Codex: startup recovery and depth fixes (not released)
 
 - Owner screenshots show legacy migration failure and map depth artifacts. Verified remote native branch remains e99716c; Claude gameplay unchanged.
