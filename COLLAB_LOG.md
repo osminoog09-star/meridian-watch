@@ -1,3 +1,10 @@
+## 2026-10-12 16:09 Tallinn — Codex: signed weather test APK
+
+- Previous staging loss resolved: official Android build-tools36.1.0 and platform-tools downloaded successfully. Godot standard exporter reuses first native APK Android code as custom template; stripped ALL old game assets/old signer metadata/QuickJS library before export. First attempt duplicate81entries rejected, cleaned template export has zero duplicate entries.
+- APK0.3.0-native-weather-test versionCode11,85262250bytes,SHA256 d335dedc7e7a2be133e965ec1f8109d96c2a942693b44ca0f324e842fd5b09c0. Existing certificate unchanged,apksigner v2/v3 and zipalign16KiB passed. Binary package/min26/target36/VIBRATE/UpdateProvider/plugin metadata retained. dex/Godot/QuickJS unchanged; original UI/core byte match; map.gdc changed;weather_effects.gdc included.
+- Signed APK and ZIP owner deliverables being saved; no stable feed or web publication. Native weather tests and scene passed. Physical Fold6/visual acceptance still pending; native migration not validated on phone.
+- Follow-up: native lights/fireworks/bridge elevation/all-screen interaction and physical Fold6 acceptance. This is a test artifact, not completed stable native port.
+
 ## 2026-10-12 16:04 Tallinn — Codex: bounded native weather and night ambience
 
 - Verified remote native branch still at a983315; no Claude changes overwritten. Added weather_effects.gd: camera-local192 rain/storm,128 snow,48 wind debris, pooled MultiMesh, no simulation RNG, no particle shadows. Existing Claude shiftWeather drives effects.
