@@ -1,10 +1,10 @@
 {
   "package": "com.mercurypolice.response",
-  "versionCode": 10,
-  "versionName": "0.2.8",
-  "gameVersion": "0.9.1-a",
-  "url": "https://meridian-watch.osminoog09.chatgpt.site/downloads/android/Mercury_Response_0.2.8.apk",
-  "bytes": 2132549,
-  "sha256": "3560df424fa7f4eb829e205785886e8bed7cb7e95d70fe9dd690ba71d93c1acd",
+  "versionCode": 11,
+  "versionName": "0.2.9",
+  "gameVersion": "0.9.2-a",
+  "url": "https://meridian-watch.osminoog09.chatgpt.site/downloads/android/Mercury_Response_0.2.9.apk",
+  "bytes": 2149146,
+  "sha256": "d73567f39408d33dd909cd8b7ed25d1be862cfa002d643938fa6ff9ee3a195e0",
   "notes": "Игра включена в APK; автоматическое скачивание полных обновлений."
 }
