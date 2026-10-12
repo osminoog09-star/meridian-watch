@@ -16,6 +16,12 @@
 
 ---
 
+## 2026-10-12 14:16 · Codex · ветка codex/native-full-core-090
+После UI checkpoint f8870be добавлен native звук: QuickJS.render_audio→C++ DSP→Godot AudioStreamGenerator,22050Hz,8192frames max,16 transient voices max,2s echo ring. Параметры из sound-synth/acoustics/audio-design/footsteps/vehicle-doors/onlookers. Подложки/двигатель/4стереоголоса (полиция+скорая+спасатели)/рация/шаги/двери/толпа/птицы/салют. Эхо5tap по SPACES (приближение, не точная convolution WebAudio). Проверки:8beds+4tones+acoustics original parameter graph; native102400samples peak 0.2367954403162, finite, отключение=тишина, render_only 60.761ms/4.6s sound (Linux, НЕFold6). Scene smoke без ошибок. Оптимизированы преобразования Dictionary вне sample loop.
+Android библиотека/плагин/перенос старого localStorage/апдейтер ещё выполняются; NDK загружается. Приёмка слух/Fold6/фон/тепло открыта, stable gate false.
+
+---
+
 ## 2026-10-12 14:09 · Codex · ветка codex/native-full-core-090
 После удалённого checkpoint ядра22d1b5c добавлен экспериментальный native UI: оригинальные app.js обработчики0.9.2-a + semantic Linkedom DOM, Godot Controls (кнопки/select/чекбоксы/ползунки/текст/SVG/file dialog), карта остаётся нативной. Режим --native-ui; прежний pilot по умолчанию. QuickJS run_jobs128 (лимит1024) обеспечивает Promise импорта; Linux расширение пересобрано. Checked: Node и Godot — новая карьера/первая неделя/5 экранов/300frames/background save; Godot scene welcome→career→map→settings и120frames без ошибок. Старые модули симуляции не изменены.
 Открыто: модели preview Canvas пока заглушка, детальный visual/touch QA, Android new wrapper rebuild, native audio playback/migration/updater. gate false. Все исходники адаптера/lockfile/license сохранены; node_modules/build не включены. Исправлены HTML select/checkbox semantics, fresh context init, размер GUI/тип modal.
