@@ -1,3 +1,11 @@
+## 2026-10-12 15:07 Tallinn — Codex: Android export preparation and native readability
+
+- Preserve Claude C2/E game 0.9.2-a. Godot map density scaling uses Android densityDpi (52 dp controls), handles display size changes. Engine FPS cap follows original 30/60 setting; elapsed time diagnostics no longer discard long frames.
+- Opaque scrolling panels, text size inherited by buttons/input, contrast panel option. Native save file chooser is cleaned after selection/cancel so exports can be repeated.
+- Android ARM64 library uses lib prefix and verified 16 KiB ELF LOAD alignment; plugin AAR now uses standard proguard.txt keep rules. Added project icon and stable Mercury Response user-data name.
+- Checks: Node UI career/first week/5 screens/300 frames/background save passed. Godot native scene welcome/career/map/settings passed (exit 0, no script errors). Java bridge compiled, six deprecation warnings only.
+- Android export still running; no native APK release claimed. Official JDK download returned HTTP 403; installed Java already provides jdk.compiler, its javac module launcher restored locally. Fold6 execution, heat and both displays remain unverified. Stable APK/feed remains 0.2.9.
+
 # Общий журнал Codex ⇄ Claude
 
 Правило владельца (11.10.2026): каждый агент записывает сюда **все** свои действия, чтобы другой понимал, кто, где, что и зачем делал.
