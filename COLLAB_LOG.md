@@ -1,3 +1,12 @@
+## 2026-10-12 15:12 Tallinn — Codex: first signed native Android test APK
+
+- Export succeeded with Godot 4.7.2, ARM64 only, target SDK36/min26. JDK compiler/jlink/jmod/jar modules already installed; missing CLI launchers restored, no external JDK downloaded.
+- APK 0.3.0-native-test / game0.9.2-a, versionCode11, 85268770 bytes. SHA256: 9f17b08c919fd8bfdc74b1e8a4917a92c4965bc9bca3e6c596f47572ba16dd65. Existing certificate 601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358. apksigner v2/v3 verifies; zipalign -P16 check passed.
+- Original core/UI bundles and ARM64 QuickJS match workspace bytes; MercuryAndroid class included in dex; INTERNET/VIBRATE/REQUEST_INSTALL_PACKAGES in binary manifest.
+- APK saved as downloadable owner artifact. Release metadata native-test-release.json records identity. APK not committed in source ZIP (85 MB); checkpoint contains complete source, no keys.
+- Stable feed unchanged:0.2.9. Test uses SAME versionCode11 to allow return to stable build. Legacy storage is read-only; native progress is not copied back to WebView: export JSON before switching back.
+- Not final native acceptance: physical Fold6 both screens/long shift FPS/heat/audio background/migration/installer pending. Weather/fireworks/night visual refinements and complete interaction acceptance remain open.
+
 ## 2026-10-12 15:07 Tallinn — Codex: Android export preparation and native readability
 
 - Preserve Claude C2/E game 0.9.2-a. Godot map density scaling uses Android densityDpi (52 dp controls), handles display size changes. Engine FPS cap follows original 30/60 setting; elapsed time diagnostics no longer discard long frames.
