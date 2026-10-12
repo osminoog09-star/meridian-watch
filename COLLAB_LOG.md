@@ -16,6 +16,11 @@
 
 ---
 
+## 2026-10-12 10:44 · Codex · ветка codex/android-029-claude-c2-e
+Подписан APK 0.2.9 / игра 0.9.2-a / versionCode 11 тем же сертификатом 601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358. SHA256 d73567f39408d33dd909cd8b7ed25d1be862cfa002d643938fa6ff9ee3a195e0, 2149146 bytes. 538 JS / 12 deploy passed; VIBRATE присутствует в бинарном manifest; setMediaPlaybackRequiresUserGesture(false) сохранён. Публикация APK/feed выполняется отдельно через Sites; веб-игра неизменна. Проверки Fold6 (zoom/vibrate/первая неделя/нагрев) открыты. Первый checkpoint уже удалённо: 131c908.
+
+---
+
 ## 2026-10-12 10:42 · Codex · ветка codex/android-029-claude-c2-e
 C2 и E наложены чисто на 0.9.1-a; npm test 538/538. Manifest: versionCode 11, APK 0.2.9, VIBRATE; игра 0.9.2-a. Проверка runtime требует service2/firstweek/accessibility и побайтное совпадение APK. Архив исходников обновлён до сборки, APK и feed пока старые — выпуск ещё не опубликован.
 

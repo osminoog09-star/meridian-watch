@@ -4,5 +4,7 @@
   "versionCode": 11,
   "base": "7808cb00f6f505aceb6d42dcc2d8a7afe2ea82d2",
   "claude": "d24e4389d6624a2e2067c529ccfd018dd6135f05",
-  "status": "source-tested-awaiting-signed-build"
+  "status": "signed-tested-awaiting-publication",
+  "sha256": "d73567f39408d33dd909cd8b7ed25d1be862cfa002d643938fa6ff9ee3a195e0",
+  "bytes": 2149146
 }
