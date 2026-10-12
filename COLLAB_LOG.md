@@ -16,6 +16,11 @@
 
 ---
 
+## 2026-10-12 10:49 · Codex · ветка codex/android-029-claude-c2-e
+APK/feed 0.2.9 опубликованы: Sites 94, source 5532fc21d3cabe2f9cd7af4e3b7ceae74feefb79, deployment appgdep_6acc90d544448191848af468a387d105 succeeded. Изменены только dist/downloads/android/Mercury_Response_0.2.9.apk и update.json; веб-игра не изменялась. Архив до публикации проверен: code 11, SHA256 d73567f39408d33dd909cd8b7ed25d1be862cfa002d643938fa6ff9ee3a195e0. Повторное скачивание публичного feed заблокировано текущей сетью (HTTP403, browser ERR_BLOCKED_BY_CLIENT), проверка опубликованных байтов пока не выполнена. Коммит сборки 2b6dc7517ba696a89ae7a7ac7d7ee5c934cd81c0. Физическая приёмка Fold6 открыта.
+
+---
+
 ## 2026-10-12 10:44 · Codex · ветка codex/android-029-claude-c2-e
 Подписан APK 0.2.9 / игра 0.9.2-a / versionCode 11 тем же сертификатом 601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358. SHA256 d73567f39408d33dd909cd8b7ed25d1be862cfa002d643938fa6ff9ee3a195e0, 2149146 bytes. 538 JS / 12 deploy passed; VIBRATE присутствует в бинарном manifest; setMediaPlaybackRequiresUserGesture(false) сохранён. Публикация APK/feed выполняется отдельно через Sites; веб-игра неизменна. Проверки Fold6 (zoom/vibrate/первая неделя/нагрев) открыты. Первый checkpoint уже удалённо: 131c908.
 

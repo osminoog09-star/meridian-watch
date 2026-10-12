@@ -4,7 +4,9 @@
   "versionCode": 11,
   "base": "7808cb00f6f505aceb6d42dcc2d8a7afe2ea82d2",
   "claude": "d24e4389d6624a2e2067c529ccfd018dd6135f05",
-  "status": "signed-tested-awaiting-publication",
+  "status": "published-public-redownload-network-blocked",
   "sha256": "d73567f39408d33dd909cd8b7ed25d1be862cfa002d643938fa6ff9ee3a195e0",
-  "bytes": 2149146
+  "bytes": 2149146,
+  "siteVersion": 94,
+  "siteCommit": "5532fc21d3cabe2f9cd7af4e3b7ceae74feefb79"
 }
