@@ -1,3 +1,11 @@
+## 2026-10-12 19:20 Tallinn — Codex: startup recovery and depth fixes (not released)
+
+- Owner screenshots show legacy migration failure and map depth artifacts. Verified remote native branch remains e99716c; Claude gameplay unchanged.
+- Android reader now attaches transparent WebView at original HTTPS origin, serves local empty HTML, blocks network, transfers read-only localStorage in 64K chunks with explicit errors, generation-safe timeout and cleanup. Java compiled successfully (6 existing deprecation warnings); physical WebView migration still unverified.
+- Recovery panel is opaque and offers retry; tested actual Godot recovery button, new career startup, modal HUD removal/restoration. Original WebView storage never modified. 12 legacy fixtures retain identical full simulation state.
+- Camera near/far now scale with zoom; ground below distinct land/water layers. Numeric depth ratio checked at 35/90/650/14000/16000; GPU/Fold6 visual verification still pending.
+- Rebuilt plugin AAR. Native scene and startup recovery passed. Android tools/templates restored for full rebuild; no new APK or feed publication yet. Remaining: visual/device acceptance, full screen gameplay audit, signed APK.
+
 ## 2026-10-12 16:09 Tallinn — Codex: signed weather test APK
 
 - Previous staging loss resolved: official Android build-tools36.1.0 and platform-tools downloaded successfully. Godot standard exporter reuses first native APK Android code as custom template; stripped ALL old game assets/old signer metadata/QuickJS library before export. First attempt duplicate81entries rejected, cleaned template export has zero duplicate entries.
@@ -46,90 +54,6 @@
 Для другого агента: … (если нужно действие или осторожность)
 ```
 
----
-
-## 2026-10-12 14:35 · Codex · ветка codex/native-full-core-090
-После Androidbridge4a8ae64 добавлены native live_actors:64cars/128people max, shared оригинальные модели sedan/suv/civilian/officer; остальные экипажи/службы/жители/foot officers, camera culling. 4054 исходных areas воды/парков/других зон из тойже карты. Canvas model previews заменены GodotSubViewport originals. UI view берёт residentPosition/real service&unit poses, симуляция не меняется. Android автоматически включает native UI;desktop --native-ui. Node career/screens tests + chief4stepwizard/department roster passed; native welcome/career/map/settings scene без ERROR.
-Исправлена ошибка отступа добавления vibration в controller после прошлого smoke: новый scene verifier отказывает если scene.campaign_ready=false; предыдущий script мог закончить0 при script errors. Коррекция включена здесь.
-Для полного native release остаются visual/touch/device QA, bridge elevation/night/weather/fireworks details. Скачаны officialGodot4.7.2 Android export templates для отдельного testAPK; стабильный0.2.9 не заменяется.
-
----
-
-## 2026-10-12 14:25 · Codex · ветка codex/native-full-core-090
-После sound checkpoint537bb3a добавлен Android Godot v2 bridge: проверенный ApkUpdater port Activity/Host (тот же HTTPS/size/hash/package/signature checks); установка ждёт native save success. Read-only hidden WebView для legacy localStorage same origin https://mercurypolice.com/game/, не рисует игру/не пишетстарые данные/внешние requests403. Pending/error gate не позволяет пустому новому save затереть старый; failed import сохраняется отдельно при явном продолжении. 12 старых0.7/0.8 payloads совпали полным состоянием; corrupt input blocks save. NDKr27c ARM64 DSP/Promise rebuilt; Java AAR compile passed(4deprecationwarnings).
-VIBRATE/optional pattern,device PSS/battery temp/thermal status; FPS обновляется независимо от UI snapshot. Godot scene welcome/career/map/settings smoke passed. OfficialGodot4.7 v2 plugin export packaging. В Android ещё НЕзапущено: old WebView origin/plugin registration/install dialog/background sound/Fold6 bothscreens. NativeAPK не выпущен,stable gate false.
-
----
-
-## 2026-10-12 14:16 · Codex · ветка codex/native-full-core-090
-После UI checkpoint f8870be добавлен native звук: QuickJS.render_audio→C++ DSP→Godot AudioStreamGenerator,22050Hz,8192frames max,16 transient voices max,2s echo ring. Параметры из sound-synth/acoustics/audio-design/footsteps/vehicle-doors/onlookers. Подложки/двигатель/4стереоголоса (полиция+скорая+спасатели)/рация/шаги/двери/толпа/птицы/салют. Эхо5tap по SPACES (приближение, не точная convolution WebAudio). Проверки:8beds+4tones+acoustics original parameter graph; native102400samples peak 0.2367954403162, finite, отключение=тишина, render_only 60.761ms/4.6s sound (Linux, НЕFold6). Scene smoke без ошибок. Оптимизированы преобразования Dictionary вне sample loop.
-Android библиотека/плагин/перенос старого localStorage/апдейтер ещё выполняются; NDK загружается. Приёмка слух/Fold6/фон/тепло открыта, stable gate false.
-
----
-
-## 2026-10-12 14:09 · Codex · ветка codex/native-full-core-090
-После удалённого checkpoint ядра22d1b5c добавлен экспериментальный native UI: оригинальные app.js обработчики0.9.2-a + semantic Linkedom DOM, Godot Controls (кнопки/select/чекбоксы/ползунки/текст/SVG/file dialog), карта остаётся нативной. Режим --native-ui; прежний pilot по умолчанию. QuickJS run_jobs128 (лимит1024) обеспечивает Promise импорта; Linux расширение пересобрано. Checked: Node и Godot — новая карьера/первая неделя/5 экранов/300frames/background save; Godot scene welcome→career→map→settings и120frames без ошибок. Старые модули симуляции не изменены.
-Открыто: модели preview Canvas пока заглушка, детальный visual/touch QA, Android new wrapper rebuild, native audio playback/migration/updater. gate false. Все исходники адаптера/lockfile/license сохранены; node_modules/build не включены. Исправлены HTML select/checkbox semantics, fresh context init, размер GUI/тип modal.
-
----
-
-## 2026-10-12 12:01 · Codex · ветка codex/native-full-core-090
-Восстановлен потерянный незакоммиченный этап после reset. База c83a94e, оригинальная игра0.9.2-a из выпущенной ветки APK0.2.9. 52 модуля сохранены побайтно, C2/E service2/firstweek/accessibility включены. Повторно 36/36 полных состояний Node/QuickJS и backup recovery прошли. Результат: {"accelerated_frame_cases": 12, "campaigns": "career/chief, legacy/scheduled, three seeds", "direct_ticks_per_fixture": 300, "elapsed_ms": 83654, "frames_per_speed_case": 180, "full_state_parity_tolerance": 1e-08, "headless_tick_median_ms": 1.102, "headless_tick_p95_ms": 3.293, "native_quickjs_fixtures": 36, "old_save_cases": 12, "save_backup_recovery": true}
-Editor headless снова exit134; runtime verification exit0. Нативный стабильный выпуск запрещён до UI/audio/migration/updater/device acceptance. Начата изолированная подготовка UI adapter, ещё не реализован/проверен.
-
----
-
-## 2026-10-12 10:49 · Codex · ветка codex/android-029-claude-c2-e
-APK/feed 0.2.9 опубликованы: Sites 94, source 5532fc21d3cabe2f9cd7af4e3b7ceae74feefb79, deployment appgdep_6acc90d544448191848af468a387d105 succeeded. Изменены только dist/downloads/android/Mercury_Response_0.2.9.apk и update.json; веб-игра не изменялась. Архив до публикации проверен: code 11, SHA256 d73567f39408d33dd909cd8b7ed25d1be862cfa002d643938fa6ff9ee3a195e0. Повторное скачивание публичного feed заблокировано текущей сетью (HTTP403, browser ERR_BLOCKED_BY_CLIENT), проверка опубликованных байтов пока не выполнена. Коммит сборки 2b6dc7517ba696a89ae7a7ac7d7ee5c934cd81c0. Физическая приёмка Fold6 открыта.
-
----
-
-## 2026-10-12 10:44 · Codex · ветка codex/android-029-claude-c2-e
-Подписан APK 0.2.9 / игра 0.9.2-a / versionCode 11 тем же сертификатом 601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358. SHA256 d73567f39408d33dd909cd8b7ed25d1be862cfa002d643938fa6ff9ee3a195e0, 2149146 bytes. 538 JS / 12 deploy passed; VIBRATE присутствует в бинарном manifest; setMediaPlaybackRequiresUserGesture(false) сохранён. Публикация APK/feed выполняется отдельно через Sites; веб-игра неизменна. Проверки Fold6 (zoom/vibrate/первая неделя/нагрев) открыты. Первый checkpoint уже удалённо: 131c908.
-
----
-
-## 2026-10-12 10:42 · Codex · ветка codex/android-029-claude-c2-e
-C2 и E наложены чисто на 0.9.1-a; npm test 538/538. Manifest: versionCode 11, APK 0.2.9, VIBRATE; игра 0.9.2-a. Проверка runtime требует service2/firstweek/accessibility и побайтное совпадение APK. Архив исходников обновлён до сборки, APK и feed пока старые — выпуск ещё не опубликован.
-
----
-
-## 2026-10-12 10:38 · Codex · ветка codex/android-029-claude-c2-e
-База: codex/android-028-claude-abc, 7808cb0; Claude release-e d24e438. Восстановлен доступ к GitHub, архив базы проверен импортёром. Накладываются только C2 и E, старые цепочки не запускаются. Сначала APK 0.2.9, затем PR #11. Физического Fold6 в среде нет; его приёмка не подтверждена. Все этапы сохраняются удалённо после проверки.
-
----
-
-## 2026-10-12 10:05 · Claude · ветка claude/release-e (от claude/release-c2, e7b578a)
-**Указание владельца:** «демо звук норм. Давай дальше» → звук выпуска A принят; сделана **часть Claude выпуска E**: шаг 5 цепочки `patches/apply-claude-090.sh`.
-**Сделано:**
-- `dist/firstweek.js` (новый) + `sim.js`: `startFirstWeek` (вызывается приложением при новой карьере; в тестах и старых кампаниях недели нет), `skipFirstWeek`, `storyTick` (учебный вызов дня приходит экипажу 01 через 8% смены, 350–900 м от участка, `i.story`), итог дня записывается в `finish()` (`week.outcome`), разбор и итог недели в `weekShift` (награда при ≥10 из 14). Валидация `validWeek`, `i.story` 1..7.
-- `dist/accessibility.js` (новый) + `app.js`/`style.css`/`index.html`: крупный текст (zoom панелей и окон, карта без изменений), контраст, меньше движения, вспышка `#a11yFlash` и `navigator.vibrate` при новом вызове. Хранится в localStorage телефона.
-- `app.js`: при старте карьеры сразу открывается инструктаж с неделей; справка.
-- `tests/ui.test.mjs`: учитывает инструктаж при старте.
-**Проверки:** чистая 0.9.0-a + 5 шагов → **538/538 JS**, дерево побайтно = рабочей копии; deploy 11/12 (тот же `test_real_release`); 42/42 сохранения; хаос 30+30 — 0 ошибок; неделя проходится автоматическим экипажем 14/14; скриншоты инструктажа и настроек 412/900 без ошибок страницы.
-**Для Codex:** `claude/release-e`, `sh patches/apply-claude-090.sh` (5 шагов). Новые модули: `firstweek.js`, `accessibility.js` (+ раньше `career2.js`, `acoustics.js`, `onlookers.js`, `service2.js`). В Android проверь `navigator.vibrate` в WebView (нужно разрешение VIBRATE в манифесте) и CSS `zoom`.
-**Осталось:** D ждёт решения владельца; E — проверка на телефонах, языки, магазин (Codex/владелец).
-
----
-
-## 2026-10-12 09:40 · Claude · ветка claude/release-c2 (от claude/release-a, 195295b)
-**Указание владельца:** «на счёт хостинга пока мимо, хост локал будем делать потом, возможно и сервер возьму. Остальное ок» → выпуск D отложен (записано в `docs/ROADMAP_2.md`), сделан **C2 «Служба 2.1»** — шаг 4 цепочки `patches/apply-claude-090.sh`.
-**Сделано (новый `dist/service2.js` + `sim.js`/`app.js`/`life.js`/`calls.js`/`upgrades.js`/`style.css`):**
-- График на месяц (начальник): полный / только дневные / облегчённый 0,75. При старте смены кто не выходит — замена из резерва (по наименьшему стрессу), иначе экипаж один, иначе сотрудник вызывается (стресс +8); `u.homeCrew` возвращает свой экипаж на следующую смену; ручная перестановка (`changeCrew`) удаляет `homeCrew`. Зарплата: ×0,75 для облегчённого, без ночной надбавки для дневного.
-- Обучение сотрудников (только из резерва): вторая специальность (`o.extra`, учитывается в `crewFits`) или навык +5%; пока на курсе — недоступен как в отпуске.
-- Улучшение «Мастерская»: ремонт ×0,65 цены и ×0,6 времени, обслуживание машин начальника между сменами.
-- Карьера: `requestTransfer` — рапорт, ответ через 3 смены, отказ после D; роль и курс «Дорожная полиция» (бонус к дорожным вызовам, рейды ×1,5). `setRole` оставлен как прямой приказ (старые тесты).
-- Личные цели (`buyPersonal`): спортзал, путёвка, машина, взнос за квартиру; «Сломалась своя машина» — только если машина есть.
-**Проверки:** чистая 0.9.0-a + 4 шага → **534/534 JS**, дерево побайтно = рабочей копии; deploy 11/12 (тот же `test_real_release`); 42/42 старых сохранения; хаос 30+30 — 0 ошибок; начальник 40 смен с графиком и курсом (с тиками, сохранение каждые 500 тиков) — 0 ошибок; скриншоты отделения и личного дела 412/900 без ошибок страницы.
-**Для Codex:** брать `claude/release-c2`: `sh patches/apply-claude-090.sh` (4 шага). Новый модуль `service2.js` — через граф импортов; для нативного QuickJS добавь `career2.js`, `acoustics.js`, `onlookers.js`, `service2.js`.
-**Осталось:** D — ждёт решения владельца (локальная игра / сервер). Дальше Claude: E-часть (обучение-сюжет первой недели, доступность), приёмка звука на слух.
-
----
-
-## 2026-10-12 09:21 · Codex · ветка codex/android-028-claude-abc
-Что сделано: собран APK0.2.8/game0.9.1-a code10 от Claude195295b, все пакетыB/C/A. Прежний сертификат601ca75c…; SHA2563560df424fa7f4eb829e205785886e8bed7cb7e95d70fe9dd690ba71d93c1acd, 2132549bytes. Пакет89 ресурсов проверен побайтно; media gesture=false сохранён. 525JS/12deploy,42 предыдущих снимка0.9,60 случайных смен с reload каждые400тиков. Native36проверок и старые0.7/0.8fixtures прошли; nativec83a94e/PR11 обновлён отдельно.
-Тест выпуска больше не фиксирует число85: требует новые модули и точное равенство closure содержимомуAPK. SDK35официальный, ключи внеGit. APK/feed опубликованы (Sites93, source d92ef9851d5a5c131f106f5d22ac081aaf59b173); веб-игра не менялась. Первый Sites архив обнаружен со старымfeed9; версия92 сохранена, НЕразвёрнута; исправленная упаковка проверена feed10/hash и развёрнута93.
-Для Claude: исходный импорт уже включает30шагов, новые исторические090НЕзапускать. Полный Godot ещё не готов, его в стабильныйAPKне включать.
 ---
 
 ## 2026-10-12 09:13 · Codex · ветка codex/native-full-core-090
