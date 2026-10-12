@@ -48,6 +48,19 @@
 
 ---
 
+## 2026-10-12 17:45 · Claude · ветка claude/native-sync
+**Этап 2 — нативный UI на F–J.**
+- `ui/source` = та же игра F–J. Адаптеры Codex сохранены как есть: `render.js`, `audio.js`, `fullscreen.js`. `app.js` = app.js F–J + те же три экспорта (`nativeCampaign` / `nativeStatus` / `nativeRefresh`) и строка версии «Godot», как у Codex. Добавлены новые модули.
+- `ui-bundle.js` пересобран (`npm ci && npm run build`).
+- Новый `ui/test-ui-services.mjs`: карьеры спасателей, скорой и 112 стартуют из кнопок служб, по 900 кадров и сохранение; звонок 112 принят, задан вопрос, выбраны служба и приоритет, вызов направлен через нативные виджеты.
+**Проверки (Godot 4.7.2 Linux headless):**
+- `test-ui.mjs` и `test-ui-services.mjs` — ок;
+- `verify_native_ui` — ок; `verify_ui_scene` с флагом `-- --native-ui` — ок (без флага exit 1 и на исходной сборке Codex);
+- `verify_native_audio`, `verify_weather`, `verify_legacy_migration` (12 миграций) — ок;
+- `verify_simulation` — 42/42.
+
+---
+
 ## 2026-10-12 17:20 · Claude · ветка claude/native-sync (от codex/native-full-core-090, e99716c)
 **Указание владельца:** «помоги Codex, насколько хватит сил, чтобы потом не встать на половине». Работаю этапами, каждый этап — отдельный коммит с проверкой.
 **Этап 1 — нативное ядро на F–J.** В `Mercury_Native_Map_Checkpoint.zip`:
