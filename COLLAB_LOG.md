@@ -16,6 +16,12 @@
 
 ---
 
+## 2026-10-12 14:09 · Codex · ветка codex/native-full-core-090
+После удалённого checkpoint ядра22d1b5c добавлен экспериментальный native UI: оригинальные app.js обработчики0.9.2-a + semantic Linkedom DOM, Godot Controls (кнопки/select/чекбоксы/ползунки/текст/SVG/file dialog), карта остаётся нативной. Режим --native-ui; прежний pilot по умолчанию. QuickJS run_jobs128 (лимит1024) обеспечивает Promise импорта; Linux расширение пересобрано. Checked: Node и Godot — новая карьера/первая неделя/5 экранов/300frames/background save; Godot scene welcome→career→map→settings и120frames без ошибок. Старые модули симуляции не изменены.
+Открыто: модели preview Canvas пока заглушка, детальный visual/touch QA, Android new wrapper rebuild, native audio playback/migration/updater. gate false. Все исходники адаптера/lockfile/license сохранены; node_modules/build не включены. Исправлены HTML select/checkbox semantics, fresh context init, размер GUI/тип modal.
+
+---
+
 ## 2026-10-12 12:01 · Codex · ветка codex/native-full-core-090
 Восстановлен потерянный незакоммиченный этап после reset. База c83a94e, оригинальная игра0.9.2-a из выпущенной ветки APK0.2.9. 52 модуля сохранены побайтно, C2/E service2/firstweek/accessibility включены. Повторно 36/36 полных состояний Node/QuickJS и backup recovery прошли. Результат: {"accelerated_frame_cases": 12, "campaigns": "career/chief, legacy/scheduled, three seeds", "direct_ticks_per_fixture": 300, "elapsed_ms": 83654, "frames_per_speed_case": 180, "full_state_parity_tolerance": 1e-08, "headless_tick_median_ms": 1.102, "headless_tick_p95_ms": 3.293, "native_quickjs_fixtures": 36, "old_save_cases": 12, "save_backup_recovery": true}
 Editor headless снова exit134; runtime verification exit0. Нативный стабильный выпуск запрещён до UI/audio/migration/updater/device acceptance. Начата изолированная подготовка UI adapter, ещё не реализован/проверен.
