@@ -16,6 +16,13 @@
 
 ---
 
+## 2026-10-12 14:35 · Codex · ветка codex/native-full-core-090
+После Androidbridge4a8ae64 добавлены native live_actors:64cars/128people max, shared оригинальные модели sedan/suv/civilian/officer; остальные экипажи/службы/жители/foot officers, camera culling. 4054 исходных areas воды/парков/других зон из тойже карты. Canvas model previews заменены GodotSubViewport originals. UI view берёт residentPosition/real service&unit poses, симуляция не меняется. Android автоматически включает native UI;desktop --native-ui. Node career/screens tests + chief4stepwizard/department roster passed; native welcome/career/map/settings scene без ERROR.
+Исправлена ошибка отступа добавления vibration в controller после прошлого smoke: новый scene verifier отказывает если scene.campaign_ready=false; предыдущий script мог закончить0 при script errors. Коррекция включена здесь.
+Для полного native release остаются visual/touch/device QA, bridge elevation/night/weather/fireworks details. Скачаны officialGodot4.7.2 Android export templates для отдельного testAPK; стабильный0.2.9 не заменяется.
+
+---
+
 ## 2026-10-12 14:25 · Codex · ветка codex/native-full-core-090
 После sound checkpoint537bb3a добавлен Android Godot v2 bridge: проверенный ApkUpdater port Activity/Host (тот же HTTPS/size/hash/package/signature checks); установка ждёт native save success. Read-only hidden WebView для legacy localStorage same origin https://mercurypolice.com/game/, не рисует игру/не пишетстарые данные/внешние requests403. Pending/error gate не позволяет пустому новому save затереть старый; failed import сохраняется отдельно при явном продолжении. 12 старых0.7/0.8 payloads совпали полным состоянием; corrupt input blocks save. NDKr27c ARM64 DSP/Promise rebuilt; Java AAR compile passed(4deprecationwarnings).
 VIBRATE/optional pattern,device PSS/battery temp/thermal status; FPS обновляется независимо от UI snapshot. Godot scene welcome/career/map/settings smoke passed. OfficialGodot4.7 v2 plugin export packaging. В Android ещё НЕзапущено: old WebView origin/plugin registration/install dialog/background sound/Fold6 bothscreens. NativeAPK не выпущен,stable gate false.
