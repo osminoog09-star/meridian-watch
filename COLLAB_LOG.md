@@ -48,6 +48,17 @@
 
 ---
 
+## 2026-10-12 17:20 · Claude · ветка claude/native-sync (от codex/native-full-core-090, e99716c)
+**Указание владельца:** «помоги Codex, насколько хватит сил, чтобы потом не встать на половине». Работаю этапами, каждый этап — отдельный коммит с проверкой.
+**Этап 1 — нативное ядро на F–J.** В `Mercury_Native_Map_Checkpoint.zip`:
+- `simulation/source` = 0.9.2-a + F/G/H/I/J (`apply-claude-092.sh`, побайтно как `claude/release-j`), 59 модулей, новые arcs/rescue/rescue-scenes/agency/ems/ems-scenes/dispatch;
+- `game-core.js` и `modules.json` пересобраны той же командой esbuild 0.28.2 из README;
+- `source-sha256.json` — новые хэши; `make-parity-fixtures.mjs` дополнен фикстурами: спасатели и скорая (карьера и начальник), 112 (карьера с командами оператора), история города; `parity-fixtures.json` перегенерирован в Node.
+**Проверка:** Godot 4.7.2 Linux headless, `scripts/verify_simulation.gd` — **42/42 полных состояний QuickJS = Node** (было 36), сохранение и восстановление из резервной копии — да, тик P95 1,7 мс на Linux. Тот же импорт `--import` даёт exit 134, как у Codex, — на проверку не влияет.
+**Не трогал:** UI-адаптер, Android, подпись. Ветка Codex не изменена.
+
+---
+
 ## 2026-10-12 14:35 · Codex · ветка codex/native-full-core-090
 После Androidbridge4a8ae64 добавлены native live_actors:64cars/128people max, shared оригинальные модели sedan/suv/civilian/officer; остальные экипажи/службы/жители/foot officers, camera culling. 4054 исходных areas воды/парков/других зон из тойже карты. Canvas model previews заменены GodotSubViewport originals. UI view берёт residentPosition/real service&unit poses, симуляция не меняется. Android автоматически включает native UI;desktop --native-ui. Node career/screens tests + chief4stepwizard/department roster passed; native welcome/career/map/settings scene без ERROR.
 Исправлена ошибка отступа добавления vibration в controller после прошлого smoke: новый scene verifier отказывает если scene.campaign_ready=false; предыдущий script мог закончить0 при script errors. Коррекция включена здесь.
