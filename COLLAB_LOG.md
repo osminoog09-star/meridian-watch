@@ -16,6 +16,12 @@
 
 ---
 
+## 2026-10-12 14:25 · Codex · ветка codex/native-full-core-090
+После sound checkpoint537bb3a добавлен Android Godot v2 bridge: проверенный ApkUpdater port Activity/Host (тот же HTTPS/size/hash/package/signature checks); установка ждёт native save success. Read-only hidden WebView для legacy localStorage same origin https://mercurypolice.com/game/, не рисует игру/не пишетстарые данные/внешние requests403. Pending/error gate не позволяет пустому новому save затереть старый; failed import сохраняется отдельно при явном продолжении. 12 старых0.7/0.8 payloads совпали полным состоянием; corrupt input blocks save. NDKr27c ARM64 DSP/Promise rebuilt; Java AAR compile passed(4deprecationwarnings).
+VIBRATE/optional pattern,device PSS/battery temp/thermal status; FPS обновляется независимо от UI snapshot. Godot scene welcome/career/map/settings smoke passed. OfficialGodot4.7 v2 plugin export packaging. В Android ещё НЕзапущено: old WebView origin/plugin registration/install dialog/background sound/Fold6 bothscreens. NativeAPK не выпущен,stable gate false.
+
+---
+
 ## 2026-10-12 14:16 · Codex · ветка codex/native-full-core-090
 После UI checkpoint f8870be добавлен native звук: QuickJS.render_audio→C++ DSP→Godot AudioStreamGenerator,22050Hz,8192frames max,16 transient voices max,2s echo ring. Параметры из sound-synth/acoustics/audio-design/footsteps/vehicle-doors/onlookers. Подложки/двигатель/4стереоголоса (полиция+скорая+спасатели)/рация/шаги/двери/толпа/птицы/салют. Эхо5tap по SPACES (приближение, не точная convolution WebAudio). Проверки:8beds+4tones+acoustics original parameter graph; native102400samples peak 0.2367954403162, finite, отключение=тишина, render_only 60.761ms/4.6s sound (Linux, НЕFold6). Scene smoke без ошибок. Оптимизированы преобразования Dictionary вне sample loop.
 Android библиотека/плагин/перенос старого localStorage/апдейтер ещё выполняются; NDK загружается. Приёмка слух/Fold6/фон/тепло открыта, stable gate false.
