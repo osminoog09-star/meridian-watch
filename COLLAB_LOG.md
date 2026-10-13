@@ -1,3 +1,12 @@
+## 2026-10-13 · Codex · HUD layout verified
+
+- HUD regression with explicit empty storage passed at360/740: all4source stats and radio present, header/transport inside screen. Narrow footer was201px and initially overflowed; now pinned by actual measured height with matching content/map-control bounds. Existing scroll regression rerun. Source checkpoint first; signed APK build pending.
+
+## 2026-10-13 15:34 Tallinn · Codex · HUD continuation after environment reset
+
+- Restored committed4119f58 checkpoint from GitHub (local scratch reverted to older recovery source). Uncommitted morning HUD edits reconstructed. Add native_hud.gd: original clock/trust/budget/resolved, FPS under clock, brand/help/settings, two-line radio with journal button and opaque transport; updater in shift menu. No gameplay changes.
+- Identified test-fixture contamination: startCareer with an existing save opens confirmation; closing it aborts new game. HUD tests now initialize explicit empty storage before actions, never assume stale local test state. Validation pending.
+
 ## 2026-10-13 · Codex · scroll regression verified; signed test APK
 
 - Remote base ff036b550eeac152fcfaf658b99344b09ad8ce68 verified. No gameplay/core/Claude modifications.
