@@ -1,3 +1,16 @@
+## 2026-10-13 · Codex · native menu/cards test APK
+
+- Remote branch verified at dd2260cf7325c74470f4245cf8fa3efcc3a3449b. No Claude gameplay edits overwritten. Source baseline remains game0.9.2-a.
+- Diagnosis: generic renderer flattened rich buttons and ignored CSS hierarchy, details and progress widths. Ported original palette, rich card children with wrapping, selected states, heading/muted/status colors, responsive start/report/focus grids, wrapping action rows, bordered briefing cards, disclosure controls and meter/xp bars. Modal close is right-aligned, content centered with backdrop and blocks map input. Theme now cached. DOM serializer retains inline styles/open/placeholder.
+- Files: scripts/native_ui.gd, scripts/native_rich_button.gd, ui/ui-entry.js, rebuilt ui/ui-bundle.js, scripts/verify_native_presentation.gd.
+- Checks passed: Godot scene welcome/career/settings; startup recovery/modal isolation; 360/740 logical-width card wrapping and minimum height; disclosures/progress/map input isolation; Node UI career/first-week/five screens/300 frames/background save; native control/tip coverage. No real rendered-image, Fold6 FPS/thermal or physical installation claim.
+- APK 0.3.0-native-ui-test, versionCode11, 85279334 bytes, SHA256 92147412a847ead584a305b0cb96d1a01093022ec91b6cd940d6cd76866f7050. Signed with existing certificate, signature and16KiB alignment verified. DEX unchanged from recovery APK, fresh UI bundle matches source bytes, no duplicate ZIP entries. Manual test artifact; stable feed unchanged.
+- Full native acceptance remains open: all-screen visual matching, tables/compact HUD refinements, device save migration/audio/background/long-shift heat, native map visual gaps. This is a tested UI migration step, not completion of the entire port.
+
+## 2026-10-13 · Codex · native menu restoration in progress
+
+- Resume audit: previous transient UI edits and APK did not survive; workspace still contains recovery baseline. Reimplement semantic presentation from original CSS and DOM. No new APK or device acceptance claimed.
+
 ## 2026-10-12 19:28 Tallinn — Codex: restore missing gameplay controls; recovery test APK
 
 - Follow-up to 04eb2a18e7f6ebdcdbd61309ac8c0380aa39fece. Found actual missing migration UI: snapshot omitted entire unitSettings and used #tip instead of #tipCard. Render full left panel (identity, service/department, crews, auto/manual, district, rest). Restore tip card/dismissal and trust value. Tap map actor selects original unit/call/resident handler; drag/pinch does not select. Camera coordinate transform matches actors. Scroll speed row/map controls on small logical screens.
