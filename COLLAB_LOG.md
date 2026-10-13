@@ -1,3 +1,16 @@
+## 2026-10-13 · Codex · scroll regression verified; signed test APK
+
+- Remote base ff036b550eeac152fcfaf658b99344b09ad8ce68 verified. No gameplay/core/Claude modifications.
+- native_scroll.gd retains native touch/inertia handling, blocks renderer rebuilds during finger contact or motion, remembers per-screen position, restores after two layout passes with generation guard. Horizontal panning disabled;10px deadzone. Close button outside scrolling content. Noninteractive labels ignore pointer input. Financial dl grids and narrow-screen diagnostic table cards ported.
+- Godot regression passed at360x640: overflowing settings fixture, real retained child identity while touch/inertia active, same-page150px restoration, settings220px return, menu starts0, close stays fixed. Previous360/740 presentation test and recovery/HUD isolation passed. Physical Fold6 gesture feel remains unverified.
+- APK 0.3.0-native-scroll-test, versionCode11, 85287937bytes, SHA256 11d5da7f371be597b350c57b8754ab4f0638a0f9f77b266661abf8b8f2d56e63. Same signer certificate; apksigner and16KiB ZIP alignment passed. New native_scroll included; UI bundle and Android DEX unchanged; no duplicate APK entries. APK/ZIP delivered as test build; stable feed unchanged. Full native/device/visual acceptance still open.
+- Handoff: source checkpoint and COLLAB_LOG to codex/native-full-core-090/PR11. No main push, no website publication, no private signing material in checkpoint.
+
+## 2026-10-13 09:33 Tallinn · Codex · scroll continuity and remaining screen structures
+
+- Owner reports inconvenient menu scrolling. Audited ff036b5 renderer: wholesale rebuild during touch/inertia, one shared scroll offset for unrelated screens, close button scrolls away, restore occurs before card layout. Implement native-scroll guard, per-page positions, two-pass guarded restoration, fixed close action and horizontal-scroll suppression. Preserve built-in Godot touch/inertia rather than add conflicting gesture recognizer.
+- Continuing UI transfer: financial definition grids and labeled diagnostic table rows for narrow screens. Validation/build pending.
+
 ## 2026-10-13 · Codex · native menu/cards test APK
 
 - Remote branch verified at dd2260cf7325c74470f4245cf8fa3efcc3a3449b. No Claude gameplay edits overwritten. Source baseline remains game0.9.2-a.
