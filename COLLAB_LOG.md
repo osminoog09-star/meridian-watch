@@ -1,3 +1,8 @@
+## 2026-10-13 · Codex · signed HUD APK
+
+- Signed APK 0.3.0-native-hud-test, game0.9.2-a, versionCode11, 85292436bytes, SHA256 533bd3c0820b2a33cfa6cf7243d8cfae4df2bde46e3e3de4db9c1f412251cd99. Existing certificate preserved; apksigner and16KiB ZIP alignment verified. Fresh native_hud.gdc included; JS bundle and DEX unchanged from scroll build; no duplicate ZIP entries.
+- New-game HUD360/740 and scroll regression passed. Source checkpoint committed separately. APK/ZIP owner artifacts; stable feed unchanged. Full native/Fold6 visual, thermal, migration/audio and long-shift acceptance still open; no claim of completed port.
+
 ## 2026-10-13 · Codex · HUD layout verified
 
 - HUD regression with explicit empty storage passed at360/740: all4source stats and radio present, header/transport inside screen. Narrow footer was201px and initially overflowed; now pinned by actual measured height with matching content/map-control bounds. Existing scroll regression rerun. Source checkpoint first; signed APK build pending.
