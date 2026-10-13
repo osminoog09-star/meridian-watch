@@ -1,3 +1,16 @@
+## 2026-10-13 · Codex · full native shift parity and event queue repair
+
+- Node real UI handlers: career and chief completed12h scheduled shift at60x/45worldrate; career28resolved/1missed,chief17/6; shift2, full-state restart and export/import exact. Godot QuickJS replayed1029 UI requests; final full states equal to Node within1e-8, both modes. Tests are committed and reproducible.
+- Found native autosave lost camera commands: action snapshot drained JS queue, then save snapshot overwrote pending native queue. Controller now appends commands, including asynchronous Promise results, until native consumer drains. Native contract regression passes actual quarter button across autosave, HTML-root huge/contrast, disabled inputs/options and multiline readonly reports.
+- Quality preferences now control native model representation/shadows/city LOD; adaptive source cap1..2 maps to3Dscale0.5..1 without scaling UI. Native walking network/source Dijkstra now draws paths and A/B selected route. Original core/Claude modules unchanged.
+- HUD regression passed360/740. Full native cycle passed again after queue correction. Map control integration verification recorded separately below. No Fold6/physical/GPU acceptance claim; stable feed unchanged, signed APK pending.
+
+## 2026-10-13 20:45 Tallinn · Codex · native functional audit resumed
+
+- Restored remote d60bef9 checkpoint (branch head161e4a7); transient workspace had reverted to Oct12. Previous uncommitted cycle tests lost, reconstructing and rerunning, not counting old unrecorded outcomes.
+- Native adapter now serializes HTML-root accessibility classes, disabled/readonly attributes, decision jump, visual call signal and device-test bar. Godot respects disabled checkboxes/sliders/select/options and readonly multiline text. Clipboard bridged to OS. Decision action displayed above footer.
+- Camera reset/city/quarter/locate now stop following; previous native camera snapped back to patrol after these actions. Both adapter/native state corrected. Gameplay modules unchanged. Validation in progress; no new APK or stable feed promotion.
+
 ## 2026-10-13 · Codex · signed HUD APK
 
 - Signed APK 0.3.0-native-hud-test, game0.9.2-a, versionCode11, 85292436bytes, SHA256 533bd3c0820b2a33cfa6cf7243d8cfae4df2bde46e3e3de4db9c1f412251cd99. Existing certificate preserved; apksigner and16KiB ZIP alignment verified. Fresh native_hud.gdc included; JS bundle and DEX unchanged from scroll build; no duplicate ZIP entries.
