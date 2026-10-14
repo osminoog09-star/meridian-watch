@@ -1,3 +1,10 @@
+## 2026-10-14 · Codex · signed native vehicle presentation APK
+
+- Source checkpoint479d93c committed to codex/native-full-core-090. Original Claude simulation unchanged. Native vehicle liveries/kits, original hinged door geometry, garage paint/kit/rotation preview and per-view actor/follow camera update included.
+- Full career/chief/manual three-stage replay1064requests passes exact Node final-state comparison. Native vehicle geometry/doors, source garage preview/save, map-view visibility, native map controls and moving-patrol frame sync passed. Original simulation remains fixed-step; no interpolated shortcut through road corners.
+- APK0.3.0-native-vehicles-test, game0.9.2-a, versionCode11, size85353704bytes, SHA256 2739b8a57dedf3853e4421042676d16cec655fd52b5dd3fe7722e4228f7c7f8b. Existing signer, v2/v3 signature,16KiB alignment, CRC/unique ZIP entries, current UI/core byte-match, vehicle_skin compiled script and unchanged Android DEX verified.
+- Migration remains incomplete: human poses/colors, full lighting/bridge approaches and complete rendered menu equivalence still open. Physical Fold6 both screens, old-save migration, audio/background, installer and long-shift FPS/thermal acceptance unavailable here. Stable feed unchanged; no web publication or new roadmap work.
+
 ## 2026-10-14 · Codex · migration-only priority and vehicle presentation
 
 - Owner explicitly requires complete existing-game migration before any new roadmap feature. Keep migration gate false and do not start feature roadmap. Continue from1484521.
