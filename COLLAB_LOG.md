@@ -1,3 +1,10 @@
+## 2026-10-14 14:36 Tallinn · Codex · signed native scenes APK
+
+- Workspace cleanup removed local build. Recovered source checkpoint2a4bcbc from remote branch and previous cycle APK/signing kit privately; original APK SHA verified. Rebuilt from recovered source with official Godot4.7.2. No source/gameplay loss; no unverified old binary reused as new output.
+- APK 0.3.0-native-scenes-test, game0.9.2-a, versionCode11, 85345125bytes, SHA256 c007d82bee1ca07a327a3c721afdb0ab10afe3ff5822694cc5a6e7b2ceae345b. Existing signer, v2/v3,16KiB alignment, ZIP CRC/uniqueness, UI/core byte-match and unchanged Android DEX verified.
+- Restored Node map-view tests and native map/scene/controls tests passed. Full-cycle replay after recovery passed1064requests for career/chief/manual three-stage call, exact Node final states. Stable feed unchanged. Native call symbols, full fleet arrows/IDs/selection, exact original route, scene anchors, participants/chase car, crew visibility and police SUV model selection included.
+- Physical Fold6/display/FPS/thermal/audio/migration/installer acceptance remains open. Native camera/actor updates remain10Hz; exact garage paint/livery/door animation and complete visual matching not claimed.
+
 ## 2026-10-14 · Codex · native call/scene map verified
 
 - Restore source sceneAnchor and visibility through ui/map-view.js: active calls, visible incident participants, pursuit cars, original crewPresentation, road route, police SUV selection, emergency arrow state. Original Claude simulation modules unchanged.
