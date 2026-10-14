@@ -1,3 +1,8 @@
+## 2026-10-14 · Codex · human presentation transfer in progress
+
+- Continue owner migration-first instruction from3ba97f6. Audit found native people use one static mesh and fallback material names (pants/cloth) instead of original trousers/uniform; crewPresentation poses and residentProfile colours are dropped.
+- Transfer original modelPalette and posedVertex rigid transforms, preserving save/core logic. Use reusable grouped geometry and distance-driven walking phase; verify against source vertices. Source colour/pose/read-only contracts and13600 original vertex samples passed. Native near/far LOD, distance-driven gait, pause, pooling, crowd model/phone and map controls passed. Whole-shift replay/build still in progress. No new roadmap work or device acceptance claim.
+
 ## 2026-10-14 · Codex · signed native vehicle presentation APK
 
 - Source checkpoint479d93c committed to codex/native-full-core-090. Original Claude simulation unchanged. Native vehicle liveries/kits, original hinged door geometry, garage paint/kit/rotation preview and per-view actor/follow camera update included.
