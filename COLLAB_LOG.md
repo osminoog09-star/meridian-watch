@@ -1,3 +1,11 @@
+## 2026-10-14 · Codex · signed native cycle/graphics test APK
+
+- Continue remote280cbac. Godot full-state replay now1064requests: career/chief full scheduled shift, report/next shift/restart/export/import plus actual manual dispatch and all3dialogue stages.12legacy fixtures passed; corrupt input blocks save. Scroll/HUD360/740/map-controls/effects tests passed. No gameplay module rewrite.
+- Native diagnostics now uses Godot frame intervals and Android PSS/battery temperature/thermal status. Synthetic tour tests verify cancel/restore/export/clipboard, not phone FPS. Weather restored in header; fullscreen button now expands map and restores HUD; expired toasts removed.
+- Bounded native night details192windows/48lamps,128calendar-driven New Year sparks, calm disables moving effects. Distinct ambulance/rescue bodies;53bridge segment deck elevation applied to actors. Headless effects/finite transforms/caps/day/night/calm tests pass; GPU appearance remains unverified.
+- APK0.3.0-native-cycle-test, versionCode11, 85336701bytes, SHA256 9be3765e299055bada0140318e39a401372b652d95a1e0dc953716daad1976cd. Same certificate, signature/16KiB alignment/ZIP uniqueness passed. UI/core bundles byte-match current workspace; DEX unchanged from verified HUD host. New native scripts included. Rebuilt after fullscreen/weather/toast fixes; earlier unsigned/source intermediate is superseded.
+- Source and build instructions retained in checkpoint. APK/ZIP saved successfully; SHA256 and ZIP integrity verified after saving. Stable feed unchanged; no web publication. Physical Fold6 both displays/long-shift FPS/heat/audio/background/migration/installer still NOT tested. Full visual equivalence and bridge approach ramps remain unaccepted; migration-gate remains false. Do not merge as completed stable native port.
+
 ## 2026-10-13 · Codex · full native shift parity and event queue repair
 
 - Node real UI handlers: career and chief completed12h scheduled shift at60x/45worldrate; career28resolved/1missed,chief17/6; shift2, full-state restart and export/import exact. Godot QuickJS replayed1029 UI requests; final full states equal to Node within1e-8, both modes. Tests are committed and reproducible.
