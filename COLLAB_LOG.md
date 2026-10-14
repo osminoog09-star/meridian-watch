@@ -1,3 +1,13 @@
+## 2026-10-14 · Codex · native call/scene map verified
+
+- Restore source sceneAnchor and visibility through ui/map-view.js: active calls, visible incident participants, pursuit cars, original crewPresentation, road route, police SUV selection, emergency arrow state. Original Claude simulation modules unchanged.
+- New native map_annotations draws all patrol arrows below14px, numbered/selected patrols, selected original route and anchored call icons. Picking uses those same projected positions; hidden/home/resolved entities cannot steal taps. Empty campaign clears overlays. Bridge-height cache bounded8192.
+- Node map-view read-only/visibility/crew tests and Godot annotations/scene pooling tests passed. Full career/chief/manual dialogue replay1064requests still exactly matches Node. Native map controls passed after fixing nullable selectedCall conversion. APK pending; physical/GPU acceptance still open.
+
+## 2026-10-14 09:20 Tallinn · Codex · map presentation audit
+
+- Remote PR11 still ends at0d65b76; continue same branch. Found missing native call icons, source sceneAnchor, selected-route overlay, incident participants and full-fleet small-scale markers. Hidden/resolved/home actors could intercept taps. Restoring original presentation semantics in native adapters only; no Claude simulation edits. Verification and APK pending.
+
 ## 2026-10-14 · Codex · signed native cycle/graphics test APK
 
 - Continue remote280cbac. Godot full-state replay now1064requests: career/chief full scheduled shift, report/next shift/restart/export/import plus actual manual dispatch and all3dialogue stages.12legacy fixtures passed; corrupt input blocks save. Scroll/HUD360/740/map-controls/effects tests passed. No gameplay module rewrite.
