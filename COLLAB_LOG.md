@@ -1,3 +1,10 @@
+## 2026-10-14 · Codex · migration-only priority and vehicle presentation
+
+- Owner explicitly requires complete existing-game migration before any new roadmap feature. Keep migration gate false and do not start feature roadmap. Continue from1484521.
+- Transfer source vehicleDoors timing and modelPalette/liveries/kit selection into native vehicle presentation. Split original hinged model into body/doors; bounded mesh cache96, no procedural replacement for original geometry. Source and native geometry/hinge tests passed for sedan/SUV and all kits. Garage rotation/paint/kit preview and save passed; civilian models omit police hardware. Native map controls passed.
+- Actor/camera presentation now consumes each authoritative view without the former extra100ms gate. Moving-patrol test passes5 changed poses, all between old timer boundaries; original10Hz simulation stays unchanged (no invented interpolation/corner cutting). Fixture explicitly waits for the real initial briefing to finish.
+- Full-cycle replay and signed APK pending. MIGRATION_REMAINING.md records outstanding visual/device acceptance; no complete-port claim.
+
 ## 2026-10-14 14:36 Tallinn · Codex · signed native scenes APK
 
 - Workspace cleanup removed local build. Recovered source checkpoint2a4bcbc from remote branch and previous cycle APK/signing kit privately; original APK SHA verified. Rebuilt from recovered source with official Godot4.7.2. No source/gameplay loss; no unverified old binary reused as new output.
