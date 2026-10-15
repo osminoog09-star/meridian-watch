@@ -16,6 +16,11 @@
 
 ---
 
+## 2026-10-16 01:10 Tallinn · Claude · ветка claude/release-j
+
+- **J5:** в гараже («Настройка автомобиля») пожарная машина и скорая рисовались полицейским седаном. `garageModel(type)` в app.js берёт модель машины (engine/ladder/tanker/ambulance/resus; rapid → suv).
+- `patches/claude-release-j5-090.patch` + шаг `release-j5`; новый `tests/garage-models.test.mjs`. `npm test` 574/574; цепочка j2→j5 на чистом 0.9.2-a + F–J1 даёт app.js байт в байт. Веб-снимки гаража спасателей и скорой проверены.
+
 ## 2026-10-16 00:35 Tallinn · Claude · ветка claude/release-j
 
 - **J4 — спасатели и скорая без полицейских текстов и правил:**
