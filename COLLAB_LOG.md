@@ -1,3 +1,13 @@
+## 2026-10-15 · Codex · token-efficient migration workflow
+
+- Owner requests economical token use. Work in related migration blocks; reuse prior source analysis; targeted regression checks during edits, one full audit before APK. Keep patrol-selection regression mandatory for UI changes. Concise output and updates; persist each verified block in branch/PR. Do not start new roadmap features.
+
+## 2026-10-15 · Codex · native vehicle light transfer
+
+- Continue migration only from e764661. Read source cityLighting/headlightBeams/modelPalette and service siren eligibility. Transfer seasonal darkness and original separate emitter positions into Godot illumination; bounded reusable lights with no shadow maps, distance/quality/settings culling. Preserve gameplay/save modules and patrol event fix. 32/32 automated groups passed, including actual Godot retained-patrol button, full 1064-request UI replay, 36 core fixtures, old saves, source lighting 288 seasonal samples and native illumination settings/pooling/vehicle integration. Device and GPU acceptance not claimed.
+- Two original headlamp emitter positions, native road illumination and alternating police/service beacon illumination; seasonal dawn/dusk ambient transitions. Four nearest light rigs (two in eco), no shadow maps; overview/simple/settings cull lights. Calm mode retains steady headlights while suppressing flashes.
+- Signed APK0.3.0-native-lights-test, game0.9.2-a, versionCode11,85716976bytes, SHA256 064777032ebd90f9fe50fb4cfecd6b03e94d16215f4d83ab889bf87f40ad0f04. Existing signature v2/v3,16KiB alignment, ZIP CRC, compiled lighting script and source UI/core match verified. Stable feed unchanged.
+
 ## 2026-10-15 · Codex · patrol selection regression
 
 - Owner reports patrol cannot be selected; migration-first remains mandatory. Reproduced: native patrol button retained during touch outlives source DOM replacement; click on detached element cannot reach delegated units handler. Existing tests selected via direct map API and missed this path.

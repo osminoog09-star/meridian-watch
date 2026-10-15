@@ -1,0 +1,10 @@
+{
+  "versionName": "0.3.0-native-lights-test",
+  "versionCode": 11,
+  "game": "0.9.2-a",
+  "size": 85716976,
+  "sha256": "064777032ebd90f9fe50fb4cfecd6b03e94d16215f4d83ab889bf87f40ad0f04",
+  "signer_sha256": "601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358",
+  "stable_feed_changed": false,
+  "device_acceptance": false
+}
