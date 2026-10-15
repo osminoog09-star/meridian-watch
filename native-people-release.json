@@ -1,0 +1,10 @@
+{
+  "versionName": "0.3.0-native-people-test",
+  "versionCode": 11,
+  "game": "0.9.2-a",
+  "size": 85567077,
+  "sha256": "b0374ab2c5b8a1e11839d414bcb84c7385d9de943b2f64e9dff29df82b8b9172",
+  "signer_sha256": "601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358",
+  "stable_feed_changed": false,
+  "device_acceptance": false
+}

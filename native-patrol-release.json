@@ -1,0 +1,10 @@
+{
+  "versionName": "0.3.0-native-patrol-test",
+  "versionCode": 11,
+  "game": "0.9.2-a",
+  "size": 85708377,
+  "sha256": "9aa983ddf9787855f4bdad06c4d7d8301024f27a6730ba751122a90303ee34bb",
+  "signer_sha256": "601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358",
+  "stable_feed_changed": false,
+  "device_acceptance": false
+}

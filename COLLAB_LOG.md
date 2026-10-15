@@ -1,3 +1,19 @@
+## 2026-10-15 · Codex · patrol selection regression
+
+- Owner reports patrol cannot be selected; migration-first remains mandatory. Reproduced: native patrol button retained during touch outlives source DOM replacement; click on detached element cannot reach delegated units handler. Existing tests selected via direct map API and missed this path.
+- Resolve replaced data-bound controls by exact semantic attributes within original container; forward identity from Godot. Removed/ambiguous/disabled targets safely refresh without firing a different action. Regression reproduced before fix, then Node and real Godot Button viewport input tests passed at 360/740px, including retained source DOM replacement and correct follow target. Full audit 29/29 plus added Godot selection regression =30/30 checks. 1064-request career/chief/manual replay remains exact to Node; old-save and scroll tests pass. Physical Fold6/GPU acceptance remains open.
+- Signed APK0.3.0-native-patrol-test / game0.9.2-a / versionCode11:85708377bytes, SHA256 9aa983ddf9787855f4bdad06c4d7d8301024f27a6730ba751122a90303ee34bb. Existing signer verified v2/v3,16KiB alignment, ZIP CRC/unique entries, UI/core byte-match and unchanged Android DEX. Includes original human poses/colours, participant legacy-ID fallback, connected bridge ramps and previous vehicle transfer. Stable feed unchanged.
+
+## 2026-10-14 23:28 Tallinn · Codex · full transferred-functionality audit
+
+- Owner requests audit all transferred work before continuing migration. Run all available Node and Godot checks with isolated save directories, fail on script errors even with exit0; retain logs/result under audit/. Real Fold6 and GPU-rendered visual acceptance remain separate and unverified.
+- Audit completed:28/28 groups passed after one compatibility fix. New human presenter assumed participant.id; restored incident-local index fallback for older/minimal scene records. Rechecked scene annotations and human transforms/pooling.36QuickJS fixtures,12legacy migrations,1064full-UI requests, audio buffer generation, scrolling/layout, weather/effects and city geometry pass. These are automated/headless checks, not phone/GPU acceptance.
+- People source checkpoint f5175e7 is committed; signed people APK0.3.0-native-people-test/versionCode11, SHA256 b0374ab2c5b8a1e11839d414bcb84c7385d9de943b2f64e9dff29df82b8b9172, 85567077bytes, same signer, saved APK/ZIP. Full1064-request replay passed before interruption; current full audit revalidates remaining native adapters and pending bridge changes.
+
+## 2026-10-14 · Codex · connected bridge approaches in progress
+
+- After human presentation verification, address native-only elevation discontinuity: former bridge surface/actors jumped0→2.5m. Derive40m approach profiles along existing connected roads, preserving routing and source coordinates. Generated53bridge /456profiled roads /669elevated pieces. Shared height profiles drive native mesh and actor height. Tests/build pending.
+
 ## 2026-10-14 · Codex · human presentation transfer in progress
 
 - Continue owner migration-first instruction from3ba97f6. Audit found native people use one static mesh and fallback material names (pants/cloth) instead of original trousers/uniform; crewPresentation poses and residentProfile colours are dropped.
