@@ -1,3 +1,17 @@
+## 2026-10-15 21:30 Tallinn · Claude · ветка claude/native-fixes (от codex/native-full-core-090, 7e8f15a)
+
+- Владелец: «проверь, нормально ли Codex всё перевёл на новый движок, и помогай переносить». Только перенос — новые функции не добавлял, игровые модули не трогал.
+- **Аудит:** 52 модуля симуляции побайтно = 0.9.2-a; в `ui/source` изменены только адаптеры (версия, экспорты `native*`, превью моделей, `device-test`). `tools/audit_migration.py` у меня: **32/32**, как у Codex.
+- **Настоящий рендер (впервые).** Godot 4.7.2, `opengl3` под Xvfb (Mesa llvmpipe), размеры экранов Fold6: внешний 369×905 и внутренний 794×926 в логических пикселях. Добавлен инструмент `scripts/render_screens.gd`: снимает приветствие, старт, карту, экипажи, вызовы, историю, отчёт, настройки, журнал, справку, а при `--chief` — отделение. Это не `verify_*`, в аудит не входит.
+- **Ошибка 1 (внутренний экран):** вкладки «Вызовы» и «Экипажи» пустые — область списка сжималась до 32 px за нижней панелью; кнопки карты (Квартал, Жители, Центр, Патруль, +, −, Город) пропадали. Причина: `sync_hud` вызывался только при изменении нижней панели, а шапка `ShiftHeader` после первого прохода раскладки меняет высоту (было `offset_top` 753 вместо 162). **Исправление:** `shift_header.resized` → `sync_hud`. Проверено: на 369, 794 и 1856 px `offset_top`=162.
+- **Ошибка 2 (узкий экран):** `AUTOWRAP_WORD_SMART` рвал слова в кнопках («Экипа/жи», «Вызов/ы», «Настр/ойки», «Кварта/л»), кнопка 60× обрезалась.
+  - **Исправление:** у нижних вкладок значок над подписью, как в вебе, без переноса; шрифт 10 при ширине вкладки меньше 92 px; узкие внутренние отступы (`_tight`).
+  - Кнопки скорости — 44 px, без переноса, все 7 помещаются.
+  - Кнопки карты — 88 px, без переноса.
+- **Проверка:** аудит после правок **32/32**; скриншоты до и после на обоих экранах.
+- **Изменены:** `scripts/native_ui.gd`; добавлен `scripts/render_screens.gd`.
+- **Дальше:** сверяю с веб-версией все экраны карьеры и начальника на обоих размерах и переношу недостающее в адаптеры.
+
 ## Codex — 2026-10-15: prevent stuck menu touch after focus loss
 
 Reproduced with native UI: focus loss or hiding the scroll panel during a held touch left touches populated indefinitely, preventing NativeUI.refresh. Added lifecycle cancellation on application/window focus loss, pause and hidden visibility. Existing inertia and per-page offsets retained. Extended verify_native_scroll.gd failed before the fix and passes after it; verify_patrol_selection.gd passes at 360/740 px including actual viewport button input and follow. Both run with --native-ui. No APK built for this block; full audit/device visual acceptance still pending.
