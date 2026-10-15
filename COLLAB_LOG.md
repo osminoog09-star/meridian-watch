@@ -1,3 +1,7 @@
+## Codex — 2026-10-15: lamp surface transfer (targeted checks passed, not released)
+
+Separated original headlight/tail-light faces into unshaded vertex-colour meshes; active beacon lenses use the same material, inactive lenses retain body lighting. Original face geometry, kits and door transforms are preserved; pooled extra meshes are hidden on reuse. Extended vehicle presentation regression to check face totals, material modes and pool reset. Node garage/source fixture test passes. Godot was restored from the official 4.7.2 archive after detecting a truncated local executable. Native vehicle presentation regression passes. No APK or stable feed changed. Previous 32/32 full audit predates this block; final release/device acceptance is still required.
+
 ## 2026-10-15 · Codex · token-efficient migration workflow
 
 - Owner requests economical token use. Work in related migration blocks; reuse prior source analysis; targeted regression checks during edits, one full audit before APK. Keep patrol-selection regression mandatory for UI changes. Concise output and updates; persist each verified block in branch/PR. Do not start new roadmap features.
