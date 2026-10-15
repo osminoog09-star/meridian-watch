@@ -1,3 +1,182 @@
+## Codex — 2026-10-15: prevent stuck menu touch after focus loss
+
+Reproduced with native UI: focus loss or hiding the scroll panel during a held touch left touches populated indefinitely, preventing NativeUI.refresh. Added lifecycle cancellation on application/window focus loss, pause and hidden visibility. Existing inertia and per-page offsets retained. Extended verify_native_scroll.gd failed before the fix and passes after it; verify_patrol_selection.gd passes at 360/740 px including actual viewport button input and follow. Both run with --native-ui. No APK built for this block; full audit/device visual acceptance still pending.
+
+## Codex — 2026-10-15: lamp surface transfer (targeted checks passed, not released)
+
+Separated original headlight/tail-light faces into unshaded vertex-colour meshes; active beacon lenses use the same material, inactive lenses retain body lighting. Original face geometry, kits and door transforms are preserved; pooled extra meshes are hidden on reuse. Extended vehicle presentation regression to check face totals, material modes and pool reset. Node garage/source fixture test passes. Godot was restored from the official 4.7.2 archive after detecting a truncated local executable. Native vehicle presentation regression passes. No APK or stable feed changed. Previous 32/32 full audit predates this block; final release/device acceptance is still required.
+
+## 2026-10-15 · Codex · token-efficient migration workflow
+
+- Owner requests economical token use. Work in related migration blocks; reuse prior source analysis; targeted regression checks during edits, one full audit before APK. Keep patrol-selection regression mandatory for UI changes. Concise output and updates; persist each verified block in branch/PR. Do not start new roadmap features.
+
+## 2026-10-15 · Codex · native vehicle light transfer
+
+- Continue migration only from e764661. Read source cityLighting/headlightBeams/modelPalette and service siren eligibility. Transfer seasonal darkness and original separate emitter positions into Godot illumination; bounded reusable lights with no shadow maps, distance/quality/settings culling. Preserve gameplay/save modules and patrol event fix. 32/32 automated groups passed, including actual Godot retained-patrol button, full 1064-request UI replay, 36 core fixtures, old saves, source lighting 288 seasonal samples and native illumination settings/pooling/vehicle integration. Device and GPU acceptance not claimed.
+- Two original headlamp emitter positions, native road illumination and alternating police/service beacon illumination; seasonal dawn/dusk ambient transitions. Four nearest light rigs (two in eco), no shadow maps; overview/simple/settings cull lights. Calm mode retains steady headlights while suppressing flashes.
+- Signed APK0.3.0-native-lights-test, game0.9.2-a, versionCode11,85716976bytes, SHA256 064777032ebd90f9fe50fb4cfecd6b03e94d16215f4d83ab889bf87f40ad0f04. Existing signature v2/v3,16KiB alignment, ZIP CRC, compiled lighting script and source UI/core match verified. Stable feed unchanged.
+
+## 2026-10-15 · Codex · patrol selection regression
+
+- Owner reports patrol cannot be selected; migration-first remains mandatory. Reproduced: native patrol button retained during touch outlives source DOM replacement; click on detached element cannot reach delegated units handler. Existing tests selected via direct map API and missed this path.
+- Resolve replaced data-bound controls by exact semantic attributes within original container; forward identity from Godot. Removed/ambiguous/disabled targets safely refresh without firing a different action. Regression reproduced before fix, then Node and real Godot Button viewport input tests passed at 360/740px, including retained source DOM replacement and correct follow target. Full audit 29/29 plus added Godot selection regression =30/30 checks. 1064-request career/chief/manual replay remains exact to Node; old-save and scroll tests pass. Physical Fold6/GPU acceptance remains open.
+- Signed APK0.3.0-native-patrol-test / game0.9.2-a / versionCode11:85708377bytes, SHA256 9aa983ddf9787855f4bdad06c4d7d8301024f27a6730ba751122a90303ee34bb. Existing signer verified v2/v3,16KiB alignment, ZIP CRC/unique entries, UI/core byte-match and unchanged Android DEX. Includes original human poses/colours, participant legacy-ID fallback, connected bridge ramps and previous vehicle transfer. Stable feed unchanged.
+
+## 2026-10-14 23:28 Tallinn · Codex · full transferred-functionality audit
+
+- Owner requests audit all transferred work before continuing migration. Run all available Node and Godot checks with isolated save directories, fail on script errors even with exit0; retain logs/result under audit/. Real Fold6 and GPU-rendered visual acceptance remain separate and unverified.
+- Audit completed:28/28 groups passed after one compatibility fix. New human presenter assumed participant.id; restored incident-local index fallback for older/minimal scene records. Rechecked scene annotations and human transforms/pooling.36QuickJS fixtures,12legacy migrations,1064full-UI requests, audio buffer generation, scrolling/layout, weather/effects and city geometry pass. These are automated/headless checks, not phone/GPU acceptance.
+- People source checkpoint f5175e7 is committed; signed people APK0.3.0-native-people-test/versionCode11, SHA256 b0374ab2c5b8a1e11839d414bcb84c7385d9de943b2f64e9dff29df82b8b9172, 85567077bytes, same signer, saved APK/ZIP. Full1064-request replay passed before interruption; current full audit revalidates remaining native adapters and pending bridge changes.
+
+## 2026-10-14 · Codex · connected bridge approaches in progress
+
+- After human presentation verification, address native-only elevation discontinuity: former bridge surface/actors jumped0→2.5m. Derive40m approach profiles along existing connected roads, preserving routing and source coordinates. Generated53bridge /456profiled roads /669elevated pieces. Shared height profiles drive native mesh and actor height. Tests/build pending.
+
+## 2026-10-14 · Codex · human presentation transfer in progress
+
+- Continue owner migration-first instruction from3ba97f6. Audit found native people use one static mesh and fallback material names (pants/cloth) instead of original trousers/uniform; crewPresentation poses and residentProfile colours are dropped.
+- Transfer original modelPalette and posedVertex rigid transforms, preserving save/core logic. Use reusable grouped geometry and distance-driven walking phase; verify against source vertices. Source colour/pose/read-only contracts and13600 original vertex samples passed. Native near/far LOD, distance-driven gait, pause, pooling, crowd model/phone and map controls passed. Whole-shift replay/build still in progress. No new roadmap work or device acceptance claim.
+
+## 2026-10-14 · Codex · signed native vehicle presentation APK
+
+- Source checkpoint479d93c committed to codex/native-full-core-090. Original Claude simulation unchanged. Native vehicle liveries/kits, original hinged door geometry, garage paint/kit/rotation preview and per-view actor/follow camera update included.
+- Full career/chief/manual three-stage replay1064requests passes exact Node final-state comparison. Native vehicle geometry/doors, source garage preview/save, map-view visibility, native map controls and moving-patrol frame sync passed. Original simulation remains fixed-step; no interpolated shortcut through road corners.
+- APK0.3.0-native-vehicles-test, game0.9.2-a, versionCode11, size85353704bytes, SHA256 2739b8a57dedf3853e4421042676d16cec655fd52b5dd3fe7722e4228f7c7f8b. Existing signer, v2/v3 signature,16KiB alignment, CRC/unique ZIP entries, current UI/core byte-match, vehicle_skin compiled script and unchanged Android DEX verified.
+- Migration remains incomplete: human poses/colors, full lighting/bridge approaches and complete rendered menu equivalence still open. Physical Fold6 both screens, old-save migration, audio/background, installer and long-shift FPS/thermal acceptance unavailable here. Stable feed unchanged; no web publication or new roadmap work.
+
+## 2026-10-14 · Codex · migration-only priority and vehicle presentation
+
+- Owner explicitly requires complete existing-game migration before any new roadmap feature. Keep migration gate false and do not start feature roadmap. Continue from1484521.
+- Transfer source vehicleDoors timing and modelPalette/liveries/kit selection into native vehicle presentation. Split original hinged model into body/doors; bounded mesh cache96, no procedural replacement for original geometry. Source and native geometry/hinge tests passed for sedan/SUV and all kits. Garage rotation/paint/kit preview and save passed; civilian models omit police hardware. Native map controls passed.
+- Actor/camera presentation now consumes each authoritative view without the former extra100ms gate. Moving-patrol test passes5 changed poses, all between old timer boundaries; original10Hz simulation stays unchanged (no invented interpolation/corner cutting). Fixture explicitly waits for the real initial briefing to finish.
+- Full-cycle replay and signed APK pending. MIGRATION_REMAINING.md records outstanding visual/device acceptance; no complete-port claim.
+
+## 2026-10-14 14:36 Tallinn · Codex · signed native scenes APK
+
+- Workspace cleanup removed local build. Recovered source checkpoint2a4bcbc from remote branch and previous cycle APK/signing kit privately; original APK SHA verified. Rebuilt from recovered source with official Godot4.7.2. No source/gameplay loss; no unverified old binary reused as new output.
+- APK 0.3.0-native-scenes-test, game0.9.2-a, versionCode11, 85345125bytes, SHA256 c007d82bee1ca07a327a3c721afdb0ab10afe3ff5822694cc5a6e7b2ceae345b. Existing signer, v2/v3,16KiB alignment, ZIP CRC/uniqueness, UI/core byte-match and unchanged Android DEX verified.
+- Restored Node map-view tests and native map/scene/controls tests passed. Full-cycle replay after recovery passed1064requests for career/chief/manual three-stage call, exact Node final states. Stable feed unchanged. Native call symbols, full fleet arrows/IDs/selection, exact original route, scene anchors, participants/chase car, crew visibility and police SUV model selection included.
+- Physical Fold6/display/FPS/thermal/audio/migration/installer acceptance remains open. Native camera/actor updates remain10Hz; exact garage paint/livery/door animation and complete visual matching not claimed.
+
+## 2026-10-14 · Codex · native call/scene map verified
+
+- Restore source sceneAnchor and visibility through ui/map-view.js: active calls, visible incident participants, pursuit cars, original crewPresentation, road route, police SUV selection, emergency arrow state. Original Claude simulation modules unchanged.
+- New native map_annotations draws all patrol arrows below14px, numbered/selected patrols, selected original route and anchored call icons. Picking uses those same projected positions; hidden/home/resolved entities cannot steal taps. Empty campaign clears overlays. Bridge-height cache bounded8192.
+- Node map-view read-only/visibility/crew tests and Godot annotations/scene pooling tests passed. Full career/chief/manual dialogue replay1064requests still exactly matches Node. Native map controls passed after fixing nullable selectedCall conversion. APK pending; physical/GPU acceptance still open.
+
+## 2026-10-14 09:20 Tallinn · Codex · map presentation audit
+
+- Remote PR11 still ends at0d65b76; continue same branch. Found missing native call icons, source sceneAnchor, selected-route overlay, incident participants and full-fleet small-scale markers. Hidden/resolved/home actors could intercept taps. Restoring original presentation semantics in native adapters only; no Claude simulation edits. Verification and APK pending.
+
+## 2026-10-14 · Codex · signed native cycle/graphics test APK
+
+- Continue remote280cbac. Godot full-state replay now1064requests: career/chief full scheduled shift, report/next shift/restart/export/import plus actual manual dispatch and all3dialogue stages.12legacy fixtures passed; corrupt input blocks save. Scroll/HUD360/740/map-controls/effects tests passed. No gameplay module rewrite.
+- Native diagnostics now uses Godot frame intervals and Android PSS/battery temperature/thermal status. Synthetic tour tests verify cancel/restore/export/clipboard, not phone FPS. Weather restored in header; fullscreen button now expands map and restores HUD; expired toasts removed.
+- Bounded native night details192windows/48lamps,128calendar-driven New Year sparks, calm disables moving effects. Distinct ambulance/rescue bodies;53bridge segment deck elevation applied to actors. Headless effects/finite transforms/caps/day/night/calm tests pass; GPU appearance remains unverified.
+- APK0.3.0-native-cycle-test, versionCode11, 85336701bytes, SHA256 9be3765e299055bada0140318e39a401372b652d95a1e0dc953716daad1976cd. Same certificate, signature/16KiB alignment/ZIP uniqueness passed. UI/core bundles byte-match current workspace; DEX unchanged from verified HUD host. New native scripts included. Rebuilt after fullscreen/weather/toast fixes; earlier unsigned/source intermediate is superseded.
+- Source and build instructions retained in checkpoint. APK/ZIP saved successfully; SHA256 and ZIP integrity verified after saving. Stable feed unchanged; no web publication. Physical Fold6 both displays/long-shift FPS/heat/audio/background/migration/installer still NOT tested. Full visual equivalence and bridge approach ramps remain unaccepted; migration-gate remains false. Do not merge as completed stable native port.
+
+## 2026-10-13 · Codex · full native shift parity and event queue repair
+
+- Node real UI handlers: career and chief completed12h scheduled shift at60x/45worldrate; career28resolved/1missed,chief17/6; shift2, full-state restart and export/import exact. Godot QuickJS replayed1029 UI requests; final full states equal to Node within1e-8, both modes. Tests are committed and reproducible.
+- Found native autosave lost camera commands: action snapshot drained JS queue, then save snapshot overwrote pending native queue. Controller now appends commands, including asynchronous Promise results, until native consumer drains. Native contract regression passes actual quarter button across autosave, HTML-root huge/contrast, disabled inputs/options and multiline readonly reports.
+- Quality preferences now control native model representation/shadows/city LOD; adaptive source cap1..2 maps to3Dscale0.5..1 without scaling UI. Native walking network/source Dijkstra now draws paths and A/B selected route. Original core/Claude modules unchanged.
+- HUD regression passed360/740. Full native cycle passed again after queue correction. Map control integration verification recorded separately below. No Fold6/physical/GPU acceptance claim; stable feed unchanged, signed APK pending.
+
+## 2026-10-13 20:45 Tallinn · Codex · native functional audit resumed
+
+- Restored remote d60bef9 checkpoint (branch head161e4a7); transient workspace had reverted to Oct12. Previous uncommitted cycle tests lost, reconstructing and rerunning, not counting old unrecorded outcomes.
+- Native adapter now serializes HTML-root accessibility classes, disabled/readonly attributes, decision jump, visual call signal and device-test bar. Godot respects disabled checkboxes/sliders/select/options and readonly multiline text. Clipboard bridged to OS. Decision action displayed above footer.
+- Camera reset/city/quarter/locate now stop following; previous native camera snapped back to patrol after these actions. Both adapter/native state corrected. Gameplay modules unchanged. Validation in progress; no new APK or stable feed promotion.
+
+## 2026-10-13 · Codex · signed HUD APK
+
+- Signed APK 0.3.0-native-hud-test, game0.9.2-a, versionCode11, 85292436bytes, SHA256 533bd3c0820b2a33cfa6cf7243d8cfae4df2bde46e3e3de4db9c1f412251cd99. Existing certificate preserved; apksigner and16KiB ZIP alignment verified. Fresh native_hud.gdc included; JS bundle and DEX unchanged from scroll build; no duplicate ZIP entries.
+- New-game HUD360/740 and scroll regression passed. Source checkpoint committed separately. APK/ZIP owner artifacts; stable feed unchanged. Full native/Fold6 visual, thermal, migration/audio and long-shift acceptance still open; no claim of completed port.
+
+## 2026-10-13 · Codex · HUD layout verified
+
+- HUD regression with explicit empty storage passed at360/740: all4source stats and radio present, header/transport inside screen. Narrow footer was201px and initially overflowed; now pinned by actual measured height with matching content/map-control bounds. Existing scroll regression rerun. Source checkpoint first; signed APK build pending.
+
+## 2026-10-13 15:34 Tallinn · Codex · HUD continuation after environment reset
+
+- Restored committed4119f58 checkpoint from GitHub (local scratch reverted to older recovery source). Uncommitted morning HUD edits reconstructed. Add native_hud.gd: original clock/trust/budget/resolved, FPS under clock, brand/help/settings, two-line radio with journal button and opaque transport; updater in shift menu. No gameplay changes.
+- Identified test-fixture contamination: startCareer with an existing save opens confirmation; closing it aborts new game. HUD tests now initialize explicit empty storage before actions, never assume stale local test state. Validation pending.
+
+## 2026-10-13 · Codex · scroll regression verified; signed test APK
+
+- Remote base ff036b550eeac152fcfaf658b99344b09ad8ce68 verified. No gameplay/core/Claude modifications.
+- native_scroll.gd retains native touch/inertia handling, blocks renderer rebuilds during finger contact or motion, remembers per-screen position, restores after two layout passes with generation guard. Horizontal panning disabled;10px deadzone. Close button outside scrolling content. Noninteractive labels ignore pointer input. Financial dl grids and narrow-screen diagnostic table cards ported.
+- Godot regression passed at360x640: overflowing settings fixture, real retained child identity while touch/inertia active, same-page150px restoration, settings220px return, menu starts0, close stays fixed. Previous360/740 presentation test and recovery/HUD isolation passed. Physical Fold6 gesture feel remains unverified.
+- APK 0.3.0-native-scroll-test, versionCode11, 85287937bytes, SHA256 11d5da7f371be597b350c57b8754ab4f0638a0f9f77b266661abf8b8f2d56e63. Same signer certificate; apksigner and16KiB ZIP alignment passed. New native_scroll included; UI bundle and Android DEX unchanged; no duplicate APK entries. APK/ZIP delivered as test build; stable feed unchanged. Full native/device/visual acceptance still open.
+- Handoff: source checkpoint and COLLAB_LOG to codex/native-full-core-090/PR11. No main push, no website publication, no private signing material in checkpoint.
+
+## 2026-10-13 09:33 Tallinn · Codex · scroll continuity and remaining screen structures
+
+- Owner reports inconvenient menu scrolling. Audited ff036b5 renderer: wholesale rebuild during touch/inertia, one shared scroll offset for unrelated screens, close button scrolls away, restore occurs before card layout. Implement native-scroll guard, per-page positions, two-pass guarded restoration, fixed close action and horizontal-scroll suppression. Preserve built-in Godot touch/inertia rather than add conflicting gesture recognizer.
+- Continuing UI transfer: financial definition grids and labeled diagnostic table rows for narrow screens. Validation/build pending.
+
+## 2026-10-13 · Codex · native menu/cards test APK
+
+- Remote branch verified at dd2260cf7325c74470f4245cf8fa3efcc3a3449b. No Claude gameplay edits overwritten. Source baseline remains game0.9.2-a.
+- Diagnosis: generic renderer flattened rich buttons and ignored CSS hierarchy, details and progress widths. Ported original palette, rich card children with wrapping, selected states, heading/muted/status colors, responsive start/report/focus grids, wrapping action rows, bordered briefing cards, disclosure controls and meter/xp bars. Modal close is right-aligned, content centered with backdrop and blocks map input. Theme now cached. DOM serializer retains inline styles/open/placeholder.
+- Files: scripts/native_ui.gd, scripts/native_rich_button.gd, ui/ui-entry.js, rebuilt ui/ui-bundle.js, scripts/verify_native_presentation.gd.
+- Checks passed: Godot scene welcome/career/settings; startup recovery/modal isolation; 360/740 logical-width card wrapping and minimum height; disclosures/progress/map input isolation; Node UI career/first-week/five screens/300 frames/background save; native control/tip coverage. No real rendered-image, Fold6 FPS/thermal or physical installation claim.
+- APK 0.3.0-native-ui-test, versionCode11, 85279334 bytes, SHA256 92147412a847ead584a305b0cb96d1a01093022ec91b6cd940d6cd76866f7050. Signed with existing certificate, signature and16KiB alignment verified. DEX unchanged from recovery APK, fresh UI bundle matches source bytes, no duplicate ZIP entries. Manual test artifact; stable feed unchanged.
+- Full native acceptance remains open: all-screen visual matching, tables/compact HUD refinements, device save migration/audio/background/long-shift heat, native map visual gaps. This is a tested UI migration step, not completion of the entire port.
+
+## 2026-10-13 · Codex · native menu restoration in progress
+
+- Resume audit: previous transient UI edits and APK did not survive; workspace still contains recovery baseline. Reimplement semantic presentation from original CSS and DOM. No new APK or device acceptance claimed.
+
+## 2026-10-12 19:28 Tallinn — Codex: restore missing gameplay controls; recovery test APK
+
+- Follow-up to 04eb2a18e7f6ebdcdbd61309ac8c0380aa39fece. Found actual missing migration UI: snapshot omitted entire unitSettings and used #tip instead of #tipCard. Render full left panel (identity, service/department, crews, auto/manual, district, rest). Restore tip card/dismissal and trust value. Tap map actor selects original unit/call/resident handler; drag/pinch does not select. Camera coordinate transform matches actors. Scroll speed row/map controls on small logical screens.
+- Tests: actual recovery button, career startup, modal isolation/restoration, projected unit tap passed in Godot; original UI Node tests and actionable serialized controls passed; QuickJS/Node36 full-state parity,12 legacy saves/backup/accelerations passed. Camera depth and road surface separation increased further.
+- Fresh official Godot4.7.2 Gradle build with new Java reader. Fixed export staging recursion (.gdignore on android; removed generated *.import under Android res). APK bundle byte-matches current JS; no duplicate ZIP entries; chunked reader present in DEX; old reader absent. SDK36.1/min26/target36/ARM64.
+- Signed APK 0.3.0-native-recovery-test, versionCode11, 85281724 bytes, SHA256 ad552b371f345d02240eaa4c0eab5b8984988cd8bc7a7481113623c863355c7b. Existing certificate retained; v2/v3 and16KiB alignment passed. Stable feed unchanged. Native release gate remains false.
+- Physical Fold6 storage/GPU/heat/audio/installer still pending. Tried software-render test; Xvfb cannot establish listening sockets in this environment. No rendered-image or device-performance claim. This fixes specific playable UI gaps, NOT completion of every native feature; bridges/night lights/fireworks and full device acceptance remain.
+
+## 2026-10-12 19:20 Tallinn — Codex: startup recovery and depth fixes (not released)
+
+- Owner screenshots show legacy migration failure and map depth artifacts. Verified remote native branch remains e99716c; Claude gameplay unchanged.
+- Android reader now attaches transparent WebView at original HTTPS origin, serves local empty HTML, blocks network, transfers read-only localStorage in 64K chunks with explicit errors, generation-safe timeout and cleanup. Java compiled successfully (6 existing deprecation warnings); physical WebView migration still unverified.
+- Recovery panel is opaque and offers retry; tested actual Godot recovery button, new career startup, modal HUD removal/restoration. Original WebView storage never modified. 12 legacy fixtures retain identical full simulation state.
+- Camera near/far now scale with zoom; ground below distinct land/water layers. Numeric depth ratio checked at 35/90/650/14000/16000; GPU/Fold6 visual verification still pending.
+- Rebuilt plugin AAR. Native scene and startup recovery passed. Android tools/templates restored for full rebuild; no new APK or feed publication yet. Remaining: visual/device acceptance, full screen gameplay audit, signed APK.
+
+## 2026-10-12 16:09 Tallinn — Codex: signed weather test APK
+
+- Previous staging loss resolved: official Android build-tools36.1.0 and platform-tools downloaded successfully. Godot standard exporter reuses first native APK Android code as custom template; stripped ALL old game assets/old signer metadata/QuickJS library before export. First attempt duplicate81entries rejected, cleaned template export has zero duplicate entries.
+- APK0.3.0-native-weather-test versionCode11,85262250bytes,SHA256 d335dedc7e7a2be133e965ec1f8109d96c2a942693b44ca0f324e842fd5b09c0. Existing certificate unchanged,apksigner v2/v3 and zipalign16KiB passed. Binary package/min26/target36/VIBRATE/UpdateProvider/plugin metadata retained. dex/Godot/QuickJS unchanged; original UI/core byte match; map.gdc changed;weather_effects.gdc included.
+- Signed APK and ZIP owner deliverables being saved; no stable feed or web publication. Native weather tests and scene passed. Physical Fold6/visual acceptance still pending; native migration not validated on phone.
+- Follow-up: native lights/fireworks/bridge elevation/all-screen interaction and physical Fold6 acceptance. This is a test artifact, not completed stable native port.
+
+## 2026-10-12 16:04 Tallinn — Codex: bounded native weather and night ambience
+
+- Verified remote native branch still at a983315; no Claude changes overwritten. Added weather_effects.gd: camera-local192 rain/storm,128 snow,48 wind debris, pooled MultiMesh, no simulation RNG, no particle shadows. Existing Claude shiftWeather drives effects.
+- Night ambient energy lowered to0.22; day0.55. Current lighting preference disables weather as well (no separate weather preference yet). Existing road/time routes preserved.
+- Tests:6weather kinds, storm, finite transforms,192 cap and disabled effects passed. Native UI scene career/map/settings passed exit0/no script errors. Test initially ran before _ready; moved verification to deferred startup and reran passed.
+- New Android APK NOT yet built for this step: transient SDK/NDK/Gradle staging disappeared after environment restart. Existing downloadable native-test APK remains previous a983315 build and does not include this new weather. Android build environment must be restored before next signed test artifact.
+- Open: proper night street/window lights, snowfall visual acceptance, fireworks, bridges actor elevation, full UI/device acceptance. No Fold6 FPS/thermal claim. Stable feed unchanged.
+
+## 2026-10-12 15:12 Tallinn — Codex: first signed native Android test APK
+
+- Export succeeded with Godot 4.7.2, ARM64 only, target SDK36/min26. JDK compiler/jlink/jmod/jar modules already installed; missing CLI launchers restored, no external JDK downloaded.
+- APK 0.3.0-native-test / game0.9.2-a, versionCode11, 85268770 bytes. SHA256: 9f17b08c919fd8bfdc74b1e8a4917a92c4965bc9bca3e6c596f47572ba16dd65. Existing certificate 601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358. apksigner v2/v3 verifies; zipalign -P16 check passed.
+- Original core/UI bundles and ARM64 QuickJS match workspace bytes; MercuryAndroid class included in dex; INTERNET/VIBRATE/REQUEST_INSTALL_PACKAGES in binary manifest.
+- APK saved as downloadable owner artifact. Release metadata native-test-release.json records identity. APK not committed in source ZIP (85 MB); checkpoint contains complete source, no keys.
+- Stable feed unchanged:0.2.9. Test uses SAME versionCode11 to allow return to stable build. Legacy storage is read-only; native progress is not copied back to WebView: export JSON before switching back.
+- Not final native acceptance: physical Fold6 both screens/long shift FPS/heat/audio background/migration/installer pending. Weather/fireworks/night visual refinements and complete interaction acceptance remain open.
+
+## 2026-10-12 15:07 Tallinn — Codex: Android export preparation and native readability
+
+- Preserve Claude C2/E game 0.9.2-a. Godot map density scaling uses Android densityDpi (52 dp controls), handles display size changes. Engine FPS cap follows original 30/60 setting; elapsed time diagnostics no longer discard long frames.
+- Opaque scrolling panels, text size inherited by buttons/input, contrast panel option. Native save file chooser is cleaned after selection/cancel so exports can be repeated.
+- Android ARM64 library uses lib prefix and verified 16 KiB ELF LOAD alignment; plugin AAR now uses standard proguard.txt keep rules. Added project icon and stable Mercury Response user-data name.
+- Checks: Node UI career/first week/5 screens/300 frames/background save passed. Godot native scene welcome/career/map/settings passed (exit 0, no script errors). Java bridge compiled, six deprecation warnings only.
+- Android export still running; no native APK release claimed. Official JDK download returned HTTP 403; installed Java already provides jdk.compiler, its javac module launcher restored locally. Fold6 execution, heat and both displays remain unverified. Stable APK/feed remains 0.2.9.
+
 # Общий журнал Codex ⇄ Claude
 
 Правило владельца (11.10.2026): каждый агент записывает сюда **все** свои действия, чтобы другой понимал, кто, где, что и зачем делал.
@@ -16,6 +195,91 @@
 
 ---
 
+## 2026-10-12 09:13 · Codex · ветка codex/native-full-core-090
+Что сделано: восстановлены GitHub checkpoint ed01ccc и свежая Claude release-a 195295b, прочитаны PR9/11, правила и новые журналы. Чистый импорт 0.9.0-a + только 3 шага apply-claude-090. Пакеты B/C/A не перезаписаны; 525/525 JS прошли.
+Godot: обновлены 47 исходных модулей побайтно, включая career2/dialogues/acoustics/onlookers; полные состояния 36/36 совпали с Node, в том числе 12 старых сохранений и все 6 ускорений. Backup recovery прошёл, P95 тика Linux0.614мс — не телефонный FPS. Генератор эталонов теперь использует сохранённые старые input snapshots, не требует пропавших внешних рабочих папок.
+Нативная карта: подключены чистые Claude onlookersFor, фиксированный пул180 прохожих с отсечением дальних, свидетель и свет телефона; пилот панели поддерживает chooseTalk/условия. Перетаскивание карты теперь перемещает камеру, кнопка «Патруль» включает слежение. Smoke120 кадров без script errors. Первое открытие восстановленного архива требовало editor import расширений; editor на выходе аварийно завершился, последующие runtime smoke и parity завершились с code0. Это ограничение зафиксировано, не заявлять полную приёмку редактора.
+Осталось: выпуск нового подписанного APK с пакетами B/C/A ещё НЕ сделан; стабильный0.2.7 не заменён. Полный native UI/audio/migration/updater/службы/погода/салют/мосты/Fold6 остаются открыты. Нативный стабильный gate false. Новый ROADMAP_2 сохранён в архиве как план Claude, прямое ТЗ владельца приоритетно.
+---
+
+## 2026-10-12 08:55 · Claude · ветка claude/release-a (от claude/release-c, 007c9f0)
+**Указание владельца:** «давай дальше». Следующий по карте — **выпуск A «Живой город», часть Claude: звук и поведение**. Сдаётся шагом 3 цепочки `patches/apply-claude-090.sh` (release-b → release-c → release-a).
+**Аудит до работы:** шаги были синусом 115 Гц без покрытия; эха нет совсем; у скорой и спасателей нет звука; сирена дальше ~300 м пропадала полностью; у места вызова тишина (кроме дверей); возле вызова только 2 участника, прохожих нет. Машины уже уступают дорогу (traffic.js), это не трогал.
+**Сделано:**
+- `dist/acoustics.js` (новый): по карте (здания, парки, вода) клетки 40 м → двор / улица / парк / у воды / открытое; процедурный стерео-отклик для эха; покрытие под ногами (асфальт, лужи, снег, лёд, трава); `inBuilding` для размещения людей.
+- `dist/onlookers.js` (новый, только отображение): зеваки по типу вызова, часу, погоде, событию; собираются за ~8 мин, стоят вне зданий, часть снимает на телефон, при оцеплении отходят, свидетель подходит к экипажу на этапе вопросов (по фактам `dialogues.js`). В сохранение ничего не пишется.
+- `dist/sound-synth.js`: шаги по покрытию, тона скорой (720/960) и спасателей (392/523), срез высоких по расстоянию, огибающая голосов, интервал рации на месте.
+- `dist/audio.js`: шина эха (ConvolverNode, пересборка только при смене места и не чаще 1,5 с), шаги — шумовые всплески, голоса/толпа/рация у вызова, голос сирены служб (создаётся с первой скорой), далёкая сирена до 2,5 км.
+- `dist/render.js`: зеваки, светящийся телефон ночью, подпись «свидетель». `app.js`: справка.
+**Проверки:** чистая 0.9.0-a + 3 шага → **525/525 JS**, дерево побайтно = рабочей копии; deploy 11/12 (тот же `test_real_release`, нет update.json в импорте); 42/42 старых сохранения; хаос 30+30 — 0 ошибок; офлайн-рендер 7 сцен — 0 клиппинга, шаги различимы, голосовая полоса у вызова +9 дБ; 0 зевак в зданиях на 2263 проверках; скриншоты 412/900 без ошибок страницы. Симуляция (`sim.js`) не менялась.
+**Для Codex:** брать `claude/release-a`: `sh patches/apply-claude-090.sh` на чистой 0.9.0-a. Новые модули `acoustics.js`, `onlookers.js` попадут в APK через граф импортов. Для нативной версии: `onlookersFor`/`placeAt` — чистые функции, их можно звать из QuickJS для отрисовки и звука в Godot.
+**Осталось:** приёмка сведения на слух владельцем; прохожие, оборачивающиеся на сирену; дальше по карте — D (нужно решение владельца по хостингу) или C2 (перевод между отделами, график на месяц, обучение, траты сбережений).
+
+---
+
+## 2026-10-12 07:10 · Claude · ветка claude/release-c (от codex/android-027-sound-quality, b993405)
+**Указание владельца:** «давай дальше» → **выпуск C «Карьера и отделение 2.0»** по `docs/ROADMAP_2.md`. Сдаётся одним выпуском: новая цепочка `patches/apply-claude-090.sh` поверх 0.9.0-a: шаг 1 `release-b` (побайтно = `claude-release-b-080.patch`), шаг 2 `release-c`.
+**Исследование:** ППА: старший смены (välijuht) ведёт смену, развивающая беседа раз в год (в игре — полгода, иначе в долгой кампании её почти не видно), побочная работа только с разрешения работодателя, нехватка сотрудников первой линии (ERR: 200–300 человек).
+**Сделано (новый `dist/career2.js` + `sim.js`/`app.js`/`economy.js`/`detective.js`/`patrolwork.js`/`history.js`/`tips.js`/`style.css`):**
+- Задача смены (сержант со звания 3 или начальник) на инструктаже: обычный режим / профилактика / быстрое реагирование / безопасность дорог.
+- Аттестация раз в 6 месяцев, оценка A–D, история последних 6, новость при A.
+- Жизнь вне службы (≈ раз в 6 смен, 7 ситуаций), без ответа — осторожный вариант; нарушения честности ловит внутренний контроль (опыт −150, стресс +15, доверие −2).
+- Следователь: допрос (нужно 30% сведений, один раз) и экспертиза (результат 10–22% к следующей смене).
+- Начальник: мэрия каждый месяц (деньги / обещание с проверкой / отчёт; без ответа — отчёт), моральный дух (стресс ×0,75, усталость, жалобы, улучшения), ниже 35% уходит самый выгоревший (не чаще раза в 12 смен, одиночный экипаж не трогается), рынок кандидатов каждый месяц, итоги года и «Полицейский года».
+- Бюджет начальника: сверх резерва (max(3000, 15 смен расходов)) мэрия платит половину надбавки за доверие, в конце года остаток уходит в казну. Без этого за 120 смен бюджет раздувался до 22 тыс.
+- Справка и 3 новые подсказки.
+**Аудит нашёл и исправил:**
+- (1) **ошибка выпуска B:** `// automatic crews…` посреди строки закомментировал вызов скорой из сцены — травмы, найденные в разговоре, скорую не вызывали; теперь `/* */`, новый тест ловит именно это (без исправления падает);
+- (2) порог увольнений был недостижим (мораль не опускалась ниже 40 даже при стрессе 97) — коэффициент стресса 0,6→0,75, плюс пауза между увольнениями;
+- (3) тест `trust-balance` давал всем seed один номер вызова → один набор фактов; номер теперь зависит от seed.
+- (4) аттестация и «Полицейский года» в карьере считали обоснованные жалобы на **все** экипажи — за 2 года прогона награду не получил никто; теперь `stats.ownFounded` (только экипаж 01), тест.
+**Проверки:** чистая 0.9.0-a + 2 шага → **519/519 JS**, дерево побайтно = рабочей копии; deploy 11/12 — `test_real_release` падает так же на чистой 0.9.0-a (нет `dist/downloads/android/update.json` в импорте); 42/42 старых сохранения; хаос 30+30 смен — 0 ошибок; начальник 420 смен (≈2,3 года): бюджет циклично 3,5–23 тыс., мораль 48–56 при отдыхе, 0 увольнений; карьера 180+ смен — аттестации B, B; скриншоты инструктажа 412/600/900 без ошибок страницы.
+**Для Codex:** брать `claude/release-c`: `python3 -I source-import.py && sh patches/apply-claude-090.sh`. Если шаг B уже наложен — только `patch -p1 < patches/claude-release-c-090.patch`. Новый модуль `dist/career2.js` входит в APK через граф импортов; для нативного ядра (QuickJS) добавь его в список исходников/`simulation/source-sha256.json`. Версия игры в `diagnostics.js` = 0.9.0-a (выбери номер выпуска при сборке).
+**Осталось:** подпись и выпуск APK — Codex. Дальше по карте у Claude: выпуск A (звук и поведение жителей) или C2 (перевод между отделами, график на месяц, обучение сотрудников, траты сбережений).
+
+---
+
+## 2026-10-12 01:44 · Claude · ветка claude/release-b (от claude/sound-quality + roadmap-2)
+**Указание владельца:** «давай делай» (выпуск B по `docs/ROADMAP_2.md`). **Выпуск B «Глубина вызовов»** сдаётся одним шагом: шаг 9 `apply-claude-080.sh`.
+**Исследование:** ERR/ETSC — алкометр всем участникам ДТП, 0,2 г/л — предел, 0,2–1,49 — проступок, от 1,5 — уголовное; ППА может на месте запретить агрессору приближаться к дому до 72 ч (лист оценки риска, согласие пострадавшей не нужно).
+**Сделано:**
+- Новый `dist/dialogues.js`: сцены «подход → выяснение → решение». 12 своих сценариев + драка болельщиков + 6 общих по типам. Факты по хешу номера вызова. Эффекты: напряжение, сведения, темп (×0,5 веса), жалобы (задержание без сведений ×2, со сведениями ×0,5), повторные вызовы, доверие, связь с напарником, риск ушиба. Автовыбор по правилам отделения; `validTalk`.
+- `sim.js`:
+  - `i.talk` только в кампаниях по графику;
+  - `chooseTalk` (этап 1 вызывает прежний `decide`);
+  - `tickTalk` — неотвеченные этапы отвечаются автоматически, когда работа продвинулась;
+  - `finishTalk` — доверие и связь;
+  - автоматические экипажи не задают `custodyChoice`: работает правило отделения;
+  - протокол сцены — если совпадает с фактическим задержанием;
+  - скорая по решению сцены;
+  - реплики напарника;
+  - ушиб: стресс, усталость.
+- `app.js`/`style.css`: блок сцены в карточке вызова (история, шкала сведений, варианты с подсказками и условиями) вместо старых кнопок для экипажа игрока. Исправлено: опыт до звания в шапке и личном деле считался по формуле 150 → `RANK_XP`; «Напарник: Морозов» в шапке → текущий напарник; справка.
+**Аудит выпуска нашёл и исправил:**
+- (1) беглец по ориентировке уходил, потому что подход «по инструкции» отменял погоню → для типа 5 решение всегда `autoChoice`;
+- (2) полный эффект темпа давал в 3–5 раз больше срывов в пиковые ночи → `PACE_WEIGHT=.5`;
+- (3) снова комментарий `//` посреди минифицированной строки — заменён на `/* */`, повторный скан чистый;
+- (4) тест `life` был хрупким к наградам R14 → учитывает их.
+**Проверки:** 0.8.0-a1 + 9 шагов → **507/507 JS**; 42/42 сохранения; прогоны 24/16/8/6 — 0 ошибок, 0 зависаний, срывы на уровне до выпуска; хаос 30+30 смен — 0 ошибок, 0,32 мс/тик; скриншоты 412/600/900 без ошибок страницы.
+**Для Codex:** **бери `claude/release-b` (R13–R26 + выпуск B), 9 шагов.** Новый модуль `dialogues.js` попадёт в APK через граф импортов.
+
+---
+
+## 2026-10-12 01:38 · Codex · ветка codex/native-full-core-090
+Сохранение и передача: release commit b9934050c3e91d2db8097d522a16a33896d8c705, PR #10 (main не тронут). Native commit 5fb0e3fe2ad27744ec249438f20c22137f87355e, черновой PR #11 к codex/android-027-sound-quality, без слияния. Native archive SHA256 6c4521bfd22d066012983eb2f250ea1495eccb17d3a147d618e3d3ffd3ed265b; 43 исходных JS файла совпадают побайтно с полной 0.9.0-a, hashes в simulation/source-sha256.json. Финальные native проверки: 36/36 полных состояний, old saves12, все ускорения12, backup repair, tick P95 ~0.58мс Linux; полный город14431 roofs, runtime smoke120frames без ошибок. Уменьшён зазор ряда скоростей до2px; статусы пилота переведены. Полный порт не объявлять завершённым: native UI/audio/перенос APK storage/updater/остальные визуальные слои и реальная Fold6 приёмка остаются открыты. Отчёт о выпуске и ядре отправлен в PR #9, дальнейший checkpoint — PR #11.
+
+---
+
+## 2026-10-12 01:28 · Codex · ветка codex/native-full-core-090
+Что сделано: вся карта экспортирована в Godot (14 431 здание, 7 282 дороги, 37 413 сегментов, 747 участков). Проверены все 14 431 крыши без пропусков; 636 152 треугольника дальнего LOD. Динамическая очередь строит один участок за кадр, вне кадра освобождает участки; дальний LOD без окон. Полный GPU/Fold6 FPS ещё не замерен.
+Нативное ядро: существующие sim.js и импортируемые модули 0.9.0-a выполняются в QuickJS GDExtension внутри Godot, без WebView. 36 полных состояний совпали с Node (12 обе роли/оба графика/три seed + 12 с ×1…×60 + 12 настоящих сохранений 0.7/0.8), допуск чисел 1e-8. JSON snapshot не заменяет симуляцию: вызывается исходный tick/команды/deserialize. 2000 тиков: median ~0.24 мс, P95 ~0.55 мс в headless Linux; это не Android/FPS.
+Сохранения: нативный SHA256 envelope, pending + backup; проверено восстановление после обрезанного основного файла и повторной записи; повреждённый main не затирает хорошую backup. Дополнительно 84 исходных снимка из чистой ветки android-024 продолжены; предыдущая локальная integration тоже была 0.7 с дополнительными патчами, поэтому отдельная проверка чистого релиза нужна. Это новый user:// save: автоматический перенос старого Android localStorage ещё не реализован.
+GDExtension: upstream sttts/godot-quickjs a99c40bcdf344182b22a0c31710a1abdc011e379, godot-cpp da26c1732ee8656ef9ccad587cbdd55acf8637c8. Исправлена UTF-8 (иначе русские строки искажались), сброс last_error, лимиты 256MB / stack4MB. Собраны Linux x86_64 и Android ARM64 (NDK r27c / API26); ELF AArch64 проверен, Android runtime ещё не проверен. Исходники и лицензии сохранены в архиве, воспроизводимость описана.
+Карта привязана к живой карьере: позиции/маршруты машины, время и дневной/ночной свет идут из ядра. Простой нативный пилот панели позволяет назначения/решения/отдых/сохранение/следующую смену; это НЕ полный интерфейс. Smoke 120 кадров без ошибок. Исправлены GDScript shadows Panel и необязательный target при стоящей машине.
+Статус: ЧАСТЬ 1 завершена (APK0.2.7 code9, sha f3fb82d9d4dab8e3dade028d7731a0f719f9bdfdf8a728bc93bce8ec0eb3db72, feed91, PR10). ЧАСТЬ 2 не закончена: полный нативный интерфейс, перенос R26 audio, миграция старых APK сохранений, updater, живые люди/другие машины/службы/погода/салют и Fold6 оба экрана/нагрев. Неполную нативную игру в стабильный канал НЕ выпускать.
+
+---
+
 ## 2026-10-12 01:03 · Codex · ветка codex/android-027-sound-quality
 Продолжение Godot: синхронизирован граф с полной 0.9.0-a, точные 307 зданий/548 дорог сохранены. Добавлены приподнятые бордюры и тротуарные полосы; no/separate не дублируются, неизвестные размеры помечены illustrative. Скорости ×1/2/4/10/30/60, FPS/P95/static memory под часами; буфер метрик ограничен 600 кадрами. Движение при 15/60 FPS проверено для всех шести ускорений, ошибка <0.1 мм; 4 геометрических теста, 12 эталонных маршрутов, 307 крыш прошли. После добавления бордюров исправлены явные типы Vector3 (GDScript inference); повторный headless проход успешен. Это headless проверка, не Fold6 FPS/нагрев. Полная симуляция/все R1–R26/сохранения/интерфейс/звук пока НЕ перенесены в Godot. Часть 2 ТЗ не завершена, стабильный APK оставлен на проверенной полной игре.
 
@@ -23,6 +287,32 @@
 
 ## 2026-10-12 00:54 · Codex · ветка codex/android-027-sound-quality
 Прочитаны правила, PLAN R13–R26/G1–G12, полный новый журнал Claude. Восстановлена ветка sound-quality, чистый импорт 0.8.0-a1 и 8 новых шагов; старые 070 не запускались. Проверяются 503 JS, APK-only deploy, 85 ресурсов и звук после фона. Восстановлен прежний закрытый ключ подписи; ключ вне исходников. Выпущен подписанный APK 0.2.7 / 0.9.0-a, code 9; SHA256 f3fb82d9d4dab8e3dade028d7731a0f719f9bdfdf8a728bc93bce8ec0eb3db72, 2103599 байт. 503/503 JS, 12/12 deploy; 85 APK ресурсов побайтно совпадают. 84 снимка 0.7.0-a + 84 снимка 0.8.0-a1 продолжены, 24 новые смены с reload. Восстановление звука проверено fake AudioContext и Android flag, реальное сворачивание/Fold6 ещё не проверено. Опубликованы только APK/feed (Sites 90); web game прежняя. Импортёр теперь сохраняет README/SOURCE_STATE/checksum manifest. Тест real_release проверяет фактический APK, хеш, размер, versionCode и весь граф ресурсов, без веб-архива. Нативную неполную игру в стабильный APK не включать.
+
+---
+
+## 2026-10-12 00:52 · Claude · ветка claude/roadmap-2 (от claude/sound-quality)
+**Указание владельца:** «пересобери роадмап, чтобы обновления были весомыми, а не по маленьким частям».
+**Что сделано:** новый `docs/ROADMAP_2.md` — карта крупных выпусков вместо очереди мелких пакетов:
+- A «Живой город» (Codex — графика и FPS; Claude — звук и поведение жителей);
+- B «Глубина вызовов» (Claude);
+- C «Карьера и отделение 2.0» (Claude);
+- D «Совместная служба»;
+- E «1.0».
+Правило: **один выпуск — один APK**, внутри обязательный набор проверок (тесты, хаос-прогон, старые сохранения, офлайн-рендер звука, скриншоты 412/600/900, аудит кода), сначала исследование и аудит, потом код; один отчёт владельцу на выпуск.
+**Код не менялся.** PLAN.md (не в git) получит ссылку на карту со следующим выпуском Claude.
+**Для Codex:** текущая сборка 0.9.0-a — без изменений (`claude/sound-quality`). Твой следующий крупный выпуск по карте — A (графика, нативная версия). Claude параллельно ведёт B и сдаст его одним выпуском.
+
+---
+
+## 2026-10-12 00:50 · Claude · ветка claude/load-peaks (от claude/prerelease; отдельно, на проверку Codex)
+**Указание владельца (19:43):** «давай дальше». Пакет **R9 «Нагрузка и пиковые ночи»** — закрывает находку аудита «0 пропущенных вызовов, решения игрока ничего не весят». Только кампании по графику.
+1. `season.js`: `loadFactor` — профиль по часам (вечер и первая половина ночи ×1.25–1.4, 03–07 ×0.55–0.8) и дням недели (ночь пятницы/субботы, включая часы после полуночи, ×1.45; утро воскресенья ×0.75); `weekdayOf` (кампания начинается в понедельник 12.10).
+2. `sim.js`: интервал между вызовами делится на нагрузку × праздник; темп работы на месте ×0.6 (реальные вызовы 30–60 мин: объяснения, проверки, бумаги), частота ×1.25; строка инструктажа «ночь на субботу/воскресенье — будет жарко»; `loadNow`, `weekdayNow`.
+3. `app.js`: день недели в виджете погоды.
+4. `tests/load.test.mjs`.
+**Прогон 24 смен:** будни 22–26 вызовов без пропусков; ночи пятницы/субботы 34–38 вызовов, до 6 одновременно, иногда 1–3 пропуска у автоматических экипажей — перенаправление и приоритеты игрока снова решают.
+**Проверки:** вся цепочка (17 пакетов) → **447/447 JS**, deploy 12/12, побайтно; 42 сохранения 0.7.0-a — 42/42.
+**Для Codex:** если сборка 0.2.5 ещё не начата — брать `claude/load-peaks`; если уже собрана из `claude/prerelease` — этот пакет в следующий APK.
 
 ---
 
@@ -78,6 +368,24 @@
 
 ---
 
+## 2026-10-12 00:10 · Claude · ветка claude/prerelease (от claude/leave-holidays) — ПРОВЕРКА ПЕРЕД APK
+**Указание владельца (18:51):** «проанализируй всё, может ещё что-то надо сделать прежде кидать в APK».
+**Аудит всей цепочки (16 пакетов на чистом 0.7.0-a):**
+- `npm test` **446/446**, deploy 12/12, итог побайтно совпадает с рабочей копией; в APK 76 файлов, все новые модули есть (schedule, life, routine, burnout, roster, season, garage, policy, radio).
+- Долгие прогоны с сохранением/загрузкой каждые 2000 тиков: карьера по графику 24 смены, начальник по графику 16, старая карьера 8, старый начальник 6 — **ошибок 0, зависших экипажей 0, пропусков 0**, очередь ≤2. Стоимость тика как в 0.7.0-a (0.21–0.32 мс).
+- **42 сохранения из 0.7.0-a** (обе роли, 3 сида, середина смен, пешие экипажи, задержания) грузятся новой версией и продолжаются 3000 тиков со сменой — 42/42.
+- Копия игры 412 px: новая карьера из меню (08:00, дождь, 12.10), журнал, экипажи, вызовы, отчёт, личное дело, настройки, квартал/центр/патруль/зум, справка; новый начальник: мастер патруля, отделение, гараж (оснащение), правила — ошибок страницы и консоли 0.
+**Исправлено в этом патче (`patches/claude-prerelease.patch`, шаг `prerelease`, по умолчанию):**
+1. Инструктаж 15 → 10 мин (в реальном темпе ×1 это реальные минуты простоя в начале смены).
+2. Доход за вызов в кампаниях по графику 110 → 60: 12-ч смена даёт вдвое больше вызовов, бюджет начальника рос ~2500/смену (31 тыс. за 16 смен) → теперь ~850/смену. Старые кампании — 110.
+3. «Как играть»: раздел «Как устроена служба (новая кампания)» — график, распорядок, свободное время, роли, машины, город, начальник.
+**Для Codex — порядок выпуска:** `python3 -I source-import.py && sh patches/apply-claude-070.sh` → предлагаю игра **0.8.0-a / APK 0.2.5**.
+**Риски, которые стоит знать:** (а) маршруты по времени (map-mobile) и новый вызов «Дым из окна» (rescue) меняют продолжение старых кампаний — сохранения грузятся, но события пойдут иначе; (б) в сохранениях новые необязательные поля (life, policy, radio, cases, services, bolo, vehicles: km/fuel/wear…), всё проверяется при загрузке; (в) реальный темп ×1: 12-ч смена = 12 реальных часов (×4 — 3 ч), «Быстрая смена» в настройках ускоряет.
+**Телефонная приёмка на Fold6 (нужна владельцу/Codex):** FPS в «Проверке устройства»; новая карьера: инструктаж → патруль → обед → рапорты → «Свободное время» → отпуск; ночная смена (усталость, микросон); АЗС; снег (смена ~27); узкая колонка кнопок на внешнем экране; звук рации.
+**Не блокирует выпуск, следующий шаг роудмапа:** за все прогоны 0 пропущенных вызовов — автоматические экипажи справляются всегда (так было и в 0.7.0-a). Нужна нагрузка по часам/дням недели и пиковые ночи (пятница/суббота), чтобы решения игрока имели вес.
+
+---
+
 ## 2026-10-12 00:03 · Claude · ветка claude/polish-pack (от claude/events-goals)
 **Указание владельца:** «возьми сразу несколько… ещё больше ускорения и проверить, чтобы работало правильно». Пакеты **R21–R24**, шаг 6 цепочки `apply-claude-080.sh`.
 1. **R21 баланс.** Прогоны 5–10 месяцев.
@@ -93,6 +401,26 @@
 5. Тесты: `speed.test.mjs` (3), `tips.test.mjs` (1), +2 в `service-sound`.
 **Проверки:** 0.8.0-a1 + 6 шагов → **494/494 JS**; deploy 11/12 (как на чистой базе); 42/42 сохранения; прогоны 24/16/8/6 — 0 ошибок, 0 зависаний. В браузере ×60: 20 с → 19 мин города, ошибок страницы нет.
 **Для Codex:** брать `claude/polish-pack` (R13–R24). Новые модули `tips.js` (+ уже `events.js`, `goals.js`, `partner.js`, `news.js`, `history.js`, `patrolwork.js`) попадут в APK через граф импортов.
+
+---
+
+## 2026-10-11 · Codex · ветка codex/android-024-claude-review
+Что сделано: прочитана ветка claude/case-files 6653f9d4243ec3a4197f6cfd83ee2eb39a7b044b и общий журнал; проверяется вся последовательность патчей после 0.6.0-b.
+Зачем: владелец разрешил проверить всю работу Claude и выпустить APK, если проверки успешны. Только APK, веб-игра остаётся прежней.
+Файлы: игровая цепочка Claude; android/runtime_assets.py; patches/apply-claude.sh; dist/app.js, dist/sim.js; тесты.
+Исправления Codex: отсутствующий локальный импорт теперь останавливает APK-сборку; скрипт не скрывает код ошибки npm test и отвергает неизвестный этап; тест устройства отменяется с восстановлением кампании при уходе в фон/закрытии; сбрасывается накопитель времени; наследованные свойства не принимаются как выбор задержания.
+Проверки: 387/387 JS; 12/12 deploy/import/runtime; 42 снимка старых сохранений с одинаковым продолжением и 6 переходов смен; UI тест восстановления кампании при фоне; APK v2/v3, прежний сертификат 601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358; 67 runtime файлов совпадают побайтно. Игра 0.7.0-a / APK 0.2.4, versionCode 6. Размер 2012278 байт; SHA256 abb2c1dfcd4ca7fd710c579fbdd96e703d488a87eb2c309d306faf0b9e68fbf1. Чужие патчи и журнал сохранены. Публикация feed готовится; телефонная приёмка открыта.
+Для Claude: не применять вашу цепочку повторно к новому архиву; не обновлять браузерную игру.
+
+
+## 2026-10-11 23:30 · Claude · ветка claude/leave-holidays (от claude/seasons; отдельно, на проверку Codex)
+**Указание владельца (18:28):** «давай дальше». Пакет **R8** (добавлен в PLAN.md). Только APK, только кампании по графику.
+1. `life.js`: отпуск 35 дн./год и 5 оплачиваемых дней здоровья (karjaar.politsei.ee); отпуск на цикл — только на 4 выходных после ночных смен: пропуск 4 смен (12 дней отдыха), −8 дн., отпускные 4×зарплата, недосып 0, стресс −40, выгорание сбрасывается; «День здоровья» — занятие (недосып −30, стресс −20, не больше остатка); с нового календарного года дни восстанавливаются.
+2. `season.js`: праздники (реальные даты): Новый год/новогодняя ночь, День независимости, Яанипяэв 23–24.06, летний фестиваль на пляже 10–11.07 (вымышленный), 1 сентября, Сочельник; ночная смена учитывает следующий день; интенсивность ×1.1–1.5 (интервал между вызовами короче, без лишних вызовов rng) и множители вариантов (пьяные, костры/пожары, драки, вождение в опьянении).
+3. `sim.js`/`calls.js`: `nextShift(s,{vacation:true})`; событие смены в `shiftWeather().event`, строка на инструктаже; `weatherFactor` учитывает событие. Протокол/материалы в каждом закрытом деле (`PROTOCOLS`: протокол о проступке, материалы в криминальную полицию, сведения соцработнику, камера протрезвления, схема ДТП…), проверка при загрузке.
+4. `app.js`: блок «Отпуск» в «Свободном времени» (остаток дней, галочка отпуска), «День здоровья», праздник в виджете погоды, строка «📄 протокол» в делах.
+5. `tests/leave-holidays.test.mjs` (4 теста).
+**Проверки:** чистый 0.7.0-a + вся цепочка (15 пакетов) → **446/446 JS**, deploy 12/12, побайтно. На копии игры: после 4-й смены отпуск → смена 9, отпускные 412 €, осталось 27 дн.; ошибок нет.
 
 ---
 
@@ -120,6 +448,16 @@
 
 ---
 
+## 2026-10-11 22:40 · Claude · ветка claude/seasons (от claude/radio-audio; отдельно, на проверку Codex)
+**Указание владельца (18:04):** «давай дальше». Пакет **R7 «Сезоны и свет»** (добавлен в PLAN.md). Только APK, только кампании по графику (старые — без изменений).
+1. Новый `dist/season.js`: дата каждой смены (кампания с 12.10.2026), сезоны, восход/закат Пярну по месяцам, сезонная погода: зима — снег/гололёд/мороз до −14, весна, лето — жара до +31, осень — дожди/туман; скорость всех машин: снег ×0.8, гололёд ×0.7, туман ×0.9.
+2. `calls.js`: погода «Снег», «Гололёд», «Жара» с влиянием на вызовы (ДТП ×2.5/×3 зимой; дворы, бары, драки, кражи велосипедов летом); `weatherFor(seed,shift,season)` — без сезона прежний результат.
+3. `sim.js`: `shiftWeather` по сезону, `shiftDateOf`, `sunOf`; погода замедляет патрули, скорую и спасателей. `lighting.js`: `cityLighting(minute, sun)` — темнота по реальному восходу/закату (без `sun` — прежний день 07–17). `render.js`: снег (хлопья и светлая дымка), гололёд и жара — лёгкий оттенок; свет по сезону. `debrief.js`/`app.js`: сезонная погода, дата в виджете и заголовке отчёта.
+4. `tests/seasons.test.mjs` (3 теста).
+**Проверки:** чистый 0.7.0-a + вся цепочка (14 пакетов) → **442/442 JS**, deploy 12/12, побайтно. На копии игры: смена 27 (01.12, снег) — хлопья, «Рассвет» в 08:xx, ошибок нет.
+
+---
+
 ## 2026-10-11 22:27 · Claude · ветка claude/trust-balance (от claude/service-history)
 **Что сделано:** пакет **R15 «Баланс доверия»**, шаг 3 цепочки `apply-claude-080.sh`. В кампаниях с графиком доверие (общее и районов) всегда было 100%: +2 за вызов при 25–35 вызовах за смену. Теперь все изменения идут через `addTrust`/`addDistrictTrust` в `sim.js`:
 - рост ×0,25·(100−доверие)/30 (районы ×0,5), потери полные;
@@ -144,11 +482,29 @@
 
 ---
 
+## 2026-10-11 22:10 · Claude · ветка claude/radio-audio (от claude/roles-cases)
+**Пакет:** звук радиоэфира (PLAN §6 A6 «короткие радио-сигналы»): на каждую новую реплику эфира — короткий шум рации (полосовой фильтр 1.8 кГц, 90 мс, детерминированный шум) и сигнал «приём»; один раз, без повтора после скрытия/паузы; уважает громкость «Рация» и выключенный звук. `dist/audio.js`, `tests/radio-audio.test.mjs`. Шаг `radio-audio` в `apply-claude-070.sh` (по умолчанию; 13 пакетов).
+**Проверки:** вся цепочка на чистом 0.7.0-a → **439/439 JS**, deploy 12/12, побайтно. На телефоне не слушал.
+
+---
+
 ## 2026-10-11 22:00 · Claude · ветка claude/patrol-work-080 (от codex/native-map-026 / 0938e99)
 **Что сделано:** прочитал отчёты Codex о 0.2.5 и 0.2.6. Спасибо за находку в `routeWeight`: `roadSpeed` возвращает объект, моя проверка давала 30 км/ч всем рёбрам. Пакет R13 (`claude/patrol-work`, 88ff1e6) перенесён на новую базу 0.8.0-a1. Новая цепочка `patches/apply-claude-080.sh`, шаг 1 — `claude-patrol-work-080.patch`. Старую цепочку 070 не запускать.
 **Перенос:** 2 hunk'а `sim.js` перенесены руками (импорт рядом с `validRoutine`, проверка `validPatrolWork` рядом с `validRoutine`). Исправление Codex для `routeWeight` и `validRoutine` сохранено; `sim.js` отличается от проверенной версии R13 только этими строками Codex.
 **Проверки:** чистый импорт 0.8.0-a1 + шаг → **473/473 JS**. Deploy: 11/12; `test_real_release` падает и на чистой базе 0.8.0-a1, потому что в источнике нет `dist/downloads/meridian-watch-0.6.0-static.zip` (веб-архив не публикуется). Это не регрессия пакета.
 **Для Codex:** для следующего APK брать `claude/patrol-work-080` поверх 0.8.0-a1. Содержимое R13 описано в записи ниже, которая была сделана на старой базе.
+
+---
+
+## 2026-10-11 21:50 · Claude · ветка claude/roles-cases (от claude/map-mobile; отдельно, на проверку Codex)
+**Указание владельца (17:42):** «по роудмапу работай». Пакет **R6** + продолжение 0.7.0/0.7.1. Только APK. Codex: новых коммитов нет, `codex/native-claude-integration` всё ещё = realism-r2.
+**Патч:** `patches/claude-roles-cases.patch`, шаг `roles-cases` в `apply-claude-070.sh` (по умолчанию; 12 пакетов).
+1. `life.js`: роли (karjaar.politsei.ee) — ГБР (звание «Старший сотрудник», курс «Тактика задержания» 3 дн., форма ≥70, действующие стрельбы: драки/семейные/шум у заведения ×1.25 и без ожидания второго экипажа), кинолог (звание «Патрульный», курс 4 дн.: поиск ×1.4, «подозреваемый замечен» ×1.2, зацепки по кражам +20%), оператор дрона (курс 2 дн.: поиск ×1.3, проверки/погони ×1.2); проверка роли при загрузке.
+2. `sim.js`: `setRole`; бонусы роли только экипажу игрока; дела «Розыск» и их зацепки переходят в следующую смену по графику (≤10 дел, зацепка через 30–90 мин новой смены, без rng), у дела поле `fromShift`; старые кампании без изменений.
+3. `calls.js`: скорая v2 — каждый 2-й семейный конфликт с пострадавшей, каждый 3-й пропавший пожилой найден с переохлаждением (по номеру вызова, без rng); `leadFor(i, extra)`.
+4. `app.js`: выбор должности в «Свободном времени» (недоступные роли с причиной), чип «из смены N» в делах.
+5. `tests/roles-cases.test.mjs` (5 тестов); PLAN.md — строка R6.
+**Проверки:** чистый 0.7.0-a + вся цепочка → **438/438 JS**, deploy 12/12, побайтно; экран «Свободное время» на копии игры без ошибок.
 
 ---
 
@@ -199,6 +555,20 @@ APK: 2062103 bytes, SHA256 737491d31b9ccda6699a2edb1a80de16796ea61e3b719ee64600a
 
 ---
 
+## 2026-10-11 21:00 · Claude · ветка claude/map-mobile (от claude/realism-r45; помощь Codex с картой)
+**Указание владельца (16:54):** «помоги Codex с картой: графика ужасная, патрульные машины часто заезжают и едут не по дороге; графику под мобилку переделать».
+**Диагностика (числами):** позиции машин в симуляции и сглаженные позиции отрисовки (тот же `advanceVisualPath`, 60 к/с, ×1/×4, режим 45) — 0 точек дальше 10–12 м от осей проезжих дорог за смену. Значит, машины не «вылетают» из геометрии. Найдено: (1) маршрут считался по **расстоянию**, и патрули резали через дворы, парковки и подъезды (OSM service) — 3% пробега; (2) у подъездов/дворовых проездов с покрытием «брусчатка/гравий» цвет как у тротуаров, а тротуары рисовались широкой светлой линией с бордюром — на телефоне машина выглядела едущей по тротуару/через двор; (3) на телефоне сам автомобиль на обзорном масштабе — 2–3 пикселя, правая колонка кнопок занимала ~25% ширины карты.
+**Патч:** `patches/claude-map-mobile.patch`, шаг `map-mobile` в `apply-claude-070.sh` (по умолчанию; 11 пакетов).
+1. `geography.js`: маршрут по времени (`routeWeight` = расстояние / скорость участка) с ценой ×4 для service и ×1.8 для living_street, ×1.15 unclassified: дворы и парковки только для подъезда к адресу. Пробег по service 3.0% → 0.1%. **Внимание Codex:** меняются маршруты → продолжение старых сохранений будет отличаться (сохранения грузятся).
+2. `street-art.js`: проезжие дороги всегда «асфальтовые» (покрытие только оттеняет) со светлой бордюрной линией; тротуары и тропы тоньше, приглушённые, без бордюра.
+3. `render.js`: на обзорном масштабе (машина < 14 px) поверх патруля рисуется стрелка направления (мигает красным на срочном выезде).
+4. `style.css` (≤700 px): узкая колонка кнопок карты 52 px вместо ~100 px, легенда скрыта, кнопка «На весь экран» и строка радио выше.
+5. `tests/map-mobile.test.mjs` (2 теста).
+**Проверки:** вся цепочка на чистом 0.7.0-a → **433/433 JS**, deploy 12/12, побайтно. Скриншоты до/после на 412 px (копия игры) — карта шире, дороги читаются, стрелка патруля на дороге.
+**Не сделано / нужно от владельца:** не воспроизвёл именно «заезжают» на копии — нужен скриншот/видео с Fold6 (масштаб, режим «Квартал»/обычный, скорость). Полная переделка графики под телефон — следующим шагом, согласовать с Codex, чтобы не пересекаться с `codex/native-claude-integration`.
+
+---
+
 ## 2026-10-11 20:28 · Claude · ветка claude/service-sound (от claude/department-upgrades; отдельно, на проверку Codex)
 **Указание владельца:** «давай дальше по роудмапу, возьми побольше». Пакет **R11 «Звук службы»** — продолжение предыдущей ветки.
 1. `audio-design.js`: режимы сирены — вой (период 3,4 с) на трассе, йелп (0,34 с) в погоне и в последние 200 м до вызова; `weatherSound` (дождь, ветер ×2,2, снег — трафик ×0,45, лёд, туман, жара); `fireworksTime` (31.12 23:45 – 01.01 01:30), `fireworkBurst` (детерминированные интервалы 0,5–2,7 с).
@@ -219,89 +589,6 @@ APK: 2062103 bytes, SHA256 737491d31b9ccda6699a2edb1a80de16796ea61e3b719ee64600a
 5. `PLAN.md`: строки R10, R12 (сделано), R11 «звук службы» — следующий.
 **Проверки:** вся цепочка (18 пакетов) на чистой 0.7.0-a → **457/457 JS**, deploy 12/12, побайтно с рабочей копией; 42/42 сохранения 0.7.0-a; прогон начальника 9 смен без ошибок; UI на 412 px — покупка и журнал без ошибок страницы.
 **Для Codex:** `sh patches/apply-claude-070.sh` (по умолчанию до department-upgrades). Модуль `upgrades.js` попадает в APK автоматически через граф импортов. Если 0.2.5 уже собран — этот пакет в следующий APK.
-
----
-
-## 2026-10-12 00:50 · Claude · ветка claude/load-peaks (от claude/prerelease; отдельно, на проверку Codex)
-**Указание владельца (19:43):** «давай дальше». Пакет **R9 «Нагрузка и пиковые ночи»** — закрывает находку аудита «0 пропущенных вызовов, решения игрока ничего не весят». Только кампании по графику.
-1. `season.js`: `loadFactor` — профиль по часам (вечер и первая половина ночи ×1.25–1.4, 03–07 ×0.55–0.8) и дням недели (ночь пятницы/субботы, включая часы после полуночи, ×1.45; утро воскресенья ×0.75); `weekdayOf` (кампания начинается в понедельник 12.10).
-2. `sim.js`: интервал между вызовами делится на нагрузку × праздник; темп работы на месте ×0.6 (реальные вызовы 30–60 мин: объяснения, проверки, бумаги), частота ×1.25; строка инструктажа «ночь на субботу/воскресенье — будет жарко»; `loadNow`, `weekdayNow`.
-3. `app.js`: день недели в виджете погоды.
-4. `tests/load.test.mjs`.
-**Прогон 24 смен:** будни 22–26 вызовов без пропусков; ночи пятницы/субботы 34–38 вызовов, до 6 одновременно, иногда 1–3 пропуска у автоматических экипажей — перенаправление и приоритеты игрока снова решают.
-**Проверки:** вся цепочка (17 пакетов) → **447/447 JS**, deploy 12/12, побайтно; 42 сохранения 0.7.0-a — 42/42.
-**Для Codex:** если сборка 0.2.5 ещё не начата — брать `claude/load-peaks`; если уже собрана из `claude/prerelease` — этот пакет в следующий APK.
-
----
-
-## 2026-10-12 00:10 · Claude · ветка claude/prerelease (от claude/leave-holidays) — ПРОВЕРКА ПЕРЕД APK
-**Указание владельца (18:51):** «проанализируй всё, может ещё что-то надо сделать прежде кидать в APK».
-**Аудит всей цепочки (16 пакетов на чистом 0.7.0-a):**
-- `npm test` **446/446**, deploy 12/12, итог побайтно совпадает с рабочей копией; в APK 76 файлов, все новые модули есть (schedule, life, routine, burnout, roster, season, garage, policy, radio).
-- Долгие прогоны с сохранением/загрузкой каждые 2000 тиков: карьера по графику 24 смены, начальник по графику 16, старая карьера 8, старый начальник 6 — **ошибок 0, зависших экипажей 0, пропусков 0**, очередь ≤2. Стоимость тика как в 0.7.0-a (0.21–0.32 мс).
-- **42 сохранения из 0.7.0-a** (обе роли, 3 сида, середина смен, пешие экипажи, задержания) грузятся новой версией и продолжаются 3000 тиков со сменой — 42/42.
-- Копия игры 412 px: новая карьера из меню (08:00, дождь, 12.10), журнал, экипажи, вызовы, отчёт, личное дело, настройки, квартал/центр/патруль/зум, справка; новый начальник: мастер патруля, отделение, гараж (оснащение), правила — ошибок страницы и консоли 0.
-**Исправлено в этом патче (`patches/claude-prerelease.patch`, шаг `prerelease`, по умолчанию):**
-1. Инструктаж 15 → 10 мин (в реальном темпе ×1 это реальные минуты простоя в начале смены).
-2. Доход за вызов в кампаниях по графику 110 → 60: 12-ч смена даёт вдвое больше вызовов, бюджет начальника рос ~2500/смену (31 тыс. за 16 смен) → теперь ~850/смену. Старые кампании — 110.
-3. «Как играть»: раздел «Как устроена служба (новая кампания)» — график, распорядок, свободное время, роли, машины, город, начальник.
-**Для Codex — порядок выпуска:** `python3 -I source-import.py && sh patches/apply-claude-070.sh` → предлагаю игра **0.8.0-a / APK 0.2.5**.
-**Риски, которые стоит знать:** (а) маршруты по времени (map-mobile) и новый вызов «Дым из окна» (rescue) меняют продолжение старых кампаний — сохранения грузятся, но события пойдут иначе; (б) в сохранениях новые необязательные поля (life, policy, radio, cases, services, bolo, vehicles: km/fuel/wear…), всё проверяется при загрузке; (в) реальный темп ×1: 12-ч смена = 12 реальных часов (×4 — 3 ч), «Быстрая смена» в настройках ускоряет.
-**Телефонная приёмка на Fold6 (нужна владельцу/Codex):** FPS в «Проверке устройства»; новая карьера: инструктаж → патруль → обед → рапорты → «Свободное время» → отпуск; ночная смена (усталость, микросон); АЗС; снег (смена ~27); узкая колонка кнопок на внешнем экране; звук рации.
-**Не блокирует выпуск, следующий шаг роудмапа:** за все прогоны 0 пропущенных вызовов — автоматические экипажи справляются всегда (так было и в 0.7.0-a). Нужна нагрузка по часам/дням недели и пиковые ночи (пятница/суббота), чтобы решения игрока имели вес.
-
----
-
-## 2026-10-11 23:30 · Claude · ветка claude/leave-holidays (от claude/seasons; отдельно, на проверку Codex)
-**Указание владельца (18:28):** «давай дальше». Пакет **R8** (добавлен в PLAN.md). Только APK, только кампании по графику.
-1. `life.js`: отпуск 35 дн./год и 5 оплачиваемых дней здоровья (karjaar.politsei.ee); отпуск на цикл — только на 4 выходных после ночных смен: пропуск 4 смен (12 дней отдыха), −8 дн., отпускные 4×зарплата, недосып 0, стресс −40, выгорание сбрасывается; «День здоровья» — занятие (недосып −30, стресс −20, не больше остатка); с нового календарного года дни восстанавливаются.
-2. `season.js`: праздники (реальные даты): Новый год/новогодняя ночь, День независимости, Яанипяэв 23–24.06, летний фестиваль на пляже 10–11.07 (вымышленный), 1 сентября, Сочельник; ночная смена учитывает следующий день; интенсивность ×1.1–1.5 (интервал между вызовами короче, без лишних вызовов rng) и множители вариантов (пьяные, костры/пожары, драки, вождение в опьянении).
-3. `sim.js`/`calls.js`: `nextShift(s,{vacation:true})`; событие смены в `shiftWeather().event`, строка на инструктаже; `weatherFactor` учитывает событие. Протокол/материалы в каждом закрытом деле (`PROTOCOLS`: протокол о проступке, материалы в криминальную полицию, сведения соцработнику, камера протрезвления, схема ДТП…), проверка при загрузке.
-4. `app.js`: блок «Отпуск» в «Свободном времени» (остаток дней, галочка отпуска), «День здоровья», праздник в виджете погоды, строка «📄 протокол» в делах.
-5. `tests/leave-holidays.test.mjs` (4 теста).
-**Проверки:** чистый 0.7.0-a + вся цепочка (15 пакетов) → **446/446 JS**, deploy 12/12, побайтно. На копии игры: после 4-й смены отпуск → смена 9, отпускные 412 €, осталось 27 дн.; ошибок нет.
-
----
-
-## 2026-10-11 22:40 · Claude · ветка claude/seasons (от claude/radio-audio; отдельно, на проверку Codex)
-**Указание владельца (18:04):** «давай дальше». Пакет **R7 «Сезоны и свет»** (добавлен в PLAN.md). Только APK, только кампании по графику (старые — без изменений).
-1. Новый `dist/season.js`: дата каждой смены (кампания с 12.10.2026), сезоны, восход/закат Пярну по месяцам, сезонная погода: зима — снег/гололёд/мороз до −14, весна, лето — жара до +31, осень — дожди/туман; скорость всех машин: снег ×0.8, гололёд ×0.7, туман ×0.9.
-2. `calls.js`: погода «Снег», «Гололёд», «Жара» с влиянием на вызовы (ДТП ×2.5/×3 зимой; дворы, бары, драки, кражи велосипедов летом); `weatherFor(seed,shift,season)` — без сезона прежний результат.
-3. `sim.js`: `shiftWeather` по сезону, `shiftDateOf`, `sunOf`; погода замедляет патрули, скорую и спасателей. `lighting.js`: `cityLighting(minute, sun)` — темнота по реальному восходу/закату (без `sun` — прежний день 07–17). `render.js`: снег (хлопья и светлая дымка), гололёд и жара — лёгкий оттенок; свет по сезону. `debrief.js`/`app.js`: сезонная погода, дата в виджете и заголовке отчёта.
-4. `tests/seasons.test.mjs` (3 теста).
-**Проверки:** чистый 0.7.0-a + вся цепочка (14 пакетов) → **442/442 JS**, deploy 12/12, побайтно. На копии игры: смена 27 (01.12, снег) — хлопья, «Рассвет» в 08:xx, ошибок нет.
-
----
-
-## 2026-10-11 22:10 · Claude · ветка claude/radio-audio (от claude/roles-cases)
-**Пакет:** звук радиоэфира (PLAN §6 A6 «короткие радио-сигналы»): на каждую новую реплику эфира — короткий шум рации (полосовой фильтр 1.8 кГц, 90 мс, детерминированный шум) и сигнал «приём»; один раз, без повтора после скрытия/паузы; уважает громкость «Рация» и выключенный звук. `dist/audio.js`, `tests/radio-audio.test.mjs`. Шаг `radio-audio` в `apply-claude-070.sh` (по умолчанию; 13 пакетов).
-**Проверки:** вся цепочка на чистом 0.7.0-a → **439/439 JS**, deploy 12/12, побайтно. На телефоне не слушал.
-
----
-
-## 2026-10-11 21:50 · Claude · ветка claude/roles-cases (от claude/map-mobile; отдельно, на проверку Codex)
-**Указание владельца (17:42):** «по роудмапу работай». Пакет **R6** + продолжение 0.7.0/0.7.1. Только APK. Codex: новых коммитов нет, `codex/native-claude-integration` всё ещё = realism-r2.
-**Патч:** `patches/claude-roles-cases.patch`, шаг `roles-cases` в `apply-claude-070.sh` (по умолчанию; 12 пакетов).
-1. `life.js`: роли (karjaar.politsei.ee) — ГБР (звание «Старший сотрудник», курс «Тактика задержания» 3 дн., форма ≥70, действующие стрельбы: драки/семейные/шум у заведения ×1.25 и без ожидания второго экипажа), кинолог (звание «Патрульный», курс 4 дн.: поиск ×1.4, «подозреваемый замечен» ×1.2, зацепки по кражам +20%), оператор дрона (курс 2 дн.: поиск ×1.3, проверки/погони ×1.2); проверка роли при загрузке.
-2. `sim.js`: `setRole`; бонусы роли только экипажу игрока; дела «Розыск» и их зацепки переходят в следующую смену по графику (≤10 дел, зацепка через 30–90 мин новой смены, без rng), у дела поле `fromShift`; старые кампании без изменений.
-3. `calls.js`: скорая v2 — каждый 2-й семейный конфликт с пострадавшей, каждый 3-й пропавший пожилой найден с переохлаждением (по номеру вызова, без rng); `leadFor(i, extra)`.
-4. `app.js`: выбор должности в «Свободном времени» (недоступные роли с причиной), чип «из смены N» в делах.
-5. `tests/roles-cases.test.mjs` (5 тестов); PLAN.md — строка R6.
-**Проверки:** чистый 0.7.0-a + вся цепочка → **438/438 JS**, deploy 12/12, побайтно; экран «Свободное время» на копии игры без ошибок.
-
----
-
-## 2026-10-11 21:00 · Claude · ветка claude/map-mobile (от claude/realism-r45; помощь Codex с картой)
-**Указание владельца (16:54):** «помоги Codex с картой: графика ужасная, патрульные машины часто заезжают и едут не по дороге; графику под мобилку переделать».
-**Диагностика (числами):** позиции машин в симуляции и сглаженные позиции отрисовки (тот же `advanceVisualPath`, 60 к/с, ×1/×4, режим 45) — 0 точек дальше 10–12 м от осей проезжих дорог за смену. Значит, машины не «вылетают» из геометрии. Найдено: (1) маршрут считался по **расстоянию**, и патрули резали через дворы, парковки и подъезды (OSM service) — 3% пробега; (2) у подъездов/дворовых проездов с покрытием «брусчатка/гравий» цвет как у тротуаров, а тротуары рисовались широкой светлой линией с бордюром — на телефоне машина выглядела едущей по тротуару/через двор; (3) на телефоне сам автомобиль на обзорном масштабе — 2–3 пикселя, правая колонка кнопок занимала ~25% ширины карты.
-**Патч:** `patches/claude-map-mobile.patch`, шаг `map-mobile` в `apply-claude-070.sh` (по умолчанию; 11 пакетов).
-1. `geography.js`: маршрут по времени (`routeWeight` = расстояние / скорость участка) с ценой ×4 для service и ×1.8 для living_street, ×1.15 unclassified: дворы и парковки только для подъезда к адресу. Пробег по service 3.0% → 0.1%. **Внимание Codex:** меняются маршруты → продолжение старых сохранений будет отличаться (сохранения грузятся).
-2. `street-art.js`: проезжие дороги всегда «асфальтовые» (покрытие только оттеняет) со светлой бордюрной линией; тротуары и тропы тоньше, приглушённые, без бордюра.
-3. `render.js`: на обзорном масштабе (машина < 14 px) поверх патруля рисуется стрелка направления (мигает красным на срочном выезде).
-4. `style.css` (≤700 px): узкая колонка кнопок карты 52 px вместо ~100 px, легенда скрыта, кнопка «На весь экран» и строка радио выше.
-5. `tests/map-mobile.test.mjs` (2 теста).
-**Проверки:** вся цепочка на чистом 0.7.0-a → **433/433 JS**, deploy 12/12, побайтно. Скриншоты до/после на 412 px (копия игры) — карта шире, дороги читаются, стрелка патруля на дороге.
-**Не сделано / нужно от владельца:** не воспроизвёл именно «заезжают» на копии — нужен скриншот/видео с Fold6 (масштаб, режим «Квартал»/обычный, скорость). Полная переделка графики под телефон — следующим шагом, согласовать с Codex, чтобы не пересекаться с `codex/native-claude-integration`.
 
 ---
 
@@ -417,6 +704,29 @@ APK: 2062103 bytes, SHA256 737491d31b9ccda6699a2edb1a80de16796ea61e3b719ee64600a
 
 ---
 
+## 2026-10-11 11:10 · Claude · ветка claude/case-files (ИТОГ, отдельно — на проверку Codex)
+
+**Указание владельца (09:11):** «давай дальше по роудмапу». Пакет **0.7.0 шаг 3 «Дела смены»**: у каждого закрытого вызова есть запись дела, видна в журнале.
+
+**База:** ветка от `claude/ambulance` (7633fe9). **Патч:** `patches/claude-case-files.patch`; в `apply-claude.sh` шаг `case-files` (теперь по умолчанию).
+
+**Что сделано:**
+1. `calls.js`: `CASE_LIMIT=30`.
+2. `sim.js`:
+   - `recordCase` в `finish`: номер, название, район, время, успех, принятое решение, задержание/предупреждение, «✚ скорая», «повтор после №», итог (≤160 символов), статус;
+   - статусы: «Не раскрыто», «Задержанный в пути в участок», «Отпущены с предупреждением», «Закрыто на месте»; после рапорта экипажа задержание получает «Передано дежурному»;
+   - `validCases` при загрузке; старые сохранения без `cases` грузятся; новая смена начинается с пустого списка (через `createGame`).
+3. `app.js` + `style.css`: в «Журнале» раздел «Дела смены» с чипами статуса перед «События смены».
+4. `tests/case-files.test.mjs` (3 теста).
+
+**Проверки:** чистый 0.6.0-b + вся цепочка `apply-claude.sh` → **386/386 JS**, deploy OK.
+
+**Ограничения:** визуально на телефоне не проверено. Сохранение растёт максимум на 30 коротких записей.
+
+**Для Codex:** порядок выпуска прежний — APK 0.2.4 из perf + review (+ device-test), затем пакеты по цепочке. Подпись и публикация только у Codex.
+
+---
+
 ## 2026-10-11 11:05 · Claude · ветка claude/radio (от claude/rescue; отдельно, на проверку Codex)
 **Указание владельца (09:57):** «работай по роудмапу автономно». Пакет **«Радиопереговоры по шаблонам»** (разбор роудмапа, «новое для жанра»; A6 «текстовые реплики» из §6).
 **Патч:** `patches/claude-radio.patch`, шаг `radio` в `patches/apply-claude-070.sh` (по умолчанию).
@@ -442,55 +752,6 @@ APK: 2062103 bytes, SHA256 737491d31b9ccda6699a2edb1a80de16796ea61e3b719ee64600a
 5. Тексты по варианту: для пожара роли «Жилец/Сосед», «Оцепляем подъезд…», «Держит оцепление у подъезда», итог «Подъезд оцеплен, жильцы выведены»; для «животное на дороге»/«машина перекрыла проезд» убрано «ДТП». У `crash` тексты прежние (`scenes.js`, `professional.js`, `crew.js`).
 **Проверки:** чистый 0.7.0-a + патч → **392/392 JS**; `tests/rescue.test.mjs` (5 тестов); скриншот в Chromium: карточка и машина на месте, ошибок страницы нет.
 **Ограничения:** новый вариант меняет распределение вызовов (одно значение rng, как раньше) — продолжение старых сохранений будет отличаться по типам вызовов, сами сохранения грузятся. На телефоне не проверено.
-
----
-
-## 2026-10-11 09:55 · Claude · ветка claude/after-024 (от codex/android-024-claude-review 4fb8735)
-Что сделано: прочитаны PR #6, запись Codex и codex-review-fixes.patch. Новая база принята: ветка claude/after-024, `python3 -I source-import.py`, цепочка apply-claude.sh повторно НЕ запускалась.
-Проверки: 387/387 JS, 12/12 deploy/import/runtime, package 0.7.0-a.
-Замечание для Codex: импорт перезаписал из архива три отслеживаемых файла более старыми копиями — docs/ROADMAP_REVIEW_CLAUDE_20261011.md (−22 строки), patches/apply-claude.sh (без проверки этапа), patches/claude-motion-lag-and-stalls.patch. Я вернул их из git (`git checkout --`). Стоит добавить их в список сохраняемых импортёром или убрать из архива.
-Дальше: следующие пункты роудмапа делаю от этой базы, отдельными ветками claude/*.
-
----
-
-## 2026-10-11 09:43 · Codex · ветка codex/android-024-claude-review
-Что сделано: APK 0.2.4 / игра 0.7.0-a опубликован в канале обновлений. Sites version 87, source e4b2d62745db8e005116cc14f47b517f37b60b50, deployment appgdep_6acb2fef19348191b630611042b2aebf succeeded.
-Зачем: выполнено разрешение владельца проверить изменения Claude и обновить APK при успешных проверках.
-Файлы доставки: только dist/downloads/android/update.json и новый Mercury_Response_0.2.4.apk. Все остальные опубликованные игровые файлы побайтно сохранены от прежнего commit 89932fc6486a2440de35f28d983060c96b0658b6.
-Проверки: публичные feed и APK скачаны; versionCode 6, размер 2012278, SHA256 abb2c1dfcd4ca7fd710c579fbdd96e703d488a87eb2c309d306faf0b9e68fbf1 совпадают с подписанной сборкой. APK сохранён владельцу. Исходный пакет после свежего импорта: 12/12 deploy/import/runtime; 67 файлов совпадают с APK; полный журнал сохранён. В пакете исправлено включение тестов доставки, метаданные импорта вынесены из ZIP, чтобы повторный импорт был безопасен.
-Статус: создан PR #6 — https://github.com/osminoog09-star/meridian-watch/pull/6 . Коммит релиза 3d2cceb198cbfebcec2dbb2c9db43a4dd6348bc2 содержит проверенные исходники, APK, читаемый codex-review-fixes.patch и общий журнал. Main и ветки Claude не переписываются. Телефонная приёмка открыта.
-Для Claude: следующую ветку основывать на codex/android-024-claude-review; python3 source-import.py. Все патчи до case-files уже применены, apply-claude.sh повторно не запускать. Проверка устройства доступна в Настройках. Дальнейшие игровые изменения требуют следующего APK, а не обновления веб-игры.
-
-
-## 2026-10-11 · Codex · ветка codex/android-024-claude-review
-Что сделано: прочитана ветка claude/case-files 6653f9d4243ec3a4197f6cfd83ee2eb39a7b044b и общий журнал; проверяется вся последовательность патчей после 0.6.0-b.
-Зачем: владелец разрешил проверить всю работу Claude и выпустить APK, если проверки успешны. Только APK, веб-игра остаётся прежней.
-Файлы: игровая цепочка Claude; android/runtime_assets.py; patches/apply-claude.sh; dist/app.js, dist/sim.js; тесты.
-Исправления Codex: отсутствующий локальный импорт теперь останавливает APK-сборку; скрипт не скрывает код ошибки npm test и отвергает неизвестный этап; тест устройства отменяется с восстановлением кампании при уходе в фон/закрытии; сбрасывается накопитель времени; наследованные свойства не принимаются как выбор задержания.
-Проверки: 387/387 JS; 12/12 deploy/import/runtime; 42 снимка старых сохранений с одинаковым продолжением и 6 переходов смен; UI тест восстановления кампании при фоне; APK v2/v3, прежний сертификат 601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358; 67 runtime файлов совпадают побайтно. Игра 0.7.0-a / APK 0.2.4, versionCode 6. Размер 2012278 байт; SHA256 abb2c1dfcd4ca7fd710c579fbdd96e703d488a87eb2c309d306faf0b9e68fbf1. Чужие патчи и журнал сохранены. Публикация feed готовится; телефонная приёмка открыта.
-Для Claude: не применять вашу цепочку повторно к новому архиву; не обновлять браузерную игру.
-
-
-## 2026-10-11 11:10 · Claude · ветка claude/case-files (ИТОГ, отдельно — на проверку Codex)
-
-**Указание владельца (09:11):** «давай дальше по роудмапу». Пакет **0.7.0 шаг 3 «Дела смены»**: у каждого закрытого вызова есть запись дела, видна в журнале.
-
-**База:** ветка от `claude/ambulance` (7633fe9). **Патч:** `patches/claude-case-files.patch`; в `apply-claude.sh` шаг `case-files` (теперь по умолчанию).
-
-**Что сделано:**
-1. `calls.js`: `CASE_LIMIT=30`.
-2. `sim.js`:
-   - `recordCase` в `finish`: номер, название, район, время, успех, принятое решение, задержание/предупреждение, «✚ скорая», «повтор после №», итог (≤160 символов), статус;
-   - статусы: «Не раскрыто», «Задержанный в пути в участок», «Отпущены с предупреждением», «Закрыто на месте»; после рапорта экипажа задержание получает «Передано дежурному»;
-   - `validCases` при загрузке; старые сохранения без `cases` грузятся; новая смена начинается с пустого списка (через `createGame`).
-3. `app.js` + `style.css`: в «Журнале» раздел «Дела смены» с чипами статуса перед «События смены».
-4. `tests/case-files.test.mjs` (3 теста).
-
-**Проверки:** чистый 0.6.0-b + вся цепочка `apply-claude.sh` → **386/386 JS**, deploy OK.
-
-**Ограничения:** визуально на телефоне не проверено. Сохранение растёт максимум на 30 коротких записей.
-
-**Для Codex:** порядок выпуска прежний — APK 0.2.4 из perf + review (+ device-test), затем пакеты по цепочке. Подпись и публикация только у Codex.
 
 ---
 
@@ -522,6 +783,14 @@ APK: 2062103 bytes, SHA256 737491d31b9ccda6699a2edb1a80de16796ea61e3b719ee64600a
 - собственная модель машины и медика;
 - носилки и видимая погрузка;
 - влияние задержки скорой на исход.
+
+---
+
+## 2026-10-11 09:55 · Claude · ветка claude/after-024 (от codex/android-024-claude-review 4fb8735)
+Что сделано: прочитаны PR #6, запись Codex и codex-review-fixes.patch. Новая база принята: ветка claude/after-024, `python3 -I source-import.py`, цепочка apply-claude.sh повторно НЕ запускалась.
+Проверки: 387/387 JS, 12/12 deploy/import/runtime, package 0.7.0-a.
+Замечание для Codex: импорт перезаписал из архива три отслеживаемых файла более старыми копиями — docs/ROADMAP_REVIEW_CLAUDE_20261011.md (−22 строки), patches/apply-claude.sh (без проверки этапа), patches/claude-motion-lag-and-stalls.patch. Я вернул их из git (`git checkout --`). Стоит добавить их в список сохраняемых импортёром или убрать из архива.
+Дальше: следующие пункты роудмапа делаю от этой базы, отдельными ветками claude/*.
 
 ---
 
@@ -557,6 +826,15 @@ perf → review → live-calls → consequences → weather → custody → debr
 - `device-test` очень желателен в ближайшем APK — он даёт реальные цифры с Fold6.
 
 ---
+
+## 2026-10-11 09:43 · Codex · ветка codex/android-024-claude-review
+Что сделано: APK 0.2.4 / игра 0.7.0-a опубликован в канале обновлений. Sites version 87, source e4b2d62745db8e005116cc14f47b517f37b60b50, deployment appgdep_6acb2fef19348191b630611042b2aebf succeeded.
+Зачем: выполнено разрешение владельца проверить изменения Claude и обновить APK при успешных проверках.
+Файлы доставки: только dist/downloads/android/update.json и новый Mercury_Response_0.2.4.apk. Все остальные опубликованные игровые файлы побайтно сохранены от прежнего commit 89932fc6486a2440de35f28d983060c96b0658b6.
+Проверки: публичные feed и APK скачаны; versionCode 6, размер 2012278, SHA256 abb2c1dfcd4ca7fd710c579fbdd96e703d488a87eb2c309d306faf0b9e68fbf1 совпадают с подписанной сборкой. APK сохранён владельцу. Исходный пакет после свежего импорта: 12/12 deploy/import/runtime; 67 файлов совпадают с APK; полный журнал сохранён. В пакете исправлено включение тестов доставки, метаданные импорта вынесены из ZIP, чтобы повторный импорт был безопасен.
+Статус: создан PR #6 — https://github.com/osminoog09-star/meridian-watch/pull/6 . Коммит релиза 3d2cceb198cbfebcec2dbb2c9db43a4dd6348bc2 содержит проверенные исходники, APK, читаемый codex-review-fixes.patch и общий журнал. Main и ветки Claude не переписываются. Телефонная приёмка открыта.
+Для Claude: следующую ветку основывать на codex/android-024-claude-review; python3 source-import.py. Все патчи до case-files уже применены, apply-claude.sh повторно не запускать. Проверка устройства доступна в Настройках. Дальнейшие игровые изменения требуют следующего APK, а не обновления веб-игры.
+
 
 ## 2026-10-11 09:20 · Claude · ветка claude/device-test (ИТОГ, отдельно — на проверку Codex)
 
@@ -962,30 +1240,6 @@ sh patches/apply-claude.sh [perf|review|live-calls|consequences|weather|custody|
 
 ---
 
-## 2026-10-11 01:12 · Codex · ветка codex/android-023-claude-integration (ИТОГ)
-
-**Решение владельца:** только APK; веб-игру больше не обновлять. Feed и загрузка APK — инфраструктура доставки. Сообщение пришло после успешной публикации release 86, дальнейших веб-публикаций не выполнял.
-
-**Что сделано:** Claude PR #3 интегрирован в подписанный APK 0.2.3 / code5 / игра 0.6.0-b. Карта, бюджеты сборки, FPS-плашка и резерв/экипажи. Исправлен importer: четыре документа сотрудничества исключены из ZIP и пропускаются даже в старом архиве. Актуальный полный журнал Claude 41e39d3 сохранён. Работа Claude над вымышленным городом остаётся в его ветке.
-
-**Проверки:** 342/342 JS; 8/8 deploy/import. APK v2/v3, прежний сертификат 601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358. Все 116 runtime assets совпали; ESM-импорты замкнуты. Публичный feed и APK реально скачаны: 3482551 байт, SHA256 9451c41e05dbed3da9b79b94c6f08011578666b30cd06fe46258172405951c38; скачанный APK побайтово совпал. Sites release 86 / source 89932fc6486a2440de35f28d983060c96b0658b6 опубликован до нового решения владельца. APK сохранён для владельца.
-
-**Для Claude:** брать codex/android-023-claude-integration; source-import.py, патчи PR #1/#3 повторно не применять. GitHub main/ветки Claude не перезаписаны. Готовый APK опубликован независимо от слияния PR. Переносить новые правки города поверх этой базы, затем отдавать Codex для подписи APK. Fold6 приёмка и ручная панель экипажа открыты. Не заявлять Node-замеры мобильным FPS.
-
----
-
-## 2026-10-11 01:08 · Codex · ветка codex/android-023-claude-integration
-
-**Что сделано:** интегрирован проверенный патч Claude PR #3 (1e7e974), добавлен regression resize+quality+idle; исправлен импортёр — четыре корневых документа совместной работы никогда не извлекаются из архивов, включая старые. Старый архив с ./CLAUDE.md проверен в временном каталоге. Версии 0.6.0-b / Android 0.2.3 / code 5. Прежний сертификат подтверждён, APK v2/v3 собирается.
-
-**Проверки:** 342/342 JS, 8/8 deploy+import. APK v2/v3, прежний сертификат, 116 точных assets и замкнутые ESM. Feed code5, SHA256 9451c41e05dbed3da9b79b94c6f08011578666b30cd06fe46258172405951c38 / 3482551 байт. Создана отдельная GitHub codex/android-023-claude-integration из 41e39d3.
-
-**Статус:** публикация и проверка публичного APK выполняются. Восстановлена среда SDK35/ECJ из официальных источников; signing kit вне git. Новый журнал Claude 41e39d3 прочитан и сохранён целиком. Его текущая работа над городом не включена и не перезаписывается; наша ветка изолирована. Изменены только согласованные игровые исправления и текст версии/описания 0.6b.
-
-**Для Claude:** PR #3 уже применён, повторно не применять. Переносите новые UI-правки поверх 0.6.0-b; подпись/пакет/ключи сохранений прежние. Не считать Node Canvas-адаптер замером Fold6.
-
----
-
 ## 2026-10-11 01:20 · Claude · ветка claude/audit-perf-graphics (СТАРТ: вымышленный город)
 
 **Новое решение владельца (01:03):**
@@ -1025,6 +1279,30 @@ sh patches/apply-claude.sh [perf|review|live-calls|consequences|weather|custody|
 5. Сборку снимка города вынести в Worker + OffscreenCanvas; плиточный кэш.
 
 **Для Codex:** если владелец согласует, могу взять пакет «Живые вызовы» (`sim.js` TYPES/spawn + карточка назначения) — отметь в журнале, если ты сейчас трогаешь `sim.js`.
+
+---
+
+## 2026-10-11 01:12 · Codex · ветка codex/android-023-claude-integration (ИТОГ)
+
+**Решение владельца:** только APK; веб-игру больше не обновлять. Feed и загрузка APK — инфраструктура доставки. Сообщение пришло после успешной публикации release 86, дальнейших веб-публикаций не выполнял.
+
+**Что сделано:** Claude PR #3 интегрирован в подписанный APK 0.2.3 / code5 / игра 0.6.0-b. Карта, бюджеты сборки, FPS-плашка и резерв/экипажи. Исправлен importer: четыре документа сотрудничества исключены из ZIP и пропускаются даже в старом архиве. Актуальный полный журнал Claude 41e39d3 сохранён. Работа Claude над вымышленным городом остаётся в его ветке.
+
+**Проверки:** 342/342 JS; 8/8 deploy/import. APK v2/v3, прежний сертификат 601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358. Все 116 runtime assets совпали; ESM-импорты замкнуты. Публичный feed и APK реально скачаны: 3482551 байт, SHA256 9451c41e05dbed3da9b79b94c6f08011578666b30cd06fe46258172405951c38; скачанный APK побайтово совпал. Sites release 86 / source 89932fc6486a2440de35f28d983060c96b0658b6 опубликован до нового решения владельца. APK сохранён для владельца.
+
+**Для Claude:** брать codex/android-023-claude-integration; source-import.py, патчи PR #1/#3 повторно не применять. GitHub main/ветки Claude не перезаписаны. Готовый APK опубликован независимо от слияния PR. Переносить новые правки города поверх этой базы, затем отдавать Codex для подписи APK. Fold6 приёмка и ручная панель экипажа открыты. Не заявлять Node-замеры мобильным FPS.
+
+---
+
+## 2026-10-11 01:08 · Codex · ветка codex/android-023-claude-integration
+
+**Что сделано:** интегрирован проверенный патч Claude PR #3 (1e7e974), добавлен regression resize+quality+idle; исправлен импортёр — четыре корневых документа совместной работы никогда не извлекаются из архивов, включая старые. Старый архив с ./CLAUDE.md проверен в временном каталоге. Версии 0.6.0-b / Android 0.2.3 / code 5. Прежний сертификат подтверждён, APK v2/v3 собирается.
+
+**Проверки:** 342/342 JS, 8/8 deploy+import. APK v2/v3, прежний сертификат, 116 точных assets и замкнутые ESM. Feed code5, SHA256 9451c41e05dbed3da9b79b94c6f08011578666b30cd06fe46258172405951c38 / 3482551 байт. Создана отдельная GitHub codex/android-023-claude-integration из 41e39d3.
+
+**Статус:** публикация и проверка публичного APK выполняются. Восстановлена среда SDK35/ECJ из официальных источников; signing kit вне git. Новый журнал Claude 41e39d3 прочитан и сохранён целиком. Его текущая работа над городом не включена и не перезаписывается; наша ветка изолирована. Изменены только согласованные игровые исправления и текст версии/описания 0.6b.
+
+**Для Claude:** PR #3 уже применён, повторно не применять. Переносите новые UI-правки поверх 0.6.0-b; подпись/пакет/ключи сохранений прежние. Не считать Node Canvas-адаптер замером Fold6.
 
 ---
 

@@ -1,0 +1,10 @@
+{
+  "versionName": "0.3.0-native-vehicles-test",
+  "versionCode": 11,
+  "game": "0.9.2-a",
+  "size": 85353704,
+  "sha256": "2739b8a57dedf3853e4421042676d16cec655fd52b5dd3fe7722e4228f7c7f8b",
+  "signer_sha256": "601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358",
+  "stable_feed_changed": false,
+  "device_acceptance": false
+}

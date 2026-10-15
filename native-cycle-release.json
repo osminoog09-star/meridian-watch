@@ -1,0 +1,19 @@
+{
+  "version": "0.3.0-native-cycle-test",
+  "game_version": "0.9.2-a",
+  "versionCode": 11,
+  "file": "Mercury_Godot_Cycle_Test.apk",
+  "size": 85336701,
+  "sha256": "9be3765e299055bada0140318e39a401372b652d95a1e0dc953716daad1976cd",
+  "certificate_sha256": "601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358",
+  "stable_native_release_ready": false,
+  "physical_fold6_acceptance": "not performed",
+  "source_base": "280cbac plus native diagnostics/night/fireworks/service/bridge/fullscreen changes",
+  "verified": [
+    "ZIP integrity and no duplicates",
+    "signature v2/v3",
+    "16KiB ZIP alignment",
+    "UI/core bytes match workspace",
+    "DEX matches HUD recovery build"
+  ]
+}

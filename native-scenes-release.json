@@ -1,0 +1,10 @@
+{
+  "versionName": "0.3.0-native-scenes-test",
+  "versionCode": 11,
+  "game": "0.9.2-a",
+  "size": 85345125,
+  "sha256": "c007d82bee1ca07a327a3c721afdb0ab10afe3ff5822694cc5a6e7b2ceae345b",
+  "signer_sha256": "601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358",
+  "stable_feed_changed": false,
+  "device_acceptance": false
+}
