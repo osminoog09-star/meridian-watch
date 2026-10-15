@@ -1,3 +1,7 @@
+## Codex — 2026-10-15: prevent stuck menu touch after focus loss
+
+Reproduced with native UI: focus loss or hiding the scroll panel during a held touch left touches populated indefinitely, preventing NativeUI.refresh. Added lifecycle cancellation on application/window focus loss, pause and hidden visibility. Existing inertia and per-page offsets retained. Extended verify_native_scroll.gd failed before the fix and passes after it; verify_patrol_selection.gd passes at 360/740 px including actual viewport button input and follow. Both run with --native-ui. No APK built for this block; full audit/device visual acceptance still pending.
+
 ## Codex — 2026-10-15: lamp surface transfer (targeted checks passed, not released)
 
 Separated original headlight/tail-light faces into unshaded vertex-colour meshes; active beacon lenses use the same material, inactive lenses retain body lighting. Original face geometry, kits and door transforms are preserved; pooled extra meshes are hidden on reuse. Extended vehicle presentation regression to check face totals, material modes and pool reset. Node garage/source fixture test passes. Godot was restored from the official 4.7.2 archive after detecting a truncated local executable. Native vehicle presentation regression passes. No APK or stable feed changed. Previous 32/32 full audit predates this block; final release/device acceptance is still required.
