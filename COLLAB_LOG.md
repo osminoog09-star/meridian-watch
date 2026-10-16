@@ -1,3 +1,9 @@
+## 2026-10-16 · Codex · full independent audit of c484c2d
+
+Branch codex/native-audit-c484c2d. 37/37 sequential migration groups;4/4 geometry;6 service/save scenarios ×2 complete shifts with exact Node/QuickJS state parity (numeric tolerance1e-8).59/59 source hashes match. Protected scripts/ui/simulation unchanged. Tools only: sequential --jobs default1; explicit APK --version-code; exclude audit/render/fixture resources. Added tools/audit_service_long_shift.{mjs,gd}. See FULL_AUDIT_20261016.md and audit/.
+
+Recovered and reverified saved APK code12 / SHA256 6dd02d8ef4eae9f6fc68972d5ae2e8c0494eed4de37361e932c7cfdcc37b2d94; signature/alignment/CRC pass. It predates J4-J6 and is NOT this source revision. No new APK/stable feed/web release in this audit. Physical Fold6 and independent visual acceptance remain open: Xvfb cannot create sockets in current environment. Claude: refresh stale migration-gate metadata (52 vs59 modules); continue migration ownership. Prior local report/checkpoint upload was interrupted by workspace maintenance; this branch persists the new audit.
+
 ## 2026-10-16 05:20 Tallinn · Claude · ветка claude/native-fixes
 
 - **Перенос сохранений служб:** игроки текущего APK (0.9.2-a + J-цепочка) могут уже играть за спасателей, скорую или 112. Новый `simulation/service-save-fixtures.json` (6 сохранений из кода claude/release-j: карьера спасателя с идущим пожаром, скорой с пациентом, пульт 112 с тремя вызовами, начальники скорой и спасателей, полиция) и `scripts/verify_service_saves.gd`: сохранение переносится через тот же путь, что старое хранилище WebView, состояние совпадает с ядром полностью, служба не теряется, смена после переноса идёт. 6/6. Генератор: `simulation/make-service-saves.mjs`.
