@@ -24,13 +24,14 @@
 #   release-m1 — ГБР works on its own like the real kiirreageerijad: a barricade is its job, K-Komando only for a hostage (the team acts first when a life is in danger), backs up patrols and takes calls nobody reached as an extra patrol
 #   release-o  — «Мой персонаж»: a new career starts in the character creator (name, surname, age, look); the chief campaign opens only after the hero reached the top rank
 #   release-o2 — «Жители-личности»: every participant of a call is a person of the city (name, age, work, household, district, character, motive); dossier and «Люди города»; custody → court next shift → fine or prison, repeated arrests cost the job; repeat calls bring the same person back
+#   release-r1 — «Служба как в ППА»: real Estonian police ranks (младший констебль → комиссар); a young officer sees only the own patrol; the shift supervisor (välijuht) drives to armed, joint and heavy calls of the player's crew and leads them; every 8 shifts a talk with him (course, paid overtime, workload, the next rank)
 #   release-p1 — «Вторая работа»: a side job (taxi with a service card, courier, club security) after a written notice to the head (ATS § 60) or at one's own risk; evenings in the off-duty planner; thanks from people the crew helped; the career path line
-# Checked by Claude on a clean 0.9.2-a import: 611/611 JS; dist/tests byte-identical to claude/release-m (with j1–j6, k, k2, l, l1, l2, m, m1, o, o2, p1)
+# Checked by Claude on a clean 0.9.2-a import: 616/616 JS; dist/tests byte-identical to claude/release-m (with j1–j6, k, k2, l, l1, l2, m, m1, o, o2, p1, r1)
 # except Codex's version strings. tests/deploy test_real_release fails until the new APK is built.
 set -e
 cd "$(dirname "$0")/.."
-steps="release-f:claude-release-f-090 release-g:claude-release-g-090 release-h:claude-release-h-090 release-i:claude-release-i-090 release-j:claude-release-j-090 release-j1:claude-release-j1-090 release-j2:claude-release-j2-090 release-j3:claude-release-j3-090 release-j4:claude-release-j4-090 release-j5:claude-release-j5-090 release-j6:claude-release-j6-090 release-k:claude-release-k-090 release-k2:claude-release-k2-090 release-l:claude-release-l-090 release-l1:claude-release-l1-090 release-l2:claude-release-l2-090 release-m:claude-release-m-090 release-m1:claude-release-m1-090 release-o:claude-release-o-090 release-o2:claude-release-o2-090 release-p1:claude-release-p1-090"
-last="${1:-release-p1}"
+steps="release-f:claude-release-f-090 release-g:claude-release-g-090 release-h:claude-release-h-090 release-i:claude-release-i-090 release-j:claude-release-j-090 release-j1:claude-release-j1-090 release-j2:claude-release-j2-090 release-j3:claude-release-j3-090 release-j4:claude-release-j4-090 release-j5:claude-release-j5-090 release-j6:claude-release-j6-090 release-k:claude-release-k-090 release-k2:claude-release-k2-090 release-l:claude-release-l-090 release-l1:claude-release-l1-090 release-l2:claude-release-l2-090 release-m:claude-release-m-090 release-m1:claude-release-m1-090 release-o:claude-release-o-090 release-o2:claude-release-o2-090 release-p1:claude-release-p1-090 release-r1:claude-release-r1-090"
+last="${1:-release-r1}"
 case " $(echo "$steps" | sed 's/:[^ ]*//g') " in *" $last "*) ;; *) echo "Unknown patch stage: $last" >&2; exit 2 ;; esac
 for step in $steps; do
   name="${step%%:*}"; file="patches/${step#*:}.patch"
