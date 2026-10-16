@@ -1,3 +1,17 @@
+## 2026-10-16 11:40 Tallinn · Claude · ветка claude/native-fixes
+
+- Принял работу Codex: `codex/native-audit-c484c2d` (ef17016, 4cb3889 — аудит 37/37, 18062 запроса с паритетом Node/QuickJS, подписанный тестовый APK 13) влит перемоткой в `claude/native-fixes` (PR #14 черновик — влил веткой, коммиты без изменений); рабочая копия на его чекпоинте.
+- По просьбе Codex обновлён `migration-gate.json` (59 модулей, сохранения служб, рендер меню, касания). `stable_native_release_ready` — false.
+- **Владелец на телефоне: «управление странное, трудно пролистать вниз». Две причины, обе исправлены:**
+  1. **Прокрутка списков/окон.** Встроенное перетаскивание ScrollContainer в Godot 4 не начинается, если палец лёг на Button/карточку (они останавливают событие), а почти весь интерфейс — кнопки и карточки. `scripts/native_scroll.gd`: своя прокрутка пальцем — после 12 px листает откуда угодно, кнопка под пальцем после прокрутки не нажимается (отпускание уводится за экран), короткий тап нажимает как раньше, бросок докатывается (трение 4/с); встроенное перетаскивание выключено (`scroll_deadzone` 100000), колесо мыши работает. Новый `scripts/verify_touch_scroll.gd` (369×905, настройки): перетаскивание с кнопки листает, кнопка не нажимается, тап нажимает; на старом коде падает.
+  2. **Карта двигалась в 2 раза быстрее пальца** и уезжала при щипке: Godot шлёт копию касания как мышь (`DEVICE_ID_EMULATION`), `map.gd` двигал карту и по ней. Теперь эмулированная мышь карту не двигает. Новый `scripts/verify_map_touch.gd`: 100 px пальца = одна прокрутка (было 2.00×).
+- **Проверки:** аудит 39/39 (37 + две новые). Проверено эмулированным вводом; на Fold6 нужно подтвердить ощущение.
+
+## 2026-10-16 11:05 Tallinn · Claude · ветка claude/native-fixes
+
+- Принял работу Codex: `codex/native-audit-c484c2d` (ef17016, 4cb3889 — аудит 37/37, 18062 запроса с паритетом Node/QuickJS, подписанный тестовый APK 13) влит перемоткой в `claude/native-fixes`; рабочая копия переведена на его чекпоинт (Android-библиотека из APK 12, инструменты длинных смен). PR #14 был черновиком — влил веткой, его коммиты без изменений.
+- По просьбе Codex обновлён `migration-gate.json`: 59 модулей (0.9.2-a + F–J, J1–J6), 6 сохранений служб, проверенные рендером меню на обоих размерах Fold6. `stable_native_release_ready` по-прежнему false — нужна приёмка на телефоне.
+
 ## 2026-10-16 · Codex · signed native audit test APK 13
 
 Base Claude c484c2d; prior audit persisted as ef17016 on codex/native-audit-c484c2d and posted to PR #11. Built 0.3.0-native-audit-test / versionCode 13 including J4–J6. Reused the verified Android QuickJS runtime from signed APK12 (no new NDK compilation in this run); checkpoint Android binary replaced with that verified runtime. Protected scripts/ui/simulation unchanged. Fixed remaining ui/*fixtures.json export exclusion. Signature v2/v3 uses existing certificate; 16KiB ZIP alignment, CRC, duplicate-entry check, JS bundle byte parity and runtime parity all passed. SHA256 e85de14bf08a00b467594415914c5abba9203e53bf4b4902636649b69c32c579; 85592060 bytes. No physical Fold6 or graphical acceptance; stable update.json and web game unchanged. APK provided separately; next step is physical-device acceptance.
