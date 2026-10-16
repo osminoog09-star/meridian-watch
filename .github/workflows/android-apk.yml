@@ -21,12 +21,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with: {distribution: temurin, java-version: '17'}
-      - uses: android-actions/setup-android@v3
-      - name: Android SDK packages
-        run: yes | sdkmanager --licenses >/dev/null; sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+      - name: Android SDK packages (preinstalled SDK on the runner)
+        run: |
+          SM=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+          echo "ANDROID_HOME=$ANDROID_HOME"; ls $ANDROID_HOME/build-tools | tail -3; ls $ANDROID_HOME/platforms | tail -3
+          yes | $SM --licenses >/dev/null || true
+          $SM "platform-tools" "platforms;android-35" "build-tools;35.0.0" > $RUNNER_TEMP/sdk.log 2>&1 || { echo "::error::sdkmanager: $(tail -3 $RUNNER_TEMP/sdk.log | tr '\n' ' ')"; exit 1; }
       - name: Godot and export templates
         run: |
           mkdir -p ~/godot && cd ~/godot
@@ -71,9 +74,13 @@ jobs:
           python3 ../../ci/android_presets.py . --version-code ${{ steps.v.outputs.code }} --version-name ${{ steps.v.outputs.name }} --out $GITHUB_WORKSPACE/out/mercury.apk --config $XDG_CONFIG_HOME
           mkdir -p $GITHUB_WORKSPACE/out
           ~/godot/godot --headless --path . --import > $RUNNER_TEMP/import.log 2>&1 || (tail -50 $RUNNER_TEMP/import.log; true)
-          ~/godot/godot --headless --path . --install-android-build-template
-          ~/godot/godot --headless --path . --export-release "Android" $GITHUB_WORKSPACE/out/mercury.apk 2>&1 | tee $RUNNER_TEMP/export.log
-          test -s $GITHUB_WORKSPACE/out/mercury.apk
+          ~/godot/godot --headless --path . --install-android-build-template > $RUNNER_TEMP/template.log 2>&1 || true
+          ~/godot/godot --headless --path . --export-release "Android" $GITHUB_WORKSPACE/out/mercury.apk > $RUNNER_TEMP/export.log 2>&1 || true
+          if [ ! -s $GITHUB_WORKSPACE/out/mercury.apk ]; then
+            grep -iE "error|fail|exception|could not|unable" $RUNNER_TEMP/template.log $RUNNER_TEMP/export.log | head -25 | while read -r l; do echo "::error::$l"; done
+            echo "::error::export log tail: $(tail -15 $RUNNER_TEMP/export.log | tr '\n' ' ' | cut -c1-1500)"
+            exit 1
+          fi
       - name: Check the APK
         id: check
         run: |
