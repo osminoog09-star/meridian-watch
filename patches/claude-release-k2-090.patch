@@ -1,0 +1,245 @@
+diff -ruN a/dist/app.js b/dist/app.js
+--- a/dist/app.js	2026-10-16 12:42:15.825848041 +0300
++++ b/dist/app.js	2026-10-16 12:42:15.829106716 +0300
+@@ -40,7 +40,7 @@
+ import {isRescue,isRescueType,RESCUE_VEHICLES,FIRE,rescueFacts} from './rescue.js';
+ import {RESCUE_TASK_IDS,EMS_TASK_IDS} from './patrolwork.js';
+ import {isService,profileOf,isServiceType,serviceText,CREW_FORMS} from './agency.js';
+-import {takeCall,askCaller,instructCaller,pickRoute,sendCall} from './sim.js';
++import {takeCall,askCaller,instructCaller,pickRoute,sendCall,notifyService} from './sim.js';
+ import {isEms,emsFacts,needsHospital,PATIENT} from './ems.js';
+ import {courseFor} from './life.js';
+ import {upgradeFor,upgradeText} from './upgrades.js';
+@@ -85,6 +85,7 @@
+   <div class="desk-block"><b>Спросить</b>${qs.filter(q=>!c.asked.includes(q.id)).map(q=>`<button data-ask="${q.id}">${escapeHtml(q.q)}</button>`).join('')||'<small>Главное спросили.</small>'}</div>
+   <div class="desk-block"><b>Инструкция по телефону</b>${Object.entries(INSTRUCTIONS).map(([k,x])=>`<button data-instr="${k}" ${c.instr.includes(k)||c.instr.length>=3?'disabled':''}>${escapeHtml(x.label)}</button>`).join('')}</div>
+   <div class="desk-block"><b>Служба</b><div class="desk-row">${Object.entries(SERVICES).map(([k,x])=>`<button data-svc="${k}" class="${pick.service===k?'active':''}">${x}</button>`).join('')}</div><b>Приоритет</b><div class="desk-row">${Object.entries(PRIORITIES).map(([k,x])=>`<button data-pri="${k}" class="${pick.priority===k?'active':''}" title="${escapeHtml(x)}">${k}</button>`).join('')}</div><small>${pick.priority?escapeHtml(PRIORITIES[pick.priority]):'A — угроза жизни, B — срочно, C — без угрозы жизни, D — может подождать.'}</small></div>
++  <div class="desk-block"><b>Оповестить смежные службы</b><div class="desk-row">${Object.entries(SERVICES).map(([k,x])=>`<button data-notify="${k}" class="${(c.notify??[]).includes(k)?'active':''}" ${pick.service===k?'disabled':''}>${x}</button>`).join('')}</div><small>ДТП с зажатым, пожар с людьми — нужны сразу несколько служб. Каждое оповещение — ${DESK.notify} с.</small></div>
+   <button id="sendCallBtn" class="primary" ${pick.service&&pick.priority?'':'disabled'}>Направить${pick.service?' · '+SERVICES[pick.service]:''}${pick.priority?' · '+pick.priority:''}</button><small>Каждый вопрос — ${DESK.question} с разговора, инструкция — ${DESK.instruction} с: на это время позже выедет экипаж. Время на линии: ${Math.round(c.cost)} с.</small>`;}
+  setHtml('callDetail',`<div class="call-detail desk-card"><span class="eyebrow">ВЫЗОВ 112 · №${i.id}</span><h3>${escapeHtml(callTitle(i))}</h3><p class="incident-location">Меридиан · ${escapeHtml(locationLabel(sceneAnchor(i)))} (определено по телефону)</p>${body}</div>`);
+  const act=(r,keep=true)=>{toast(r.message??r);if(r.ok!==false){save();refresh(true);}};
+@@ -92,6 +93,7 @@
+  document.querySelectorAll('[data-ask]').forEach(b=>b.onclick=()=>act(askCaller(state,i.id,b.dataset.ask)));
+  document.querySelectorAll('[data-instr]').forEach(b=>b.onclick=()=>act(instructCaller(state,i.id,b.dataset.instr)));
+  document.querySelectorAll('[data-svc]').forEach(b=>b.onclick=()=>{pickRoute(state,i.id,b.dataset.svc,null);save();refresh(true);});
++ document.querySelectorAll('[data-notify]').forEach(b=>b.onclick=()=>act(notifyService(state,i.id,b.dataset.notify)));
+  document.querySelectorAll('[data-pri]').forEach(b=>b.onclick=()=>{pickRoute(state,i.id,null,b.dataset.pri);save();refresh(true);});
+  if($('sendCallBtn'))$('sendCallBtn').onclick=()=>act(sendCall(state,i.id));}
+ /* Release I: the patient on an ambulance call card — condition, what the brigade knows, where the patient goes */
+diff -ruN a/dist/dispatch.js b/dist/dispatch.js
+--- a/dist/dispatch.js	2026-10-16 12:42:15.821187592 +0300
++++ b/dist/dispatch.js	2026-10-16 12:42:15.823541847 +0300
+@@ -11,6 +11,7 @@
+ //  · a crew sent to the wrong kind of call reports back and the call is passed on — minutes lost.
+ // Pure rules: sim.js keeps the desk state and calls these; nothing here touches other campaigns.
+ import {WORLD_SECONDS_PER_TICK_SECOND} from './transport.js';
++import {JOINT_VARIANTS,TRAPPED_ANSWER,notifyNeeded,jointOf} from './joint.js';
+ export const DISPATCH_SERVICE='dispatch';
+ export const isDispatch=s=>s?.agency===DISPATCH_SERVICE;
+ const hash=(a,b)=>{let h=Math.imul((a|0)+557,2654435761)^Math.imul((b|0)+29,1597334677);h^=h>>>15;h=Math.imul(h,2246822519);return ((h^h>>>13)>>>0)/4294967296;};
+@@ -22,7 +23,7 @@
+ export const RELEASE=Object.freeze({A:0,B:.5,C:3,D:8});
+ // The mix of calls at the centre (weights by service).
+ export const MIX=Object.freeze({police:1,rescue:.45,ems:1.15});
+-export const DESK=Object.freeze({question:15,instruction:25,instructionTrained:12,pickup:1,colleagueMinutes:[1.4,2.6],gap:.55,stress:{call:.5,heavy:2.5,trained:.5}});
++export const DESK=Object.freeze({question:15,instruction:25,notify:8,instructionTrained:12,pickup:1,colleagueMinutes:[1.4,2.6],gap:.55,stress:{call:.5,heavy:2.5,trained:.5}});
+ // The right answer for a call: the service and the priority.
+ const PRIORITY_OVERRIDE=Object.freeze({'fire-smoke':'A','gas-smell':'A','missing-child':'A','lost-child-mall':'B','restraining-order':'B','power-lines':'B','alarm-burglary':'B'});
+ export const typeAgency=t=>t>=10&&t<=13?'ems':t>=6&&t<=9?'rescue':'police';/* same as agency.js (no import: agency.js imports this module) */
+@@ -56,8 +57,10 @@
+ export const callGroup=i=>groupOf(i?.variant);
+ // Questions available for a call: its group's, or two general ones.
+ export const GENERAL=Object.freeze({injured:{q:'Есть пострадавшие?'},danger:{q:'Вам или кому-то угрожает опасность?'}});
+-export function questionsFor(i){const g=GROUPS[callGroup(i)];if(g)return Object.entries(g.questions).map(([id,x])=>({id,q:x.q}));return Object.entries(GENERAL).map(([id,x])=>({id,q:x.q}));}
+-export function answerFor(i,qid,ctx={}){const g=GROUPS[callGroup(i)];if(g){const x=g.questions[qid];return x?.a?.[i.variant]??x?.other??'Не знаю.';}
++/* K2: on crashes and house fires the operator can ask about trapped and injured people */
++const TRAPPED_Q=Object.freeze({id:'trapped',q:'Есть пострадавшие или зажатые?'});
++export function questionsFor(i){const g=GROUPS[callGroup(i)];const list=g?Object.entries(g.questions).map(([id,x])=>({id,q:x.q})):Object.entries(GENERAL).map(([id,x])=>({id,q:x.q}));return JOINT_VARIANTS.has(i?.variant)?[...list,TRAPPED_Q]:list;}
++export function answerFor(i,qid,ctx={}){if(qid==='trapped')return jointOf(i)?TRAPPED_ANSWER[i.joint.scenario]:TRAPPED_ANSWER.none;const g=GROUPS[callGroup(i)];if(g){const x=g.questions[qid];return x?.a?.[i.variant]??x?.other??'Не знаю.';}
+  const ag=rightService(i);if(qid==='injured')return ag==='ems'||ctx.injured?'Да, человеку плохо, нужна помощь врача.':ag==='rescue'?'Пока нет, но может быть опасно.':'Нет, вроде никто не ранен.';
+  if(qid==='danger')return ['street-fight','fan-fight','domestic','restraining-order'].includes(i.variant)?'Да! Они дерутся, один с бутылкой.':ag==='rescue'?'Да, тут опасно подходить.':'Нет, сейчас нет.';return 'Не знаю.';}
+ export const openingFor=i=>GROUPS[callGroup(i)]?.opening??null;
+@@ -96,17 +99,18 @@
+ // What a colleague decides (deterministic per call): skill decides service and priority; ambiguous calls are harder.
+ export function colleagueDecision(i,skill,types){const g=callGroup(i),right=rightService(i),pr=rightPriority(i,types),ok=hash(i.id,1)<skill-(g?.08:0);
+  let service=right;if(!ok){const alts=g?[...new Set(GROUPS[g].variants.map(v=>v.startsWith('ems-')?'ems':['fire-flat','fire-stairs','alarm-auto','fire-rubbish','rescue-crash','storm-tree','water-ice'].includes(v)?'rescue':'police'))].filter(a=>a!==right):['police','rescue','ems'].filter(a=>a!==right);service=alts[Math.floor(hash(i.id,4)*alts.length)]??right;}
+- const priority=hash(i.id,2)<skill?pr:ORDER[Math.min(3,ORDER.indexOf(pr)+1)];const instr=usefulInstruction(i)&&hash(i.id,3)<skill*.8?[usefulInstruction(i)]:[];return {service,priority,instr};}
++ const priority=hash(i.id,2)<skill?pr:ORDER[Math.min(3,ORDER.indexOf(pr)+1)];const instr=usefulInstruction(i)&&hash(i.id,3)<skill*.8?[usefulInstruction(i)]:[];const notify=jointOf(i)&&hash(i.id,6)<skill*.9?notifyNeeded(i):[];return {service,priority,instr,notify};}
+ export const colleagueMinutes=i=>DESK.colleagueMinutes[0]+hash(i.id,5)*(DESK.colleagueMinutes[1]-DESK.colleagueMinutes[0]);
+ // Grade of a routing decision (shown after the call).
+ export function gradeRoute(i,types){const c=i.call,right=rightService(i),pr=rightPriority(i,types),useful=usefulInstruction(i);
+  const service=c.sent0===right,under=ORDER.indexOf(c.priority)>ORDER.indexOf(pr),exact=c.priority===pr,instr=!!useful&&c.instr.includes(useful);
+- const xp=(service?12:0)+(exact?6:0)+(instr?8:0);
+- const text=`${service?'Служба верная':'Не та служба: нужна '+SERVICES[right].toLowerCase()}, ${exact?'приоритет верный':under?`приоритет занижен (нужен ${pr})`:`приоритет завышен (хватило бы ${pr})`}${useful?(instr?', инструкция по телефону дана':', не хватило инструкции: «'+INSTRUCTIONS[useful].label+'»'):''}.`;
+- return {service,under,exact,instr,xp,text};}
++ const need=notifyNeeded(i),miss=need.filter(k=>!(c.notify??[]).includes(k)),joint=need.length?!miss.length:undefined;
++ const xp=(service?12:0)+(exact?6:0)+(instr?8:0)+(joint?6:0);
++ const text=`${service?'Служба верная':'Не та служба: нужна '+SERVICES[right].toLowerCase()}, ${exact?'приоритет верный':under?`приоритет занижен (нужен ${pr})`:`приоритет завышен (хватило бы ${pr})`}${useful?(instr?', инструкция по телефону дана':', не хватило инструкции: «'+INSTRUCTIONS[useful].label+'»'):''}${need.length?(joint?', смежные службы оповещены':', не оповещены: '+miss.map(k=>SERVICES[k].toLowerCase()).join(', ')):''}.`;
++ return {service,under,exact,instr,xp,text,...(joint===undefined?{}:{joint})};}
+ export function validCall(c){if(c===undefined)return true;const n=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
+  return !!c&&['ringing','talking','routed'].includes(c.status)&&n(c.at,0,1e6)&&(c.handler===undefined||['player','colleague'].includes(c.handler))&&Array.isArray(c.asked)&&c.asked.length<=6&&c.asked.every(q=>typeof q==='string'&&q.length<=20)&&Array.isArray(c.instr)&&c.instr.length<=3&&c.instr.every(k=>Object.hasOwn(INSTRUCTIONS,k))&&n(c.cost,0,600)
+-  &&(c.sent===undefined||Object.hasOwn(SERVICES,c.sent))&&(c.sent0===undefined||Object.hasOwn(SERVICES,c.sent0))&&(c.priority===undefined||ORDER.includes(c.priority))&&(c.release===undefined||n(c.release,0,1e6))&&(c.pick===undefined||!!c.pick&&typeof c.pick==='object'&&(c.pick.service===undefined||Object.hasOwn(SERVICES,c.pick.service))&&(c.pick.priority===undefined||ORDER.includes(c.pick.priority)))
++  &&(c.sent===undefined||Object.hasOwn(SERVICES,c.sent))&&(c.sent0===undefined||Object.hasOwn(SERVICES,c.sent0))&&(c.priority===undefined||ORDER.includes(c.priority))&&(c.release===undefined||n(c.release,0,1e6))&&(c.notify===undefined||Array.isArray(c.notify)&&c.notify.length<=3&&new Set(c.notify).size===c.notify.length&&c.notify.every(k=>Object.hasOwn(SERVICES,k)))&&(c.pick===undefined||!!c.pick&&typeof c.pick==='object'&&(c.pick.service===undefined||Object.hasOwn(SERVICES,c.pick.service))&&(c.pick.priority===undefined||ORDER.includes(c.pick.priority)))
+   &&(c.grade===undefined||!!c.grade&&typeof c.grade.text==='string'&&c.grade.text.length<=300)&&(c.wrongTrip===undefined||c.wrongTrip===true)&&(c.colleague===undefined||Number.isInteger(c.colleague));}
+ export function validDesk(d){if(d===undefined)return true;const n=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
+  return !!d&&Array.isArray(d.colleagues)&&d.colleagues.length<=4&&d.colleagues.every(c=>c&&Number.isInteger(c.id)&&typeof c.name==='string'&&n(c.skill,0,1)&&(c.call===null||Number.isInteger(c.call))&&n(c.until,0,1e6))&&(d.player===null||Number.isInteger(d.player))
+diff -ruN a/dist/joint.js b/dist/joint.js
+--- a/dist/joint.js	2026-10-16 12:42:15.814024631 +0300
++++ b/dist/joint.js	2026-10-16 12:42:15.816512921 +0300
+@@ -31,15 +31,22 @@
+ });
+ const mix=(a,b)=>{let h=Math.imul((a|0)+97,2654435761)^Math.imul((b|0)+13,40503);h^=h>>>15;return h>>>0;};
+ export function jointScenarioFor(agency,variant){for(const id of JOINT_IDS)if(JOINT_SCENARIOS[id].variants[agency??'police']===variant)return id;return null;}
+-// The player's service does its part; the others are city crews. 112 routes calls and has no part of its own (later).
++// The player's service does its part; the others are city crews.
++// K2 (112): the desk has no part on scene — the lead service is a fleet crew; the operator must notify the others.
++export const JOINT_VARIANTS=Object.freeze(new Set(JOINT_IDS.flatMap(id=>Object.values(JOINT_SCENARIOS[id].variants))));
++export function deskScenarioFor(variant){for(const id of JOINT_IDS)for(const [service,v] of Object.entries(JOINT_SCENARIOS[id].variants))if(v===variant)return {scenario:id,lead:service};return null;}
+ export function makeJoint(s,i){
+- const agency=s?.agency??'police';if(agency==='dispatch'||!i||i.joint)return null;
+- const scenario=jointScenarioFor(agency,i.variant);if(!scenario)return null;
++ const agency=s?.agency??'police';if(!i||i.joint)return null;const desk=agency==='dispatch';
++ const found=desk?deskScenarioFor(i.variant):(jointScenarioFor(agency,i.variant)?{scenario:jointScenarioFor(agency,i.variant),lead:agency}:null);if(!found)return null;
+  if(mix(s.seed,i.id)%JOINT.every!==0)return null;
+- const parts={};for(const p of PARTS)parts[p]={by:p===agency?'player':'city',state:'called',at:null,done:null,wait:0};
+- i.joint={scenario,player:agency,parts,unsafe:0,report:null};return i.joint;
++ const parts={};for(const p of PARTS)parts[p]={by:p===found.lead?(desk?'fleet':'player'):'city',state:'called',at:null,done:null,wait:0};
++ i.joint={scenario:found.scenario,player:found.lead,parts,unsafe:0,report:null,...(desk?{desk:true}:{})};return i.joint;
+ }
++// The services a 112 operator must notify besides the lead one.
++export const notifyNeeded=i=>{const j=jointOf(i);return j?PARTS.filter(k=>j.parts[k].by==='city'):[];};
++export const TRAPPED_ANSWER=Object.freeze({crash:'Да! Водителя зажало, он не может выйти, из-под капота дым!',fire:'Да, в квартире люди, соседка надышалась дымом и кашляет!',none:'Нет, вроде все выбрались сами.'});
+ export const jointOf=i=>i?.joint&&JOINT_SCENARIOS[i.joint.scenario]?i.joint:null;
++const notifiedLine=i=>{const j=jointOf(i);if(!j?.desk)return null;const need=notifyNeeded(i),miss=need.filter(k=>!(i.call?.notify??[]).includes(k));return {miss,line:miss.length?`Оператор 112 не оповестил: ${miss.map(k=>PART_NAMES[k].toLowerCase()).join(', ')} — экипаж вызвал их уже с места.`:'Оператор 112 сразу оповестил смежные службы.'};};
+ export const jointTitle=i=>JOINT_SCENARIOS[jointOf(i)?.scenario]?.title??'';
+ const onScene=part=>part&&(part.state==='onscene'||part.state==='done');
+ // What the player's part may do this step: speed factor and whether it may finish.
+@@ -61,15 +68,16 @@
+   lines.push(`${who}: на месте через ${Math.round(x.at)} мин${x.done!==null?`, работа закончена на ${Math.round(x.done)} мин`:''} — ${sc.lines[k]}.`);
+   if(x.by==='city'&&x.at>JOINT.quickArrival)points-=.5;
+   if(x.wait>JOINT.waitLimit){lines.push(`${PART_NAMES[k]} ждали других ${Math.round(x.wait)} мин.`);points-=.5;}}
++ const n=notifiedLine(i);if(n){lines.push(n.line);if(n.miss.length)points-=1;}
+  if(j.unsafe>2){lines.push(`Работа на дороге без оцепления: ${Math.round(j.unsafe)} мин — опасно для расчёта и пострадавшего.`);points-=1;}
+  const grade=points>=2.5?'A':points>=1.5?'B':'C';
+  lines.unshift(`Совместный разбор: «${sc.title}» — оценка ${grade}.`);
+  j.report={grade,lines:lines.slice(0,8)};return j.report;
+ }
+ export function validJoint(j){
+- if(j===undefined)return true;if(!j||typeof j!=='object'||!JOINT_SCENARIOS[j.scenario]||!PARTS.includes(j.player))return false;
++ if(j===undefined)return true;if(!j||typeof j!=='object'||!JOINT_SCENARIOS[j.scenario]||!PARTS.includes(j.player)||(j.desk!==undefined&&j.desk!==true))return false;
+  const num=(x,min,max)=>Number.isFinite(x)&&x>=min&&x<=max,time=x=>x===null||num(x,0,10000);
+- if(!j.parts||!PARTS.every(k=>{const x=j.parts[k];return x&&['player','city'].includes(x.by)&&(x.by==='player')===(k===j.player)&&['called','onscene','done'].includes(x.state)&&time(x.at)&&time(x.done)&&num(x.wait,0,10000);}))return false;
++ if(!j.parts||!PARTS.every(k=>{const x=j.parts[k];return x&&['player','city','fleet'].includes(x.by)&&(x.by===(j.desk?'fleet':'player'))===(k===j.player)&&['called','onscene','done'].includes(x.state)&&time(x.at)&&time(x.done)&&num(x.wait,0,10000);}))return false;
+  if(!num(j.unsafe,0,10000))return false;
+  return j.report===null||(!!j.report&&['A','B','C'].includes(j.report.grade)&&Array.isArray(j.report.lines)&&j.report.lines.length<=8&&j.report.lines.every(l=>typeof l==='string'&&l.length<300));
+ }
+diff -ruN a/dist/sim.js b/dist/sim.js
+--- a/dist/sim.js	2026-10-16 12:42:15.807639823 +0300
++++ b/dist/sim.js	2026-10-16 12:42:15.811597742 +0300
+@@ -100,7 +100,7 @@
+ export function routeTo(u,p){u.route=roadRoute(u,p);}
+ // «Живые вызовы»: a random call picks a realistic variant by hour and kind of place (calls.js).
+ // An explicit type keeps the original wording and uniform location (tests, scripted calls).
+-export function spawnIncident(s,type,options=null){let t=type,variant,node;if(options?.variant){variant=variantById(options.variant);t=variant.type;node=options.point;}else if(t==null){const cm=s.city?.effects?.length?cityMods(s.city,s.shift):null,pm=s.prevention?.length?preventionMods(s):null,mods=cm&&pm?Object.fromEntries([...new Set([...Object.keys(cm),...Object.keys(pm)])].map(k=>[k,(cm[k]??1)*(pm[k]??1)])):cm??pm;/* Release F: a story's ending changes its calls for a while */variant=pickVariant(rng(s),cityMinute(s.population?.elapsed??s.time),{...shiftWeather(s),...(mods?{prevention:mods}:{}),...(isService(s)?{service:s.agency}:{})});t=variant.type;const nodes=placeNodes(NODES,variant.place,byId('centre'));node=nodes[Math.floor(rng(s)*nodes.length)];}else{variant=defaultVariant(t);node=NODES[Math.floor(rng(s)*NODES.length)];}const i={id:s.nextId++,type:t,variant:variant?.id,...point(node),age:0,state:'waiting',units:[],progress:0,decision:null,backupRequested:false};if(options?.followUp)i.followUp={from:options.followUp.from,reason:options.followUp.reason};ensureScene(i);linkResident(s,i);s.incidents.push(i);if(isDispatch(s)){i.call={status:'ringing',at:s.time,asked:[],instr:[],cost:0};log(s,`112: входящий вызов №${i.id} — «${callTitle(i)}».`);}else{log(s,`Диспетчер: ${callName(i)}. Новый вызов №${i.id}.`);radio(s,'broadcast',null,i,DISPATCH);}matchBolo(s,i);if(!isDispatch(s)&&makeJoint(s,i)){log(s,`Дежурный: совместный выезд на вызов №${i.id} — ${JOINT_SCENARIOS[i.joint.scenario].title}. ${PARTS.filter(p=>i.joint.parts[p].by==='city').map(p=>PART_NAMES[p]).join(' и ')} выезжают из города.`);jointCall(s,i);}if(i.variant==='fire-smoke')callRescue(s,i);return i;}
++export function spawnIncident(s,type,options=null){let t=type,variant,node;if(options?.variant){variant=variantById(options.variant);t=variant.type;node=options.point;}else if(t==null){const cm=s.city?.effects?.length?cityMods(s.city,s.shift):null,pm=s.prevention?.length?preventionMods(s):null,mods=cm&&pm?Object.fromEntries([...new Set([...Object.keys(cm),...Object.keys(pm)])].map(k=>[k,(cm[k]??1)*(pm[k]??1)])):cm??pm;/* Release F: a story's ending changes its calls for a while */variant=pickVariant(rng(s),cityMinute(s.population?.elapsed??s.time),{...shiftWeather(s),...(mods?{prevention:mods}:{}),...(isService(s)?{service:s.agency}:{})});t=variant.type;const nodes=placeNodes(NODES,variant.place,byId('centre'));node=nodes[Math.floor(rng(s)*nodes.length)];}else{variant=defaultVariant(t);node=NODES[Math.floor(rng(s)*NODES.length)];}const i={id:s.nextId++,type:t,variant:variant?.id,...point(node),age:0,state:'waiting',units:[],progress:0,decision:null,backupRequested:false};if(options?.followUp)i.followUp={from:options.followUp.from,reason:options.followUp.reason};ensureScene(i);linkResident(s,i);s.incidents.push(i);if(isDispatch(s)){i.call={status:'ringing',at:s.time,asked:[],instr:[],cost:0};log(s,`112: входящий вызов №${i.id} — «${callTitle(i)}».`);}else{log(s,`Диспетчер: ${callName(i)}. Новый вызов №${i.id}.`);radio(s,'broadcast',null,i,DISPATCH);}matchBolo(s,i);if(makeJoint(s,i)&&!isDispatch(s)){log(s,`Дежурный: совместный выезд на вызов №${i.id} — ${JOINT_SCENARIOS[i.joint.scenario].title}. ${PARTS.filter(p=>i.joint.parts[p].by==='city').map(p=>PART_NAMES[p]).join(' и ')} выезжают из города.`);jointCall(s,i);}if(i.variant==='fire-smoke')callRescue(s,i);return i;}
+ export const callName=i=>(i.followUp?(i.variant==='suspect-found'?'Розыск: ':'Повторно: '):'')+(variantOf(i)?.name??TYPES[i.type].name);
+ export const callBrief=i=>variantOf(i)?.brief??TYPES[i.type].brief;
+ // Redirect: a crew still driving to a call may be taken to a strictly more urgent one.
+@@ -272,20 +272,22 @@
+ function wrongCrew(s,u,i){if(!isDispatch(s)||unitAgency(s,u)===typeAgency(i.type))return false;const right=typeAgency(i.type);pushRadio(s,callsign(u),`На месте. Это не наш вызов — нужна ${SERVICES[right].toLowerCase()}. Передайте в 112.`);log(s,`${u.name}: вызов №${i.id} не по профилю, нужна ${SERVICES[right].toLowerCase()}. Вызов передан заново.`);
+  i.units=i.units.filter(id=>id!==u.id);if(!i.units.length&&i.state!=='onscene')i.state='waiting';u.incident=null;u.status='patrol';u.route=[];if(i.call){i.call.sent=right;i.call.release=s.time+ticksOf(1);i.call.wrongTrip=true;}if(s.desk)s.desk.stats.wrong++;return true;}
+ const routeLog=(s,i,who)=>{const c=i.call;log(s,`112${who?' ('+who+')':''}: вызов №${i.id} → ${SERVICES[c.sent]}, приоритет ${c.priority}.`);};
+-function routeCall(s,i,service,priority,who){const c=i.call;c.status='routed';c.sent=service;c.sent0=service;c.priority=priority;c.release=s.time+ticksOf(RELEASE[priority]+c.cost/60);c.grade=gradeRoute(i,TYPES);routeLog(s,i,who);
++function routeCall(s,i,service,priority,who){const c=i.call;c.status='routed';c.sent=service;c.sent0=service;c.priority=priority;c.release=s.time+ticksOf(RELEASE[priority]+c.cost/60);c.grade=gradeRoute(i,TYPES);routeLog(s,i,who);if(i.joint){if(c.notify?.length)log(s,`112${who?' ('+who+')':''}: по вызову №${i.id} оповещены ${c.notify.map(k=>SERVICES[k].toLowerCase()).join(', ')}.`);jointCall(s,i);}
+  if(c.instr.includes('away')&&i.scene)i.scene.tension=Math.max(0,i.scene.tension-10);
+  const d=s.desk;d.stats.handled++;if(c.grade.service)d.stats.service++;if(c.grade.exact)d.stats.priority++;if(c.grade.instr)d.stats.instructions++;if(c.grade.under)d.stats.under++;
+  if(c.handler==='player'){d.last.unshift({id:i.id,text:`№${i.id}: ${c.grade.text}`});d.last=d.last.slice(0,8);s.xp+=xpGain(s,c.grade.xp);s.rank=rankOf(s);if(s.life){const heavy=i.type===10||i.type===6||['missing-child','ems-choking','ems-burn'].includes(i.variant);s.life.stress=Math.min(100,s.life.stress+(heavy?DESK.stress.heavy:DESK.stress.call)*(Number.isInteger(s.life.courses?.crisis)?DESK.stress.trained:1));}}else d.stats.colleague++;}
+ function deskTick(s){const d=s.desk;if(!d)return;
+  if(d.player!=null){const p=s.incidents.find(x=>x.id===d.player);if(!p||['resolved','missed'].includes(p.state)||p.call?.status!=='talking'){d.player=null;if(p&&p.state!=='missed')log(s,`112: разговор по вызову №${p.id} прерван.`);}}
+  for(const i of s.incidents)if(i.call?.status==='talking'&&(i.call.handler==='player'?d.player!==i.id:!d.colleagues.some(c=>c.call===i.id))){i.call.status='ringing';delete i.call.handler;delete i.call.colleague;}/* a call left on the line (new shift, lost connection) rings again */
+- for(const c of d.colleagues){if(c.call!=null&&s.time>=c.until){const i=s.incidents.find(x=>x.id===c.call);c.call=null;if(i?.call?.status==='talking'&&i.call.handler==='colleague'){const r=colleagueDecision(i,c.skill,TYPES);i.call.instr=r.instr;routeCall(s,i,r.service,r.priority,c.name);}}}
++ for(const c of d.colleagues){if(c.call!=null&&s.time>=c.until){const i=s.incidents.find(x=>x.id===c.call);c.call=null;if(i?.call?.status==='talking'&&i.call.handler==='colleague'){const r=colleagueDecision(i,c.skill,TYPES);i.call.instr=r.instr;if(r.notify.length)i.call.notify=r.notify;routeCall(s,i,r.service,r.priority,c.name);}}}
+  for(const i of s.incidents){if(i.call?.status!=='ringing'||['resolved','missed'].includes(i.state)||s.time-i.call.at<ticksOf(DESK.pickup))continue;const c=d.colleagues.find(x=>x.call==null);if(!c)break;c.call=i.id;c.until=s.time+ticksOf(colleagueMinutes(i));i.call.status='talking';i.call.handler='colleague';i.call.colleague=c.id;}}
+ export function takeCall(s,id){const i=s.incidents.find(x=>x.id===id),d=s.desk;if(!isDispatch(s)||!d||s.ended||!i?.call)return {ok:false,message:'Вызов недоступен.'};if(d.player!=null&&d.player!==id)return {ok:false,message:'Сначала закончите текущий разговор.'};if(i.call.status!=='ringing')return {ok:false,message:'На этот вызов уже ответили.'};i.call.status='talking';i.call.handler='player';d.player=id;return {ok:true,message:'112, что у вас случилось?'};}
+ const myCall=(s,id)=>{const i=s.incidents.find(x=>x.id===id);return isDispatch(s)&&!s.ended&&i?.call?.status==='talking'&&i.call.handler==='player'&&s.desk?.player===id?i:null;};
+ export function askCaller(s,id,qid){const i=myCall(s,id);if(!i)return {ok:false,message:'Нет разговора.'};if(!questionsFor(i).some(q=>q.id===qid)||i.call.asked.includes(qid))return {ok:false,message:'Этот вопрос уже задан.'};i.call.asked.push(qid);i.call.cost=Math.min(600,i.call.cost+DESK.question);return {ok:true,message:answerFor(i,qid,{injured:needsAmbulanceFor(i)})};}
+ export function instructCaller(s,id,key){const i=myCall(s,id);if(!i||!INSTRUCTIONS[key])return {ok:false,message:'Нет разговора.'};if(i.call.instr.includes(key)||i.call.instr.length>=3)return {ok:false,message:'Инструкция уже дана.'};i.call.instr.push(key);i.call.cost=Math.min(600,i.call.cost+(key==='cpr'&&Number.isInteger(s.life?.courses?.tcpr)?DESK.instructionTrained:DESK.instruction));return {ok:true,message:INSTRUCTIONS[key].line};}
+ export function pickRoute(s,id,service,priority){const i=myCall(s,id);if(!i)return false;i.call.pick={...(i.call.pick??{}),...(service&&SERVICES[service]?{service}:{}),...(priority&&'ABCD'.includes(priority)&&priority.length===1?{priority}:{})};return true;}
++/* K2: the operator notifies the other services of a joint call (toggle; a few seconds on the line) */
++export function notifyService(s,id,service){const i=myCall(s,id);if(!i||!SERVICES[service])return {ok:false,message:'Нет разговора.'};const n=i.call.notify??[];if(n.includes(service)){i.call.notify=n.filter(k=>k!==service);return {ok:true,message:`${SERVICES[service]}: оповещение отменено.`};}if(n.length>=3)return {ok:false,message:'Все службы уже оповещены.'};i.call.notify=[...n,service];i.call.cost=Math.min(600,i.call.cost+DESK.notify);return {ok:true,message:`${SERVICES[service]} оповещены.`};}
+ export function sendCall(s,id){const i=myCall(s,id),p=i?.call.pick;if(!i||!p?.service||!p?.priority)return {ok:false,message:'Выберите службу и приоритет.'};s.desk.player=null;routeCall(s,i,p.service,p.priority,null);return {ok:true,message:`Направлено: ${SERVICES[p.service]}, приоритет ${p.priority}.`};}
+ /* Release I: where an idle service crew waits — the rescue station (HQ) or the ambulance substation at the hospital */
+ const serviceBase=(s,u)=>unitProfile(s,u)?.base==='hospital'?HOSPITAL:HQ;
+@@ -312,7 +314,7 @@
+ // 0.7.2 v1 rescue service: station -> scene (safe zone, work) -> station.
+ export const FIRE_STATION=point(byId('ulejoe'));
+ /* Release K: the city partners of a joint call; retried while a service limit is full */
+-function jointCall(s,i){const j=jointOf(i);if(!j)return;if(j.parts.police.by==='city'&&j.parts.police.state==='called'&&!(s.services??[]).some(a=>a.kind==='police'&&a.incident===i.id))callCityPolice(s,i);if(j.parts.rescue.by==='city')callRescue(s,i);if(j.parts.ems.by==='city')callAmbulance(s,i);}
++function jointCall(s,i){const j=jointOf(i);if(!j)return;if(j.desk&&j.parts[j.player].state==='called'){const told=i.call?.status==='routed'?(i.call.notify??[]):[];if(j.parts.police.by==='city'&&told.includes('police')&&!(s.services??[]).some(a=>a.kind==='police'&&a.incident===i.id))callCityPolice(s,i);if(j.parts.rescue.by==='city'&&told.includes('rescue'))callRescue(s,i);if(j.parts.ems.by==='city'&&told.includes('ems'))callAmbulance(s,i);return;}/* K2: before the lead crew is on scene, 112 sends only the services the operator notified */if(j.parts.police.by==='city'&&j.parts.police.state==='called'&&!(s.services??[]).some(a=>a.kind==='police'&&a.incident===i.id))callCityPolice(s,i);if(j.parts.rescue.by==='city')callRescue(s,i);if(j.parts.ems.by==='city')callAmbulance(s,i);}
+ function callCityPolice(s,i){if(!Array.isArray(s.services))s.services=[];if(s.services.filter(a=>a.kind==='police').length>=2)return;const id=(s.nextServiceId??1);s.nextServiceId=id+1;const a={id,kind:'police',x:HQ.x,y:HQ.y,route:[],status:'responding',incident:i.id,timer:0,target:{x:i.x,y:i.y}};a.route=roadRoute(a,a.target);s.services.push(a);
+  log(s,`Наряд ${id}: выезжаем на вызов №${i.id} — перекроем движение и оцепим место.`);pushRadio(s,serviceCallsign(a),'Наряд выехал, перекроем движение.');}
+ function tickCityPolice(s,a,dt){const i=s.incidents.find(x=>x.id===a.incident),open=i&&!['resolved','missed'].includes(i.state);
+@@ -324,7 +326,7 @@
+  if(p.rescue.by==='city'){if(i.rescue==='working')markPart(i,'rescue','onscene',minute);if(i.rescue==='done')markPart(i,'rescue','done',minute);}
+  if(p.ems.by==='city'){const amb=mine.find(a=>a.kind!=='rescue'&&a.kind!=='police'&&a.incident===i.id);if(i.medical==='treated')markPart(i,'ems','onscene',minute);if(i.medical==='treated'&&(!amb||['transporting','handover'].includes(amb.status)))markPart(i,'ems','done',minute);}
+  if(p.police.by==='city'&&mine.some(a=>a.kind==='police'&&a.incident===i.id&&a.status==='cordon'))markPart(i,'police','onscene',minute);
+- if(working.length)markPart(i,j.player,'onscene',minute);
++ if(working.length&&markPart(i,j.player,'onscene',minute)&&j.desk){const miss=PARTS.filter(k=>j.parts[k].by==='city'&&!(i.call?.notify??[]).includes(k));if(miss.length){const u=working[0];pushRadio(s,callsign(u),`На месте: нужны ${miss.map(k=>PART_NAMES[k].toLowerCase()).join(' и ')}, вызывайте!`);log(s,`${u.name}: на месте совместное происшествие — 112 не оповестил ${miss.map(k=>PART_NAMES[k].toLowerCase()).join(' и ')}, вызываем сами.`);}}
+  const g=jointGate(i);if(g.unsafe&&working.length)j.unsafe=Math.min(10000,j.unsafe+dm);
+  if(working.length&&!g.canClose&&i.progress>=TYPES[i.type].duration*Math.min(g.cap,JOINT.hold)-1e-9)p[j.player].wait=Math.min(10000,p[j.player].wait+dm);
+  jointCall(s,i);return g;}
+diff -ruN a/tests/joint.test.mjs b/tests/joint.test.mjs
+--- a/tests/joint.test.mjs	2026-10-16 12:42:15.888123355 +0300
++++ b/tests/joint.test.mjs	2026-10-16 12:42:15.897903861 +0300
+@@ -13,12 +13,12 @@
+ }
+ const run=(s,i,max=6000)=>{for(let k=0;k<max&&!['resolved','missed'].includes(i.state);k++)tick(s,.5);};
+ 
+-test('a third of the suitable calls is joint, by hash; 112 has none; the player does the own service\'s part',()=>{
++test('a third of the suitable calls is joint, by hash; the player does the own service\'s part; on 112 the lead is a fleet crew',()=>{
+  for(const service of [undefined,'rescue','ems']){let joint=0,all=0;
+   for(const seed of [7182,123,9001]){const s=createGame('career',seed,{schedule:'ppa',service});s.nextIncident=9000;const v=JOINT_SCENARIOS.crash.variants[service??'police'];
+    for(let k=0;k<12;k++){const n=NODES[(k*7)%NODES.length];const i=spawnIncident(s,null,{variant:v,point:{x:n.x,y:n.y}});all++;if(i.joint){joint++;assert.equal(i.joint.parts[service??'police'].by,'player');assert.equal(PARTS.filter(p=>i.joint.parts[p].by==='city').length,2);}}}
+   assert.ok(joint>=all/5&&joint<=all/2,`${service}: ${joint}/${all}`);}
+- const d=createGame('career',7182,{schedule:'ppa',service:'dispatch'});assert.equal(makeJoint(d,{id:3,variant:'crash'}),null,'112 routes calls; no part of its own yet');
++ const d=createGame('career',7182,{schedule:'ppa',service:'dispatch'});for(let id=1;id<30;id++){const j=makeJoint(d,{id,variant:'rescue-crash'});if(j){assert.ok(j.desk);assert.equal(j.player,'rescue');assert.equal(j.parts.rescue.by,'fleet');assert.equal(j.parts.police.by,'city');break;}}
+  assert.equal(makeJoint(createGame('career',7182,{schedule:'ppa'}),{id:3,variant:'shoplift'}),null,'only crashes and house fires');
+ });
+ 
+@@ -81,3 +81,36 @@
+  tick(s,.5);assert.ok(!s.services.some(a=>a.kind==='rescue'&&a.incident===i.id),'limit full');
+  s.services=s.services.filter(a=>a.id!==900);tick(s,.5);assert.ok(s.services.some(a=>a.kind==='rescue'&&a.incident===i.id),'called again');
+ });
++
++// K2: joint calls on the 112 desk.
++import {takeCall,askCaller,pickRoute,sendCall,notifyService} from '../dist/sim.js';
++import {questionsFor,validCall,colleagueDecision,gradeRoute} from '../dist/dispatch.js';
++function deskJoint(variant='rescue-crash',seed=7182){
++ const s=createGame('career',seed,{schedule:'ppa',service:'dispatch'});s.nextIncident=9000;
++ for(let k=0;k<30;k++){const n=NODES[(k*11+5)%NODES.length];const i=spawnIncident(s,null,{variant,point:{x:n.x,y:n.y}});if(i.joint)return {s,i};i.state='resolved';i.finished=s.time;}
++ throw Error('no joint desk call');
++}
++test('112: a joint call — ask about trapped people, notify the other services, they leave at once; the grade counts it',()=>{
++ const {s,i}=deskJoint();assert.ok(questionsFor(i).some(q=>q.id==='trapped'));assert.equal(questionsFor({variant:'shoplift'}).some(q=>q.id==='trapped'),false);
++ assert.ok(takeCall(s,i.id).ok);assert.match(askCaller(s,i.id,'trapped').message,/зажало/);
++ assert.ok(notifyService(s,i.id,'police').ok);assert.ok(notifyService(s,i.id,'ems').ok);pickRoute(s,i.id,'rescue','A');const xp=s.xp;assert.ok(sendCall(s,i.id).ok);
++ assert.ok(i.call.grade.joint);assert.match(i.call.grade.text,/смежные службы оповещены/);assert.ok(s.xp>xp);assert.equal(i.call.grade.xp-gradeRoute({...i,call:{...i.call,notify:[]}},TYPES).xp,6,'+6 XP for notifying');
++ const kinds=(s.services??[]).filter(a=>a.incident===i.id).map(a=>a.kind).sort();assert.deepEqual(kinds,['ambulance','police'],'the notified services leave with the routing');
++ assert.ok(validCall(i.call));deserialize(serialize(s));
++ run(s,i,8000);assert.equal(i.state,'resolved');assert.ok(i.joint.report.lines.some(l=>/сразу оповестил/.test(l)));
++});
++test('112: not notified — the lead crew calls the others from the scene; the debrief and the routing grade mark it',()=>{
++ const {s,i}=deskJoint();takeCall(s,i.id);pickRoute(s,i.id,'rescue','A');sendCall(s,i.id);
++ assert.equal(i.call.grade.joint,false);assert.match(i.call.grade.text,/не оповещены: полиция, скорая/);
++ assert.equal((s.services??[]).filter(a=>a.incident===i.id).length,0,'nobody else leaves yet');
++ let called=false;for(let k=0;k<8000&&!['resolved','missed'].includes(i.state);k++){tick(s,.5);if(!called&&(s.services??[]).some(a=>a.incident===i.id))called=i.joint.parts.rescue.state!=='called';}
++ assert.ok(called,'called only once the lead crew was on scene');
++ if(i.state==='resolved')assert.ok(i.joint.report.lines.some(l=>/не оповестил/.test(l)));
++});
++test('112: colleagues notify by skill; notify data is validated',()=>{
++ let notified=0,all=0;for(let id=1;id<=90;id++){const i={id,variant:'rescue-crash',type:7,joint:{scenario:'crash',player:'rescue',desk:true,parts:{police:{by:'city'},rescue:{by:'fleet'},ems:{by:'city'}}}};const r=colleagueDecision(i,.9,TYPES);all++;if(r.notify.length===2)notified++;}
++ assert.ok(notified>all*.6&&notified<all,`${notified}/${all}`);
++ assert.equal(validCall({status:'routed',at:1,asked:[],instr:[],cost:0,notify:['army']}),false);assert.equal(validCall({status:'routed',at:1,asked:[],instr:[],cost:0,notify:['ems','ems']}),false);
++ const {s,i}=deskJoint();const raw=JSON.parse(serialize(s));const x=raw.incidents.find(y=>y.id===i.id);x.joint.parts[x.joint.player].by='player';assert.throws(()=>deserialize(JSON.stringify(raw)),'the desk lead is a fleet crew');
++ const app=fs.readFileSync(new URL('../dist/app.js',import.meta.url),'utf8');assert.match(app,/data-notify="\$\{k\}"/);
++});
