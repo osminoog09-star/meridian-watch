@@ -16,6 +16,11 @@
 
 ---
 
+## 2026-10-16 04:50 Tallinn · Claude · ветка claude/release-j
+
+- **J6 (ошибка исходной 0.9.2-a, найдена на ночном рендере Godot):** доверие растёт дробно (прирост зависит от разрыва до 100), а шапка и итоговый отчёт выводили его как есть — «90.52977267860129 %». Теперь `Math.round`.
+- `patches/claude-release-j6-090.patch` + шаг `release-j6`; новый `tests/trust-display.test.mjs`. `npm test` 575/575; цепочка j2→j6 на чистом 0.9.2-a + F–J1 даёт app.js байт в байт.
+
 ## 2026-10-16 01:10 Tallinn · Claude · ветка claude/release-j
 
 - **J5:** в гараже («Настройка автомобиля») пожарная машина и скорая рисовались полицейским седаном. `garageModel(type)` в app.js берёт модель машины (engine/ladder/tanker/ambulance/resus; rapid → suv).
