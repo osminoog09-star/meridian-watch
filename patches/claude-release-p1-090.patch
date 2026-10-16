@@ -1,0 +1,233 @@
+diff -ruN a/dist/app.js b/dist/app.js
+--- a/dist/app.js	2026-10-16 20:34:09.838808859 +0300
++++ b/dist/app.js	2026-10-16 20:34:09.843139396 +0300
+@@ -41,7 +41,7 @@
+ import {RESCUE_TASK_IDS,EMS_TASK_IDS} from './patrolwork.js';
+ import {isService,profileOf,isServiceType,serviceText,CREW_FORMS} from './agency.js';
+ import {takeCall,askCaller,instructCaller,pickRoute,sendCall,notifyService,hireOperator,dismissOperator,trainOperator,centreSeats} from './sim.js';
+-import {prefectureOn,isGbrUnit,unitMayTake} from './sim.js';import {HERO,suggestHero,makeHero,heroName,heroSummary,chiefUnlocked} from './hero.js';import {citizen,citizenLine,traitLine,motiveFor,personOf,arrests,OUTCOME,STATUS_TEXT as PERSON_STATUS} from './citizens.js';import {gbrNeeded,PREFECTURE} from './prefecture.js';import {serviceCallsign} from './radio.js';
++import {prefectureOn,isGbrUnit,unitMayTake} from './sim.js';import {takeSideJob,leaveSideJob} from './sim.js';import {SIDE_JOBS,SIDE_JOB_IDS,sideJobActive} from './sidejob.js';import {HERO,suggestHero,makeHero,heroName,heroSummary,chiefUnlocked} from './hero.js';import {citizen,citizenLine,traitLine,motiveFor,personOf,arrests,OUTCOME,STATUS_TEXT as PERSON_STATUS} from './citizens.js';import {gbrNeeded,PREFECTURE} from './prefecture.js';import {serviceCallsign} from './radio.js';
+ import {isEms,emsFacts,needsHospital,PATIENT} from './ems.js';
+ import {courseFor} from './life.js';
+ import {upgradeFor,upgradeText} from './upgrades.js';
+@@ -168,6 +168,9 @@
+  $('heroRandom').onclick=()=>{heroDraft=suggestHero(Date.now()%9973,Math.floor(Math.random()*1000));heroCreator();};$('heroBack').onclick=()=>welcome();
+  $('heroStart').onclick=()=>hadSave?switchMode('career',true):startHero();}
+ /* Release O2: the dossier of a person of the city and the people the player has met */
++/* Release P1: the second job in the personal file */
++function sideJobMarkup(){const j=state.life.sideJob,cur=j&&SIDE_JOBS[j.kind],st={pending:`уведомление у начальника, ответ к смене ${j?.ready}`,approved:'согласована',refused:`отказ: ${j?.reason??''}`,unreported:'без уведомления — риск выговора'};
++ return `<details class="dept-section"${j?' open':''}><summary><b>Вторая работа</b>${cur?' · '+escapeHtml(cur.label)+' · '+escapeHtml(st[j.status]):''}</summary><p>Госслужащий обязан письменно уведомить начальника о побочной работе (закон о публичной службе, § 60). Начальник может запретить её, если она мешает службе или создаёт конфликт интересов. Работать без уведомления — нарушение дисциплины. Подработка — только в выходные, в планировщике «Подработка (вечер)», не больше двух вечеров за выходные.</p>${cur&&j.status!=='refused'?`<p>Отработано вечеров: ${j.days}, заработано: ${Math.round(j.earned)} €.</p><button id="quitSideJob">Оставить подработку</button>`:SIDE_JOB_IDS.map(k=>`<div class="logrow"><b>${escapeHtml(SIDE_JOBS[k].label)}</b> — ${escapeHtml(SIDE_JOBS[k].about)}<div class="modal-actions"><button data-sidejob="${k}" id="sideJob-${k}" class="primary">Уведомить начальника</button><button data-sidejob="${k}" data-report="no" id="sideJobQuiet-${k}">Без уведомления</button></div></div>`).join('')}</details>`;}
+ function personPanel(id,back=null){const c=citizen(id);if(!c)return;const r=personOf(state,id),call=state.incidents.find(i=>i.scene?.participants?.some(a=>a.citizen===id));
+  modal(`<span class="eyebrow">ДОСЬЕ · ${escapeHtml(PERSON_STATUS[r?.status??'free']).toUpperCase()}</span><h2>${escapeHtml(c.name)}</h2><p>${escapeHtml(citizenLine(c))}</p><p>Характер: ${escapeHtml(traitLine(c))}.</p>${call&&call.scene.participants[0]?.citizen===id?`<p class="tip">Что происходит: ${escapeHtml(motiveFor(call.variant,c))}.</p>`:''}${r?.lostJob?'<p class="notice">Потерял(а) работу после задержаний.</p>':''}${r?.fines?`<p>Штрафы по решениям суда: ${r.fines} €.</p>`:''}
+  <h3>Встречи с вами (${r?.met?.length??0})</h3>${(r?.met??[]).map(m=>`<div class="logrow"><small>Смена ${m.shift} · №${m.call}</small> ${escapeHtml(m.role)} — <b>${escapeHtml(OUTCOME[m.outcome]??m.outcome)}</b></div>`).join('')||'<p>Раньше не встречались.</p>'}<p class="fine-print">Город и его жители вымышлены.</p><div class="modal-actions">${back?'<button id="personBack">К списку</button>':''}<button id="personClose" class="primary">Закрыть</button></div>`);
+@@ -250,7 +253,7 @@
+  const bar=(label,v,warn)=>`<div class="life-stat"><span>${label}</span>${meter(v,warn)}<b>${Math.round(v)}</b></div>`;
+  const checks=COURSE_IDS.filter(id=>COURSES[id].mandatory).map(id=>{const ok=courseValid(life,id,state.shift),done=life.courses?.[id];return `<span class="chip${ok?'':' bad'}">${escapeHtml(COURSES[id].label)}: ${ok?`до смены ${done+COURSES[id].valid}`:'просрочен'}</span>`;}).join('');
+  const nextRank=RANK_XP.find(x=>x>state.xp);
+- const options=()=>ACTIVITY_IDS.filter(id=>(id!=='overtime'||blocks.overtime)&&(id!=='training'||blocks.training)&&!(life.forcedRest&&['overtime','training'].includes(id))&&(id!=='health'||(life.healthDays??LEAVE.health)>0)).map(id=>`<option value="${id}">${escapeHtml(ACTIVITIES[id].label)}</option>`).join('');
++ const options=()=>ACTIVITY_IDS.filter(id=>(id!=='sidejob'||sideJobActive(life))&&(id!=='overtime'||blocks.overtime)&&(id!=='training'||blocks.training)&&!(life.forcedRest&&['overtime','training'].includes(id))&&(id!=='health'||(life.healthDays??LEAVE.health)>0)).map(id=>`<option value="${id}">${escapeHtml(ACTIVITIES[id].label)}</option>`).join('');
+  const courses=COURSE_IDS.filter(id=>courseFor(id,life.agency)).map(id=>`<option value="${id}">${escapeHtml(COURSES[id].label)}${life.progress?.[id]?` · день ${life.progress[id]+1}/${COURSES[id].days}`:COURSES[id].days>1?` · ${COURSES[id].days} дн.`:''}${Number.isInteger(life.courses?.[id])&&!COURSES[id].mandatory?' · пройден':''}</option>`).join('');
+  const dayName=k=>blocks.days===1?(blocks.rest<=12?'Вечер и ночь перед сменой':'Свободные сутки'):`Выходной ${k+1}`;
+  modal(`<span class="eyebrow">МЕЖДУ СМЕНАМИ / ${blocks.rest} Ч ОТДЫХА</span><h2>Свободное время</h2><p>Следующая смена — ${n.label}, ${n.when} в ${formatMinute(n.startMinute)}. За смену: ${shiftNet()} € на руки. На счёте после зарплаты: <b>${Math.round(life.money+shiftNet())} €</b>. Показатели — после этой смены.</p>
+@@ -438,7 +441,7 @@
+  const service=serviceSummary(state);if(!service)return '<p>Личное дело доступно в режиме карьеры.</p>';
+  return `<section class="training-card service-card"><span class="eyebrow">КАРЬЕРА / ЛИЧНОЕ ДЕЛО</span><div class="service-heading"><span class="service-insignia" aria-label="Карьерная ступень ${state.rank+1} из 5">${state.rank===0?'M':'›'.repeat(state.rank)}</span><div><small>${escapeHtml((state.agency?crewName():'Патруль 01').toUpperCase())} / ЛИЧНОЕ ДЕЛО</small><h3>${escapeHtml(service.current.title)} · ${state.xp} опыта</h3></div></div><p><b>Текущее полномочие:</b> ${escapeHtml(service.current.duty)}.</p>${partnerCard()}${isScheduled(state)?attestMarkup()+career2Markup():''}${service.next?`<p>Следующее звание: <b>${escapeHtml(service.next.title)}</b> — ${escapeHtml(service.next.duty)}. Осталось опыта: ${xpProgress().left}.</p>`:'<p>Достигнута высшая ступень текущей карьерной системы.</p>'}<div class="permission-grid">${(profileOf(state)?.permissions??CAREER_PERMISSIONS).map(p=>`<div class="training-step ${p.rank<=state.rank?'done':''}"><b>${p.rank<=state.rank?'✓':'○'} ${escapeHtml(p.title)}</b><small>${escapeHtml(p.duty)}</small></div>`).join('')}</div><details open><summary>История службы · ${service.events.length}</summary>${service.events.length?service.events.map(e=>`<div class="logrow">${e.success?'✓':'—'} ${escapeHtml(e.name)} <small>№${e.incident} · смена ${e.shift}</small><p>${e.success?'Успешно завершено':'Помощь не завершена'} · ${e.xp} опыта · ${escapeHtml(rankTitle(state,e.rank))}</p></div>`).join(''):'<p>Записи появятся после вызовов, в которых участвовал '+escapeHtml(crewRef('Патруль 01','экипаж «$»'))+'.</p>'}</details><details><summary>Повышения</summary>${service.promotions.map(p=>`<p>Смена ${p.shift}: ${escapeHtml(rankTitle(state,p.rank))}</p>`).join('')}</details><p class="fine-print">Успешные вызовы дают опыт. Полномочия проверяются самой симуляцией, поэтому заблокированную команду нельзя выполнить обходом интерфейса.${service.legacy?' История начата после обновления; прежние вызовы не выдумываются.':''}</p></section>`;
+ }
+-function servicePanel(){modal('<h2>Личное дело сотрудника</h2>'+(state.hero?`<p class="tip"><b>${escapeHtml(heroName(state.hero))}</b> · ${escapeHtml(heroSummary(state.hero))}</p>`:'')+(chiefUnlocked(state)?'<p class="notice">Вы дослужились до высшего звания: можно возглавить подразделение — это новая кампания начальника с вашим персонажем.</p><button id="becomeChief" class="primary" style="width:100%">Возглавить подразделение</button>':'')+serviceMarkup()+personalGoalsMarkup()+developmentMarkup());bindCareer2(servicePanel);if($('becomeChief'))$('becomeChief').onclick=()=>{rememberChief(state);agencyChoice=state.agency??'police';switchMode('chief',true);};for(const b of document.querySelectorAll('[data-buy]'))b.onclick=()=>{const r=buyPersonal(state,b.dataset.buy);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};}
++function servicePanel(){modal('<h2>Личное дело сотрудника</h2>'+(state.hero?`<p class="tip"><b>${escapeHtml(heroName(state.hero))}</b> · ${escapeHtml(heroSummary(state.hero))}</p>`:'')+(state.mode==='career'?`<p class="fine-print">Путь: ${[0,1,2,3,4].map(k=>`${k===state.rank?'<b>':''}${escapeHtml(rankTitle(state,k))}${k===state.rank?'</b>':''}`).join(' → ')} → ${chiefUnlocked(state)?'<b>начальник — открыто</b>':'начальник (после высшего звания)'}</p>`:'')+(chiefUnlocked(state)?'<p class="notice">Вы дослужились до высшего звания: можно возглавить подразделение — это новая кампания начальника с вашим персонажем.</p><button id="becomeChief" class="primary" style="width:100%">Возглавить подразделение</button>':'')+(state.life?sideJobMarkup():'')+serviceMarkup()+personalGoalsMarkup()+developmentMarkup());bindCareer2(servicePanel);for(const b of document.querySelectorAll('[data-sidejob]'))b.onclick=()=>{const r=takeSideJob(state,b.dataset.sidejob,b.dataset.report!=='no');toast(r.message);if(r.ok){save();servicePanel();}};if($('quitSideJob'))$('quitSideJob').onclick=()=>{const r=leaveSideJob(state);toast(r.message);save();servicePanel();};if($('becomeChief'))$('becomeChief').onclick=()=>{rememberChief(state);agencyChoice=state.agency??'police';switchMode('chief',true);};for(const b of document.querySelectorAll('[data-buy]'))b.onclick=()=>{const r=buyPersonal(state,b.dataset.buy);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};}
+ /* Release C2: what the savings are for */
+ function personalGoalsMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';
+  return `<section class="training-card"><h3>Личные цели · на счёте ${Math.round(l.money)} €</h3>${PURCHASE_IDS.map(id=>{const p=PURCHASES[id],why=purchaseBlocker(l,id),have=id==='gym'?(l.owned?.gym??0)>0:owns(l,id),share=Math.max(0,Math.min(1,(l.money??0)/p.price));return `<div class="goal-row"><b>${escapeHtml(p.label)} · ${p.price} €</b><small>${escapeHtml(p.about)}</small>${have?`<small>✓ ${id==='gym'?`действует ещё ${l.owned.gym} смен`:'есть'}</small>`:`<div class="meter"><i style="width:${Math.round(share*100)}%"></i></div><button data-buy="${id}" ${why?'disabled':''} title="${escapeHtml(why??'')}">Купить</button>`}</div>`;}).join('')}</section>`;}
+diff -ruN a/dist/citizens.js b/dist/citizens.js
+--- a/dist/citizens.js	2026-10-16 20:34:09.838890190 +0300
++++ b/dist/citizens.js	2026-10-16 20:34:09.843634887 +0300
+@@ -83,7 +83,9 @@
+   if(n>=3||h%10===0){r.status='jailed';r.until=shift+PEOPLE.jailShifts;lines.push(`Суд: ${c.name} — арест (${n}-е задержание).`);}
+   else{const fine=PEOPLE.fineCourt[Math.min(PEOPLE.fineCourt.length-1,n-1)];r.status='free';r.fines+=fine;lines.push(`Суд: ${c.name} — штраф ${fine} €.`);}
+   if((r.status==='jailed'||n>=PEOPLE.jobLossRecords)&&!r.lostJob&&!['без работы','пенсионер'].includes(c.job)&&c.age>=18){r.lostJob=true;lines.push(`${c.name} потерял${c.gender==='f'?'а':''} работу (${c.job}).`);}}
+- else if(r.status==='jailed'&&shift>=r.until){r.status='free';lines.push(`${citizen(+id).name} вышел${citizen(+id).gender==='f'?'а':''} на свободу.`);}}
++ else if(r.status==='jailed'&&shift>=r.until){r.status='free';lines.push(`${citizen(+id).name} вышел${citizen(+id).gender==='f'?'а':''} на свободу.`);}
++ /* Release P1: people the crew helped sometimes thank it */
++ const m=r.met[0];if(m&&m.shift===shift-1&&['found','rescued','hospital'].includes(m.outcome)&&mix(+id,shift,7)%3===0){const c=citizen(+id);lines.push(`Благодарность: ${m.outcome==='found'?'семья, которой вернули '+(c.age<18?'ребёнка':'близкого'):c.name+(m.outcome==='hospital'?' после больницы':'')} — спасибо экипажу.`);}}
+  return lines;}
+ export const STATUS_TEXT=Object.freeze({free:'на свободе',custody:'в изоляторе, ждёт суда',jailed:'отбывает арест'});
+ export function validPeople(p){if(p===undefined)return true;if(!p||typeof p!=='object'||Array.isArray(p)||Object.keys(p).length>PEOPLE.limit+20)return false;
+diff -ruN a/dist/life.js b/dist/life.js
+--- a/dist/life.js	2026-10-16 20:34:09.838696212 +0300
++++ b/dist/life.js	2026-10-16 20:34:09.843019034 +0300
+@@ -42,6 +42,7 @@
+ export const COURSE_IDS=Object.freeze(Object.keys(COURSES));
+ import {ensurePartner,validPartner} from './partner.js';
+ import {validCases} from './detective.js';
++import {SIDE,SIDE_JOBS,sideJobActive,sideJobDay,validSideJob} from './sidejob.js';
+ export const ACTIVITIES=Object.freeze({
+  rest:{label:'Отдых и сон',about:'Высыпаетесь: недосып −40, стресс −10.',sleep:-40,stress:-10,fitness:0,money:0},
+  family:{label:'Семья и друзья',about:'Стресс −25, немного недосыпа (+5). Расходы 30 €.',sleep:5,stress:-25,fitness:0,money:-30},
+@@ -50,6 +51,7 @@
+  partner:{label:'Время с напарником',about:'Кофе, рыбалка или баня с напарником: связь +12, стресс −12. Расходы 20 €.',sleep:0,stress:-12,fitness:0,money:-20,bond:12},
+  training:{label:'Обучение',about:'День курса или проверки. Недосып +10, стресс +5.',sleep:10,stress:5,fitness:0,money:0},
+  health:{label:'День здоровья (оплачиваемый)',about:'Без больничного листа, 5 дней в год (ППА): недосып −30, стресс −20.',sleep:-30,stress:-20,fitness:0,money:0},
++ sidejob:{label:'Подработка (вечер)',about:'Вторая работа — только после уведомления начальника (или на свой риск). Такси, доставка, охрана: деньги, но недосып.',sleep:0,stress:0,fitness:0,money:0},
+  overtime:{label:'Доп. смена (12 ч)',about:'Оплата ×1.5, опыт. Недосып +35, стресс +10. Нужно ≥12 ч отдыха до и после; не больше одной за выходные.',sleep:35,stress:10,fitness:-1,money:0}
+ });
+ export const ACTIVITY_IDS=Object.freeze(Object.keys(ACTIVITIES));
+@@ -67,13 +69,14 @@
+ export function validPlan(plan,blocks,life=null){if(!Array.isArray(plan)||plan.length!==blocks.days)return false;let ot=0,health=0;if(life?.forcedRest&&plan.some(p=>['overtime','training'].includes(p.activity)))return false;
+  for(const p of plan){if(!p||!Object.hasOwn(ACTIVITIES,p.activity))return false;if(p.activity==='overtime'){ot++;if(!blocks.overtime)return false;}if(p.activity==='health')health++;
+   if(p.activity==='training'){if(!blocks.training||!Object.hasOwn(COURSES,p.course))return false;}else if(p.course!==undefined)return false;}
++ const side=plan.filter(p=>p.activity==='sidejob').length;if(side&&(!sideJobActive(life)||side>SIDE.perOff))return false;
+  return ot<=1&&health<=(life?.healthDays??LEAVE.health);}
+ export const defaultPlan=blocks=>Array.from({length:blocks.days},()=>({activity:'rest'}));
+ export function courseValid(life,id,shift){const c=COURSES[id],done=life?.courses?.[id];if(!Number.isInteger(done))return false;return !c.valid||shift-done<c.valid;}
+ export function mandatoryOk(life,shift){return COURSE_IDS.filter(id=>COURSES[id].mandatory&&courseFor(id,life?.agency)).every(id=>courseValid(life,id,shift));}
+ // Apply one plan: returns lines for the summary. `shift` = number of the shift just finished.
+ export function applyPlan(life,plan,shift){const lines=[];let xp=0;
+- for(const p of plan){const a=ACTIVITIES[p.activity];if(a.bond){const pr=ensurePartner(life);pr.bond=clamp(pr.bond+a.bond);lines.push(`${pr.name}: вечер вместе — связь +${a.bond}`);}life.sleepDebt=clamp(life.sleepDebt+a.sleep);life.stress=clamp(life.stress+a.stress);life.fitness=clamp(life.fitness+a.fitness);life.money+=a.money;
++ for(const [day,p] of plan.entries()){const a=ACTIVITIES[p.activity];if(p.activity==='sidejob'){const r=sideJobDay(life,shift,day);lines.push(...r.lines);continue;}if(a.bond){const pr=ensurePartner(life);pr.bond=clamp(pr.bond+a.bond);lines.push(`${pr.name}: вечер вместе — связь +${a.bond}`);}life.sleepDebt=clamp(life.sleepDebt+a.sleep);life.stress=clamp(life.stress+a.stress);life.fitness=clamp(life.fitness+a.fitness);life.money+=a.money;
+   if(p.activity==='overtime'){const pay=Math.round(shiftNet()*PAY.overtime);life.money+=pay;life.earned+=pay;life.overtime++;xp+=60;lines.push(`Доп. смена: +${pay} € на руки, опыт +60`);}
+   else if(p.activity==='training'){const c=COURSES[p.course];life.progress[p.course]=(life.progress[p.course]??0)+1;
+    if(life.progress[p.course]>=c.days){life.progress[p.course]=0;
+@@ -94,7 +97,7 @@
+ export const startFatigue=life=>life?Math.round(Math.min(60,life.sleepDebt*.5+Math.max(0,life.stress-60)*.3)):0;
+ // Course bonus for the player's own crew on a call variant.
+ export function courseBonus(life,variant){let b=1;for(const id of ['firstaid','negotiation']){const c=COURSES[id];if(Number.isInteger(life?.courses?.[id])&&c.variants.includes(variant))b=Math.max(b,c.bonus);}return b;}
+-export function validLife(s){const l=s.life;if(l===undefined)return true;if(s.mode!=='career'||s.schedule!=='ppa')return false;if(!validPartner(l?.partner)||!validCases(l))return false;const num=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
++export function validLife(s){const l=s.life;if(l===undefined)return true;if(s.mode!=='career'||s.schedule!=='ppa')return false;if(!validPartner(l?.partner)||!validCases(l)||!validSideJob(l))return false;const num=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
+  return !!l&&typeof l==='object'&&['sleepDebt','stress','fitness'].every(k=>num(l[k],0,100))&&num(l.money,-1e7,1e7)&&num(l.earned,0,1e8)&&Number.isInteger(l.overtime)&&l.overtime>=0
+   &&(l.agency===undefined||['rescue','ems','dispatch'].includes(l.agency)&&s.agency===l.agency)&&l.courses&&typeof l.courses==='object'&&Object.entries(l.courses).every(([k,v])=>Object.hasOwn(COURSES,k)&&Number.isInteger(v)&&v>=0&&v<=s.shift)
+   &&l.progress&&typeof l.progress==='object'&&Object.entries(l.progress).every(([k,v])=>Object.hasOwn(COURSES,k)&&Number.isInteger(v)&&v>=0&&v<COURSES[k].days)
+diff -ruN a/dist/sidejob.js b/dist/sidejob.js
+--- a/dist/sidejob.js	1970-01-01 03:00:00.000000000 +0300
++++ b/dist/sidejob.js	2026-10-16 20:34:09.843657004 +0300
+@@ -0,0 +1,43 @@
++// Release P1 «Вторая работа» (Claude, 17.10.2026). Owner 16.10: «можно работать на двух работах, если начальство
++// разрешит; таксистом — подработкой». Estonian public service act (ATS § 60): an official must notify the head in
++// writing about side work; the head may forbid it when it harms the service or creates a conflict of interest (for a
++// police officer, security work is one); not notifying is a breach of discipline. A taxi driver needs a service card
++// (teenindajakaart) from the town government. Side work happens on days off and costs sleep.
++import {citizen,CITIZEN_BASE,CITIZEN_COUNT} from './citizens.js';
++export const SIDE_JOBS=Object.freeze({
++ taxi:Object.freeze({label:'Такси',about:'Вечер за рулём такси через приложение: 8–14 поездок, пассажиры — жители города. Нужна карта обслуживающего лица из горуправы (30 €).',
++  card:30,trips:[8,14],fare:[6,16],cut:.2,sleep:12,stress:5,fitness:0}),
++ courier:Object.freeze({label:'Курьер доставки',about:'Доставка еды на велосипеде: 50–80 € за вечер, форма +2.',pay:[50,80],sleep:8,stress:3,fitness:2}),
++ security:Object.freeze({label:'Охранник в клубе',about:'Ночь на входе в клуб: 100 € за ночь.',pay:[100,100],sleep:16,stress:6,fitness:0,conflict:['police']})
++});
++export const SIDE_JOB_IDS=Object.freeze(Object.keys(SIDE_JOBS));
++export const SIDE=Object.freeze({answer:2,perOff:2,unreportedFound:4,stressLimit:70});
++const mix=(a,b,c=0)=>{let h=Math.imul((a|0)+0x51ed,2654435761)^Math.imul((b|0)+0x3c6e,2246822519)^Math.imul((c|0)+0x1b87,3266489917);h^=h>>>15;h=Math.imul(h,2246822519);h^=h>>>13;return h>>>0;};
++const span=([a,b],h)=>a+h%(b-a+1);
++export const sideJobActive=life=>['approved','unreported'].includes(life?.sideJob?.status);
++// The written notice to the head (ATS § 60); the answer comes in two shifts.
++export function requestSideJob(life,kind,shift,{report=true}={}){const j=SIDE_JOBS[kind];if(!life)return {ok:false,message:'Подработка — в карьере по графику.'};if(!j)return {ok:false,message:'Нет такой работы.'};
++ if(life.sideJob&&life.sideJob.status!=='refused'&&life.sideJob.kind===kind)return {ok:false,message:'Уже оформлено.'};
++ if(kind==='taxi'&&!life.taxiCard){if(life.money<j.card)return {ok:false,message:`Карта таксиста стоит ${j.card} €.`};life.money-=j.card;life.taxiCard=true;}
++ life.sideJob=report?{kind,status:'pending',ready:shift+SIDE.answer,days:0,earned:0}:{kind,status:'unreported',ready:shift,days:0,earned:0};
++ return {ok:true,message:report?'Уведомление о побочной работе подано начальнику. Ответ — через две смены.':'Работаете без уведомления — это нарушение дисциплины.'};}
++export function quitSideJob(life){if(!life?.sideJob)return {ok:false,message:'Подработки нет.'};life.sideJob=null;return {ok:true,message:'Подработка оставлена.'};}
++// The head's answer: refused for a conflict of interest, a D at the last attestation or when the officer is worn out.
++export function sideJobVerdict(life,agency,{grade=null}={}){const j=SIDE_JOBS[life?.sideJob?.kind];if(!j)return 'Нет заявления.';
++ if(j.conflict?.includes(agency??'police'))return 'Конфликт интересов: полиция надзирает за охранной деятельностью.';
++ if(grade==='D')return 'После оценки D на аттестации — сначала исправить службу.';
++ if(life.forcedRest||life.stress>=SIDE.stressLimit)return 'Нагрузка уже мешает службе: сначала отдых.';return null;}
++// One evening of side work: money, sleep, stress and a few lines about the people met.
++export function sideJobDay(life,shift,day){const sj=life.sideJob,j=SIDE_JOBS[sj?.kind];if(!j)return {lines:[],money:0,found:false};const h=mix(shift,day,sj.days);let money=0;const lines=[];
++ if(sj.kind==='taxi'){const trips=span(j.trips,h);let gross=0;for(let k=0;k<trips;k++)gross+=span(j.fare,mix(h,k));money=Math.round(gross*(1-j.cut));
++  const p=citizen(CITIZEN_BASE+mix(h,7)%CITIZEN_COUNT);lines.push(`Такси: ${trips} поездок, +${money} € после комиссии приложения`);
++  const e=mix(h,9)%6;if(p.age>=18){if(e===0){const lost=span(j.fare,h);money-=lost;lines.push(`${p.name} (${p.job}) вышел${p.gender==='f'?'а':''}, не заплатив: −${lost} €`);}
++   else if(e===1){lines.push(`${p.name} забыл${p.gender==='f'?'а':''} телефон в машине — вернули владельцу`);life.stress=Math.max(0,life.stress-3);}
++   else if(e===2){lines.push(`Ночью — ${p.name}, сильно пьян${p.gender==='f'?'а':''}: довезли домой, но нервы`);life.stress=Math.min(100,life.stress+3);}
++   else if(e===3)lines.push(`Разговорились с пассажиром: ${p.name}, ${p.job}${p.place?' ('+p.place+')':''}`);}}
++ else{money=span(j.pay,h);lines.push(`${j.label}: +${money} €`);}
++ life.money+=money;life.earned+=Math.max(0,money);life.sleepDebt=Math.min(100,life.sleepDebt+j.sleep);life.stress=Math.min(100,life.stress+j.stress);life.fitness=Math.min(100,life.fitness+j.fitness);
++ sj.days++;sj.earned+=money;const found=sj.status==='unreported'&&mix(h,11)%SIDE.unreportedFound===0;if(found)life.integrity=(life.integrity??0)+1;
++ return {lines,money,found};}
++export function validSideJob(l){const j=l?.sideJob;if(l?.taxiCard!==undefined&&typeof l.taxiCard!=='boolean')return false;if(j===undefined||j===null)return true;
++ return !!SIDE_JOBS[j.kind]&&['pending','approved','refused','unreported'].includes(j.status)&&Number.isInteger(j.ready)&&Number.isInteger(j.days)&&j.days>=0&&Number.isFinite(j.earned)&&Math.abs(j.earned)<1e7&&(j.reason===undefined||typeof j.reason==='string'&&j.reason.length<200);}
+diff -ruN a/dist/sim.js b/dist/sim.js
+--- a/dist/sim.js	2026-10-16 20:34:09.838740547 +0300
++++ b/dist/sim.js	2026-10-16 20:34:09.843067679 +0300
+@@ -38,6 +38,7 @@
+ import {POLICIES,policyOf,priorityOf,policyCost,validPolicy,PRIORITY_RULES} from './policy.js';
+ import {JOINT,JOINT_SCENARIOS,PARTS,PART_NAMES,makeJoint,jointOf,jointGate,markPart,jointReport,validJoint} from './joint.js';
+ import {makeHero,validHero,heroFitness} from './hero.js';
++import {requestSideJob,quitSideJob,sideJobVerdict,SIDE_JOBS} from './sidejob.js';
+ import {citizen,citizenFor,recordMet,personOf,arrests,peopleAfterShift,validPeople} from './citizens.js';
+ import {PREFECTURE,ARMED,GBR_VARIANTS,GBR_SUPPORT,makeArmed,gbrNeeded,gbrOnScene,kkOnScene,gbrStorms,prefectureCap,prefectureWait,validArmed} from './prefecture.js';
+ export const SIZE=6;
+@@ -107,6 +108,9 @@
+ export function spawnIncident(s,type,options=null){let t=type,variant,node;if(options?.variant){variant=variantById(options.variant);t=variant.type;node=options.point;}else if(t==null){const cm=s.city?.effects?.length?cityMods(s.city,s.shift):null,pm=s.prevention?.length?preventionMods(s):null,mods=cm&&pm?Object.fromEntries([...new Set([...Object.keys(cm),...Object.keys(pm)])].map(k=>[k,(cm[k]??1)*(pm[k]??1)])):cm??pm;/* Release F: a story's ending changes its calls for a while */variant=pickVariant(rng(s),cityMinute(s.population?.elapsed??s.time),{...shiftWeather(s),...(mods?{prevention:mods}:{}),...(isService(s)?{service:s.agency}:{})});t=variant.type;const nodes=placeNodes(NODES,variant.place,byId('centre'));node=nodes[Math.floor(rng(s)*nodes.length)];}else{variant=defaultVariant(t);node=NODES[Math.floor(rng(s)*NODES.length)];}const i={id:s.nextId++,type:t,variant:variant?.id,...point(node),age:0,state:'waiting',units:[],progress:0,decision:null,backupRequested:false};if(options?.followUp)i.followUp={from:options.followUp.from,reason:options.followUp.reason};ensureScene(i);if(isScheduled(s))assignCitizens(s,i,options?.followUp?.who);linkResident(s,i);for(const a of i.scene.participants)if(a.residentId)delete a.citizen;/* a resident of the centre keeps the resident card */s.incidents.push(i);if(isDispatch(s)){i.call={status:'ringing',at:s.time,asked:[],instr:[],cost:0};log(s,`112: входящий вызов №${i.id} — «${callTitle(i)}».`);}else{log(s,`Диспетчер: ${callName(i)}. Новый вызов №${i.id}.`);radio(s,'broadcast',null,i,DISPATCH);}matchBolo(s,i);if(makeJoint(s,i)&&!isDispatch(s)){log(s,`Дежурный: совместный выезд на вызов №${i.id} — ${JOINT_SCENARIOS[i.joint.scenario].title}. ${PARTS.filter(p=>i.joint.parts[p].by==='city').map(p=>PART_NAMES[p]).join(' и ')} выезжают из города.`);jointCall(s,i);}if(prefectureOn(s)&&makeArmed(s,i)){log(s,`Командный центр префектуры: вызов №${i.id} — ${ARMED[i.armed].prefix.toLowerCase()}. Направляем ГБР, патрулю держать дистанцию.`);pushRadio(s,'Командный центр',`№${i.id}: ${ARMED[i.armed].prefix.toLowerCase()} на месте. ГБР выезжает, патрулю — дистанция.`);}if(i.variant==='fire-smoke')callRescue(s,i);return i;}
+ /* Release O2: the people of a call are people of the city; a repeat call brings the same person back */
+ function assignCitizens(s,i,who){const d=districtOf(i);for(const [k,a] of i.scene.participants.entries()){const c=k===0&&citizen(who)?citizen(who):citizenFor(i,k,a.role,d);a.citizen=c.id;a.name=c.name;}}
++/* Release P1: a second job — notify the head (ATS § 60) or take the risk */
++export function takeSideJob(s,kind,report=true){if(s.mode!=='career'||!s.life)return {ok:false,message:'Подработка — в карьере по графику.'};const r=requestSideJob(s.life,kind,s.shift,{report});if(r.ok)log(s,`Личное: ${r.message}`);return r;}
++export function leaveSideJob(s){const r=quitSideJob(s.life);if(r.ok)log(s,'Личное: подработка оставлена.');return r;}
+ export const callName=i=>(i.followUp?(i.variant==='suspect-found'?'Розыск: ':'Повторно: '):'')+(ARMED[i.armed]?ARMED[i.armed].prefix+': ':'')+(variantOf(i)?.name??TYPES[i.type].name);
+ export const callBrief=i=>(variantOf(i)?.brief??TYPES[i.type].brief)+(ARMED[i.armed]?' '+ARMED[i.armed].brief:'');
+ /* Release M: the prefecture's rapid response team (ГБР) and K-Komando — police patrol campaigns on the PPA roster */
+@@ -176,7 +180,7 @@
+  if(support)transact(closed,support,'support','Антикризисная субсидия (упрощённая экономика)');
+  if(closed.mode==='chief'){const wages=shiftWages(closed);if(wages)transact(closed,-wages,'salary',isScheduled(closed)&&shiftKind(closed.shift-1)==='night'?'Зарплаты за ночную смену (+25% за ночные часы)':'Зарплаты за смену');if(closed.vehicles.length)transact(closed,-closed.vehicles.length*30,'maintenance','Содержание автопарка');const rules=policyCost(closed);if(rules)transact(closed,-rules,'policy','Правила отделения');const upkeep=upgradesUpkeep(closed);if(upkeep)transact(closed,-upkeep,'upkeep','Обслуживание оснащения отделения');}
+  else transact(closed,-cost,'maintenance','Содержание смены');
+- const n=createGame(s.mode,s.seed);if(s.agency)n.agency=s.agency;if(isDispatch(s))n.desk={...newDesk(),...(s.mode==='chief'?{colleagues:s.desk.colleagues.map(c=>({...c,call:null,until:0})),candidates:deskCandidates(n.seed,n.shift,s.desk.colleagues.map(c=>c.name))}:{}),stats:{...s.desk.stats},last:s.desk.last.slice(0,8)};n.shift=s.shift+1;if(options.vacation&&s.mode==='career'&&isScheduled(s)&&s.life&&!canTakeVacation(s.life,freeBlocks(s.shift)))n.shift+=ROTA.length;n.xp=s.xp;n.rank=s.rank;n.budget=closed.budget;n.trust=s.trust;if(s.hero)n.hero={...s.hero};if(s.people){n.people=JSON.parse(JSON.stringify(s.people));for(const l of peopleAfterShift(n,n.shift))log(n,l);}if(s.districts)n.districts={...s.districts};if(s.policy)n.policy=s.policy;if(s.upgrades)n.upgrades=[...s.upgrades];if(s.tipsSeen)n.tipsSeen=[...s.tipsSeen];if(s.tipsOff)n.tipsOff=true;if(s.priorityDistrict)n.priorityDistrict=s.priorityDistrict;
++ const n=createGame(s.mode,s.seed);if(s.agency)n.agency=s.agency;if(isDispatch(s))n.desk={...newDesk(),...(s.mode==='chief'?{colleagues:s.desk.colleagues.map(c=>({...c,call:null,until:0})),candidates:deskCandidates(n.seed,n.shift,s.desk.colleagues.map(c=>c.name))}:{}),stats:{...s.desk.stats},last:s.desk.last.slice(0,8)};n.shift=s.shift+1;if(options.vacation&&s.mode==='career'&&isScheduled(s)&&s.life&&!canTakeVacation(s.life,freeBlocks(s.shift)))n.shift+=ROTA.length;n.xp=s.xp;n.rank=s.rank;n.budget=closed.budget;n.trust=s.trust;if(s.hero)n.hero={...s.hero};if(s.people){n.people=JSON.parse(JSON.stringify(s.people));for(const l of peopleAfterShift(n,n.shift)){log(n,l);if(l.startsWith('Благодарность'))addTrust(n,.5);}}if(s.districts)n.districts={...s.districts};if(s.policy)n.policy=s.policy;if(s.upgrades)n.upgrades=[...s.upgrades];if(s.tipsSeen)n.tipsSeen=[...s.tipsSeen];if(s.tipsOff)n.tipsOff=true;if(s.priorityDistrict)n.priorityDistrict=s.priorityDistrict;
+  n.incidents=isScheduled(s)?[]:s.incidents.filter(i=>!['resolved','missed'].includes(i.state)).map(i=>({...JSON.parse(JSON.stringify(i)),units:[...i.units],carriedFrom:i.carriedFrom??s.shift,...(i.backupAt!==undefined?{backupAt:i.backupAt-s.time}:{})}));
+  const activeIds=new Set(n.incidents.map(i=>i.id));
+  n.units=s.units.map(u=>activeIds.has(u.incident)||u.foot?{...u,people:[...u.people],officerIds:[...u.officerIds],route:u.route.map(p=>({...p})),...(u.foot?{foot:JSON.parse(JSON.stringify(u.foot))}:{})}:{...u,people:[...u.people],officerIds:[...u.officerIds],x:HQ.x,y:HQ.y,route:[],incident:null,status:'patrol',fatigue:8});
+@@ -517,6 +521,7 @@
+   if(off.length)log(n,`График: сегодня не выходят — ${off.join(', ')}.${subs.length?` Замены из резерва: ${subs.join('; ')}.`:' Резерва нет — экипажи работают в одиночку.'}`);
+   if(called.length)log(n,`График: некем заменить — ${called.join(', ')} вызваны на смену (стресс +${CALLED_IN_STRESS}).`);}
+  if(n.mode==='career'&&n.life){const l=n.life,was=s.life??{};
++  if(l.sideJob?.status==='pending'&&n.shift>=l.sideJob.ready){const why=sideJobVerdict(l,n.agency);if(why){l.sideJob.status='refused';l.sideJob.reason=why;log(n,`Начальник: побочная работа «${SIDE_JOBS[l.sideJob.kind].label}» не разрешена. ${why}`);}else{l.sideJob.status='approved';log(n,`Начальник: побочная работа «${SIDE_JOBS[l.sideJob.kind].label}» согласована. Только в выходные и без ущерба службе.`);}}/* Release P1 */
+   if(l.transfer&&n.shift>=l.transfer.ready){const role=l.transfer.role,why=transferVerdict(l)??roleBlocker(l,role,n.rank,n.shift);l.transfer=null;
+    if(why)log(n,`Отдел кадров: перевод отклонён. ${why}`);else{l.role=role;log(n,`Приказ: вы переведены — ${ROLES[role].label}.`);pushNews(n,{title:`В отделении Меридиана новый сотрудник: ${ROLES[role].label.toLowerCase()}`,tone:'good',media:'Вестник Меридиана'});}}
+   if(owns(l,'car'))l.sleepDebt=Math.max(0,l.sleepDebt+PURCHASES.car.sleep);
+diff -ruN a/tests/citizens.test.mjs b/tests/citizens.test.mjs
+--- a/tests/citizens.test.mjs	2026-10-16 20:34:09.840996059 +0300
++++ b/tests/citizens.test.mjs	2026-10-16 20:34:09.845641373 +0300
+@@ -37,3 +37,9 @@
+  const j=spawnIncident(s,null,{variant:'domestic',point:node,followUp:{from:i.id,reason:'снова',who}});assert.equal(j.scene.participants[0].citizen,who);assert.equal(j.scene.participants[0].name,citizen(who).name);
+  const app=fs.readFileSync(new URL('../dist/app.js',import.meta.url),'utf8');assert.match(app,/function personPanel\(id,back=null\)/);assert.match(app,/function peoplePanel\(\)/);assert.match(app,/id="menuPeople"/);assert.match(app,/data-person="\$\{a\.citizen\}"/);
+ });
++
++test('Release P1: people the crew helped sometimes send thanks the next shift',()=>{
++ const s=career();let thanks=0;for(let k=0;k<60;k++){const id=CITIZEN_BASE+300+k;recordMet(s,id,{shift:4,call:k+1,variant:'missing-child',role:'Пропавший человек',outcome:'found'});}
++ thanks=peopleAfterShift(s,5).filter(l=>l.startsWith('Благодарность')).length;assert.ok(thanks>8&&thanks<35,'about a third: '+thanks);
++ assert.equal(peopleAfterShift(s,9).filter(l=>l.startsWith('Благодарность')).length,0,'only right after the call');
++});
+diff -ruN a/tests/sidejob.test.mjs b/tests/sidejob.test.mjs
+--- a/tests/sidejob.test.mjs	1970-01-01 03:00:00.000000000 +0300
++++ b/tests/sidejob.test.mjs	2026-10-16 20:34:09.845671913 +0300
+@@ -0,0 +1,33 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import {createGame,nextShift,serialize,deserialize,takeSideJob,leaveSideJob} from '../dist/sim.js';
++import {SIDE_JOBS,SIDE,requestSideJob,sideJobVerdict,sideJobDay,sideJobActive} from '../dist/sidejob.js';
++import {validPlan,applyPlan} from '../dist/life.js';
++// Release P1 «Вторая работа» (Claude, 17.10.2026).
++const career=(service='police')=>{const s=createGame('career',7182,{schedule:'ppa',...(service!=='police'?{service}:{})});s.life.money=100;return s;};
++const skip=s=>{s.ended=true;return nextShift(s);};
++
++test('a second job starts with a written notice; the taxi needs a service card; the head answers in two shifts',()=>{
++ let s=career();const r=takeSideJob(s,'taxi');assert.ok(r.ok);assert.equal(s.life.money,100-SIDE_JOBS.taxi.card);assert.equal(s.life.taxiCard,true);assert.equal(s.life.sideJob.status,'pending');assert.equal(s.life.sideJob.ready,s.shift+SIDE.answer);
++ assert.equal(sideJobActive(s.life),false,'not before the answer');
++ for(let k=0;k<SIDE.answer;k++)s=skip(s);assert.equal(s.life.sideJob.status,'approved');assert.ok(s.logs.some(l=>/согласована/.test(l.text)));
++ deserialize(serialize(s));assert.ok(leaveSideJob(s).ok);assert.equal(s.life.sideJob,null);
++ const poor=career();poor.life.money=5;assert.equal(takeSideJob(poor,'taxi').ok,false,'no money for the card');
++});
++
++test('the head refuses a conflict of interest or a worn-out officer',()=>{
++ const l={stress:20,sideJob:{kind:'security'}};assert.match(sideJobVerdict(l,'police'),/Конфликт интересов/);assert.equal(sideJobVerdict(l,'rescue'),null,'a rescuer may guard a club');
++ assert.match(sideJobVerdict({stress:80,sideJob:{kind:'taxi'}},'police'),/Нагрузка/);assert.match(sideJobVerdict({stress:10,sideJob:{kind:'taxi'}},'police',{grade:'D'}),/аттестации/);
++ let s=career();takeSideJob(s,'security');for(let k=0;k<SIDE.answer;k++)s=skip(s);assert.equal(s.life.sideJob.status,'refused');assert.equal(sideJobActive(s.life),false);
++});
++
++test('an evening of side work: money, sleep, passengers from the city; at most two evenings; working without notice is found sometimes',()=>{
++ const l={money:0,earned:0,sleepDebt:0,stress:10,fitness:55,sideJob:{kind:'taxi',status:'approved',ready:1,days:0,earned:0},history:[]};
++ assert.equal(validPlan([{activity:'sidejob'}],{days:1},{}),false,'not without a job');assert.ok(validPlan([{activity:'sidejob'},{activity:'sidejob'},{activity:'rest'},{activity:'rest'}],{days:4},l));
++ assert.equal(validPlan([{activity:'sidejob'},{activity:'sidejob'},{activity:'sidejob'},{activity:'rest'}],{days:4},l),false,'two evenings at most');
++ const r=applyPlan(l,[{activity:'sidejob'},{activity:'rest'}],3);assert.ok(r.lines.some(x=>/Такси: \d+ поездок/.test(x)));assert.ok(l.money>30&&l.money<250,'a taxi evening pays: '+l.money);assert.equal(l.sideJob.days,1);
++ let found=0;const q={money:0,earned:0,sleepDebt:0,stress:10,fitness:55,sideJob:{kind:'courier',status:'unreported',ready:1,days:0,earned:0}};for(let k=0;k<40;k++){q.sleepDebt=0;if(sideJobDay(q,k,0).found)found++;}
++ assert.ok(found>3&&found<20,'internal control finds some evenings: '+found);assert.equal(q.integrity,found);
++ const s=career();assert.ok(requestSideJob(s.life,'courier',s.shift,{report:false}).ok);const raw=JSON.parse(serialize(s));raw.life.sideJob.status='boss';assert.throws(()=>deserialize(JSON.stringify(raw)));
++ const app=fs.readFileSync(new URL('../dist/app.js',import.meta.url),'utf8');assert.match(app,/function sideJobMarkup\(\)/);assert.match(app,/id!=='sidejob'\|\|sideJobActive\(life\)/);
++});
