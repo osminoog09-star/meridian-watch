@@ -1,3 +1,9 @@
+## 2026-10-17 02:20 Tallinn · Claude · ветка claude/native-fixes
+
+- **Release O «Мой персонаж» в нативной игре** (тот же код, что `claude/release-m` e4ea30e): `hero.js` (новый), `sim.js` скопированы, `app.js` слиянием (0 конфликтов). На стартовом экране — «Ваш персонаж» и редактор (имя, фамилия, возраст, пол, кожа, волосы, телосложение, борода, очки); «Командование» закрыто до высшего звания карьеры. Свой сотрудник на карте носит внешность персонажа (`ui/human-style.js`, `ui/map-view.js`).
+- Проверки начальника (`ui/test-manual-call.mjs`, `test-full-cycle.mjs`, `test-vehicle-presentation.mjs`, `scripts/verify_full_ui_cycle.gd`, `verify_scene_symbols.gd`, `verify_services.gd`) стартуют с «заработанным» начальником (`mercury-chief-unlocked` в хранилище). Новые: `scripts/verify_hero.gd`, `ui/test-hero-style.mjs`; инструмент `scripts/render_hero.gd`.
+- **Проверки:** аудит **46/46**; паритет длинных смен 7/7; рендер стартового экрана и редактора 369×905 — 0 ошибок.
+
 ## 2026-10-17 00:40 Tallinn · Claude · ветка claude/native-fixes
 
 - **M1 в нативной игре** (тот же код, что `claude/release-m` 5c235f4): ГБР работает самостоятельно — баррикада её работа, K-Komando только при заложнике (при угрозе жизни ГБР действует сама), подкрепление патрулям, «доп. патруль». `prefecture/sim/life.js` скопированы, `app.js` — слиянием (0 конфликтов); `verify_prefecture.gd` под M1; `parity-fixtures.json` перегенерирован.
