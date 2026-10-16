@@ -1,0 +1,98 @@
+# Claude 17.10: the native Android APK builds itself on every push of the native checkpoint (owner 16.10: «чтобы APK
+# сам правильно собирался»). Result: a GitHub pre-release «apk-<versionCode>» with the APK and its SHA-256.
+# Signing: repository secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS — the SAME key as
+# the published APKs (an APK with another key cannot update the installed game). Without the secrets the APK is signed
+# with a throw-away CI key and marked «TEST — не ставить поверх».
+name: Android APK
+on:
+  push:
+    branches: [claude/native-fixes]
+    paths: ['Mercury_Native_Map_Checkpoint.zip','.github/workflows/android-apk.yml','ci/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+env:
+  GODOT: 4.7.2
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: android-actions/setup-android@v3
+      - name: Android SDK packages
+        run: yes | sdkmanager --licenses >/dev/null; sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+      - name: Godot and export templates
+        run: |
+          mkdir -p ~/godot && cd ~/godot
+          curl -sSLo g.zip https://github.com/godotengine/godot-builds/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_linux.x86_64.zip
+          unzip -q g.zip && mv Godot_v${GODOT}-stable_linux.x86_64 godot && chmod +x godot
+          curl -sSLo t.tpz https://github.com/godotengine/godot-builds/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_export_templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates && unzip -q t.tpz -d ~/.local/share/godot/export_templates
+          mv ~/.local/share/godot/export_templates/templates ~/.local/share/godot/export_templates/${GODOT}.stable
+      - name: Unpack the native project
+        run: unzip -q Mercury_Native_Map_Checkpoint.zip -d build && ls build/native-map | head
+      - name: Version
+        id: v
+        run: |
+          code=$((100 + GITHUB_RUN_NUMBER))
+          echo "code=$code" >> $GITHUB_OUTPUT
+          echo "name=0.3.$GITHUB_RUN_NUMBER-native" >> $GITHUB_OUTPUT
+      - name: Keystore
+        id: key
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > $RUNNER_TEMP/release.keystore
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$RUNNER_TEMP/release.keystore" >> $GITHUB_ENV
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=$KS_ALIAS" >> $GITHUB_ENV
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$KS_PASS" >> $GITHUB_ENV
+            echo "official=yes" >> $GITHUB_OUTPUT
+          else
+            keytool -genkeypair -keystore $RUNNER_TEMP/test.keystore -alias test -keyalg RSA -keysize 2048 -validity 3650 -storepass testtest -keypass testtest -dname "CN=Mercury CI test" -noprompt
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$RUNNER_TEMP/test.keystore" >> $GITHUB_ENV
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=test" >> $GITHUB_ENV
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=testtest" >> $GITHUB_ENV
+            echo "official=no" >> $GITHUB_OUTPUT
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret — the APK is signed with a TEST key and cannot update the installed game."
+          fi
+      - name: Export
+        run: |
+          cd build/native-map
+          export XDG_CONFIG_HOME=$RUNNER_TEMP/config
+          python3 ../../ci/android_presets.py . --version-code ${{ steps.v.outputs.code }} --version-name ${{ steps.v.outputs.name }} --out $GITHUB_WORKSPACE/out/mercury.apk --config $XDG_CONFIG_HOME
+          mkdir -p $GITHUB_WORKSPACE/out
+          ~/godot/godot --headless --path . --import > $RUNNER_TEMP/import.log 2>&1 || (tail -50 $RUNNER_TEMP/import.log; true)
+          ~/godot/godot --headless --path . --install-android-build-template
+          ~/godot/godot --headless --path . --export-release "Android" $GITHUB_WORKSPACE/out/mercury.apk 2>&1 | tee $RUNNER_TEMP/export.log
+          test -s $GITHUB_WORKSPACE/out/mercury.apk
+      - name: Check the APK
+        id: check
+        run: |
+          BT=$ANDROID_HOME/build-tools/35.0.0
+          $BT/apksigner verify --print-certs out/mercury.apk | tee out/certificate.txt
+          $BT/aapt dump badging out/mercury.apk | head -3 | tee out/badging.txt
+          unzip -l out/mercury.apk | grep -E "libmercury_quickjs|classes.dex" | tee out/contents.txt
+          grep -q libmercury_quickjs out/contents.txt
+          name=Mercury_Response_${{ steps.v.outputs.code }}${{ steps.key.outputs.official == 'yes' && '' || '_TEST' }}.apk
+          mv out/mercury.apk out/$name && (cd out && sha256sum $name | tee $name.sha256)
+          echo "file=$name" >> $GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ steps.v.outputs.code }}
+          path: out/
+      - name: Pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create apk-${{ steps.v.outputs.code }} out/${{ steps.check.outputs.file }} out/${{ steps.check.outputs.file }}.sha256 \
+            --prerelease --target ${{ github.sha }} --title "APK ${{ steps.v.outputs.code }} (${{ steps.v.outputs.name }})${{ steps.key.outputs.official == 'yes' && '' || ' — TEST, другой ключ' }}" \
+            --notes "Собрано автоматически из ${{ github.sha }} (claude/native-fixes). Ключ: ${{ steps.key.outputs.official == 'yes' && 'основной' || 'ТЕСТОВЫЙ — не ставить поверх установленной игры' }}. Сертификат: $(head -2 out/certificate.txt | tr '\n' ' ')"

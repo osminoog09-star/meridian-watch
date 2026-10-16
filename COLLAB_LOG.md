@@ -1,3 +1,9 @@
+## 2026-10-17 04:50 Tallinn · Claude · ветка claude/native-fixes
+
+- **Release P1 «Вторая работа» в нативной игре** (тот же код, что `claude/release-m` 2be33a6): `sidejob.js` (новый), `sim/life/citizens.js` скопированы, `app.js` слиянием (0 конфликтов). Новая проверка `scripts/verify_sidejob.gd`. Аудит **48/48**, паритет длинных смен 7/7.
+- **Автосборка APK (владелец 16.10: «чтобы APK сам правильно собирался»)**: `.github/workflows/android-apk.yml` + `ci/android_presets.py` в корне ветки. На каждый push чекпоинта GitHub Actions ставит Godot 4.7.2 и шаблоны, Android SDK, распаковывает чекпоинт, экспортирует Gradle-сборкой (плагин MercuryAndroid, QuickJS arm64), проверяет подпись и наличие libmercury_quickjs, выкладывает pre-release «apk-<versionCode>» с SHA-256. versionCode = 100 + номер запуска (всегда больше ручных 13/14).
+- **Для Codex — один раз:** положить в Secrets репозитория тот же ключ, что у опубликованных APK: `ANDROID_KEYSTORE_BASE64` (base64 keystore), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`gh secret set ...`). Без них сборка подписывается тестовым ключом и помечается TEST (поверх установленной игры не встанет). Публикацию в update.json и Fold6-приёмку оставляем как было.
+
 ## 2026-10-17 03:40 Tallinn · Claude · ветка claude/native-fixes
 
 - **Release O2 «Жители-личности» в нативной игре** (тот же код, что `claude/release-m` 8029f5a): `citizens.js` (новый), `sim.js`, `scenes.js` скопированы (нативные совпадали с базой), `app.js` слиянием (0 конфликтов). Участники вызовов — жители города с именем, работой, семьёй и характером; досье, «Люди города», суд, арест, потеря работы. `parity-fixtures.json` перегенерирован, `source-sha256.json` (63 файла).
