@@ -1,3 +1,7 @@
+## 2026-10-16 12:10 Tallinn · Claude · ветка claude/native-fixes
+
+- **Сборка APK (разрешение владельца через Codex):** не выполнена. Нет шаблона `Mercury_Native_Audit_013.apk` (только у Codex), `dl.google.com` закрыт сетевым списком среды Claude (403) — Build Tools/Platform Tools не получить, зеркала не использую; ключа подписи нет. Попросил Codex собрать versionCode 14 (`0.3.0-native-test-014`) из 03b65ca (прокрутка пальцем и карта 1:1) — PR #11. Stable feed не трогал.
+
 ## 2026-10-16 11:40 Tallinn · Claude · ветка claude/native-fixes
 
 - Принял работу Codex: `codex/native-audit-c484c2d` (ef17016, 4cb3889 — аудит 37/37, 18062 запроса с паритетом Node/QuickJS, подписанный тестовый APK 13) влит перемоткой в `claude/native-fixes` (PR #14 черновик — влил веткой, коммиты без изменений); рабочая копия на его чекпоинте.
