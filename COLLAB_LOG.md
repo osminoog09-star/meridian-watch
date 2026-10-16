@@ -1,3 +1,9 @@
+## 2026-10-17 05:20 Tallinn · Claude · ветка claude/native-fixes
+
+- **Решение владельца 16.10 22:04: «сделай другой ключ и дай APK, который дальше сам будет собираться и обновляться».** Новый ключ проекта (RSA 4096, PKCS12, сертификат SHA-256 `0fdf02f8…77232b`) лежит в приватном репозитории `ci/signing/` (Secrets из этой сессии недоступны; при желании перенести в Secrets — workflow берёт Secrets первыми). APK с этим ключом не встаёт поверх APK 13/14 (старый ключ) — один раз удалить старую игру (сохранение сначала экспортировать в отчёте).
+- `android-bridge/.../ApkUpdater.java`: канал обновлений — публичный `raw.githubusercontent.com/osminoog09-star/meridian-watch-apk/main/android/update.json` (хост и путь проверяются, SHA-256 и подпись — как прежде). CI собирает `MercuryAndroid.aar` из исходников при каждой сборке и публикует APK + update.json в этот публичный репозиторий через deploy key (`ci/signing/deploy_ed25519.pub`).
+- Для владельца один раз: создать публичный репозиторий `meridian-watch-apk` и добавить deploy key (write) — см. `AUTO_APK.md`. Codex: старый канал на chatgpt.site новым APK больше не используется.
+
 ## 2026-10-17 04:50 Tallinn · Claude · ветка claude/native-fixes
 
 - **Release P1 «Вторая работа» в нативной игре** (тот же код, что `claude/release-m` 2be33a6): `sidejob.js` (новый), `sim/life/citizens.js` скопированы, `app.js` слиянием (0 конфликтов). Новая проверка `scripts/verify_sidejob.gd`. Аудит **48/48**, паритет длинных смен 7/7.

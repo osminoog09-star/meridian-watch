@@ -40,6 +40,16 @@ jobs:
           mv ~/.local/share/godot/export_templates/templates ~/.local/share/godot/export_templates/${GODOT}.stable
       - name: Unpack the native project
         run: unzip -q Mercury_Native_Map_Checkpoint.zip -d build && ls build/native-map | head
+      - name: Build the MercuryAndroid bridge from source (updater, migration, device metrics)
+        shell: bash
+        run: |
+          mkdir -p $RUNNER_TEMP/bridge && cd $RUNNER_TEMP/bridge
+          unzip -q ~/.local/share/godot/export_templates/${GODOT}.stable/android_source.zip -d src
+          AAR=$(find src -name "godot-lib*release*.aar" | head -1); echo "::notice::godot-lib: $AAR"
+          curl -sSLo ecj.jar https://repo1.maven.org/maven2/org/eclipse/jdt/ecj/3.33.0/ecj-3.33.0.jar
+          export ANDROID_JAR=$ANDROID_HOME/platforms/android-35/android.jar ANDROID_LAMBDA_STUBS=$ANDROID_HOME/build-tools/35.0.0/core-lambda-stubs.jar GODOT_ANDROID_AAR=$AAR ECJ_JAR=$PWD/ecj.jar
+          python3 $GITHUB_WORKSPACE/build/native-map/android-bridge/build.py > bridge.log 2>&1 || { echo "::error::bridge: $(tail -20 bridge.log | tr '\n' ' ' | cut -c1-1500)"; exit 1; }
+          ls -la $GITHUB_WORKSPACE/build/native-map/addons/mercury_android/MercuryAndroid.aar
       - name: Version
         id: v
         run: |
@@ -53,6 +63,10 @@ jobs:
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
+          if [ -z "$KS" ] && [ -f ci/signing/mercury-release.keystore ]; then
+            # the project key made on the owner's request 16.10 (kept in this private repository; move it to Secrets when possible)
+            KS=$(base64 -w0 ci/signing/mercury-release.keystore); KS_PASS=$(python3 -c "import json;print(json.load(open('ci/signing/signing.json'))['password'])"); KS_ALIAS=$(python3 -c "import json;print(json.load(open('ci/signing/signing.json'))['alias'])")
+          fi
           if [ -n "$KS" ]; then
             echo "$KS" | base64 -d > $RUNNER_TEMP/release.keystore
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$RUNNER_TEMP/release.keystore" >> $GITHUB_ENV
@@ -88,10 +102,10 @@ jobs:
           BT=$ANDROID_HOME/build-tools/35.0.0
           $BT/apksigner verify --print-certs out/mercury.apk | tee out/certificate.txt
           # the published APKs (13, 14) are signed with this certificate; another key cannot update the installed game
-          OFFICIAL="601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358"
+          OFFICIAL="0fdf02f8d7e3aaa79d0d571d46da8689b8a83348cd10df32267bdc786777232b 601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358"
           got=$(grep -i "SHA-256 digest" out/certificate.txt | head -1 | awk '{print $NF}' | tr 'A-F' 'a-f')
           echo "::notice::certificate SHA-256 $got"
-          if [ "${{ steps.key.outputs.official }}" = "yes" ] && [ "$got" != "$OFFICIAL" ]; then echo "::error::the keystore in the secrets is not the key of the published APKs"; exit 1; fi
+          if [ "${{ steps.key.outputs.official }}" = "yes" ] && ! echo "$OFFICIAL" | grep -qw "$got"; then echo "::error::the keystore in the secrets is not the key of the published APKs"; exit 1; fi
           $BT/aapt dump badging out/mercury.apk | head -3 | tee out/badging.txt
           unzip -l out/mercury.apk | grep -E "libmercury_quickjs|classes.dex" | tee out/contents.txt
           grep -q libmercury_quickjs out/contents.txt
@@ -109,3 +123,14 @@ jobs:
           gh release create apk-${{ steps.v.outputs.code }} out/${{ steps.check.outputs.file }} out/${{ steps.check.outputs.file }}.sha256 \
             --prerelease --target ${{ github.sha }} --title "APK ${{ steps.v.outputs.code }} (${{ steps.v.outputs.name }})${{ steps.key.outputs.official == 'yes' && '' || ' — TEST, другой ключ' }}" \
             --notes "Собрано автоматически из ${{ github.sha }} (claude/native-fixes). Ключ: ${{ steps.key.outputs.official == 'yes' && 'основной' || 'ТЕСТОВЫЙ — не ставить поверх установленной игры' }}. Сертификат: $(head -2 out/certificate.txt | tr '\n' ' ')"
+      - name: Update channel (public repository osminoog09-star/meridian-watch-apk)
+        if: steps.key.outputs.official == 'yes'
+        shell: bash
+        run: |
+          if [ ! -f ci/signing/deploy_ed25519 ]; then echo "::notice::no deploy key — the update channel is not set up"; exit 0; fi
+          mkdir -p ~/.ssh && cp ci/signing/deploy_ed25519 ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519 && ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          if ! git ls-remote git@github.com:osminoog09-star/meridian-watch-apk.git >/dev/null 2>&1; then echo "::warning::update channel: create the public repository osminoog09-star/meridian-watch-apk and add ci/signing/deploy_ed25519.pub as a deploy key with write access (see AUTO_APK.md)"; exit 0; fi
+          F=${{ steps.check.outputs.file }}; mkdir -p channel/android && cp out/$F channel/android/
+          python3 ci/channel.py channel out/$F ${{ steps.v.outputs.code }} ${{ steps.v.outputs.name }}
+          cd channel && git init -q -b main && git add -A && git -c user.name="Mercury CI" -c user.email=ci@users.noreply.github.com commit -qm "APK ${{ steps.v.outputs.code }}" && git push -qf git@github.com:osminoog09-star/meridian-watch-apk.git main
+          echo "::notice::update channel: APK ${{ steps.v.outputs.code }} published"
