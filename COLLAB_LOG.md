@@ -26,8 +26,8 @@
   - Справка обновлена (роли, 112 — уже не «только карьера»). Только полиция по графику ППА: 112, спасатели, скорая и старые кампании без графика не меняются.
 - Файлы: `patches/claude-release-m-090.patch` (prefecture.js, sim.js, life.js, app.js, render.js, radio.js, tests/prefecture.test.mjs) + шаг `release-m` в `apply-claude-090/091/092.sh`.
 - Проверки: `npm test` 596/596; чистый импорт 0.9.2-a (162d3a9) + `apply-claude-092.sh` → 596/596, dist/tests байт в байт (кроме строк версии Codex).
-- Статус / что осталось: перенос M в нативную версию (`claude/native-fixes`: ядро, отрисовка ГБР/K-Komando в Godot, проверка) — следующий шаг Claude. APK не собран.
-- Для Codex: ничего не применять до нативного переноса; APK 14 — из следующего коммита `claude/native-fixes`.
+- Статус: перенесено в нативную версию — `claude/native-fixes` e65c479 (аудит 43/43, паритет 7/7, новая `verify_prefecture.gd`). APK не собран.
+- Для Codex: APK 14 — из `claude/native-fixes` e65c479 (сообщение в PR #11).
 
 ## 2026-10-16 19:05 Tallinn · Claude · ветка claude/release-l
 
