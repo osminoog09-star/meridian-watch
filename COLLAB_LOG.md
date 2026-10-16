@@ -1,3 +1,7 @@
+## 2026-10-16 · Codex · signed native audit test APK 13
+
+Base Claude c484c2d; prior audit persisted as ef17016 on codex/native-audit-c484c2d and posted to PR #11. Built 0.3.0-native-audit-test / versionCode 13 including J4–J6. Reused the verified Android QuickJS runtime from signed APK12 (no new NDK compilation in this run); checkpoint Android binary replaced with that verified runtime. Protected scripts/ui/simulation unchanged. Fixed remaining ui/*fixtures.json export exclusion. Signature v2/v3 uses existing certificate; 16KiB ZIP alignment, CRC, duplicate-entry check, JS bundle byte parity and runtime parity all passed. SHA256 e85de14bf08a00b467594415914c5abba9203e53bf4b4902636649b69c32c579; 85592060 bytes. No physical Fold6 or graphical acceptance; stable update.json and web game unchanged. APK provided separately; next step is physical-device acceptance.
+
 ## 2026-10-16 · Codex · full independent audit of c484c2d
 
 Branch codex/native-audit-c484c2d. 37/37 sequential migration groups;4/4 geometry;6 service/save scenarios ×2 complete shifts with exact Node/QuickJS state parity (numeric tolerance1e-8).59/59 source hashes match. Protected scripts/ui/simulation unchanged. Tools only: sequential --jobs default1; explicit APK --version-code; exclude audit/render/fixture resources. Added tools/audit_service_long_shift.{mjs,gd}. See FULL_AUDIT_20261016.md and audit/.

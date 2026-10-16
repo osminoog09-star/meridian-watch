@@ -1,0 +1,11 @@
+{
+  "versionName": "0.3.0-native-audit-test",
+  "versionCode": 13,
+  "sourceCommit": "c484c2dd7534b2c660b66046c931e8b6021e4304",
+  "sha256": "e85de14bf08a00b467594415914c5abba9203e53bf4b4902636649b69c32c579",
+  "size": 85592060,
+  "signerSha256": "601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358",
+  "androidRuntime": "reused verified code12 runtime 596c90573f31aff9dbecbafcedc6bc1ee98a0121886c42b4e6593a2e267cec68",
+  "physicalDeviceAcceptance": false,
+  "stableFeedChanged": false
+}
