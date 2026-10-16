@@ -87,6 +87,11 @@ jobs:
         run: |
           BT=$ANDROID_HOME/build-tools/35.0.0
           $BT/apksigner verify --print-certs out/mercury.apk | tee out/certificate.txt
+          # the published APKs (13, 14) are signed with this certificate; another key cannot update the installed game
+          OFFICIAL="601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358"
+          got=$(grep -i "SHA-256 digest" out/certificate.txt | head -1 | awk '{print $NF}' | tr 'A-F' 'a-f')
+          echo "::notice::certificate SHA-256 $got"
+          if [ "${{ steps.key.outputs.official }}" = "yes" ] && [ "$got" != "$OFFICIAL" ]; then echo "::error::the keystore in the secrets is not the key of the published APKs"; exit 1; fi
           $BT/aapt dump badging out/mercury.apk | head -3 | tee out/badging.txt
           unzip -l out/mercury.apk | grep -E "libmercury_quickjs|classes.dex" | tee out/contents.txt
           grep -q libmercury_quickjs out/contents.txt
