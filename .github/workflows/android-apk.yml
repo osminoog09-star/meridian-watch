@@ -109,7 +109,7 @@ jobs:
           $BT/aapt dump badging out/mercury.apk | head -3 | tee out/badging.txt
           unzip -l out/mercury.apk | grep -E "libmercury_quickjs|classes.dex" | tee out/contents.txt
           grep -q libmercury_quickjs out/contents.txt
-          name=Mercury_Response_${{ steps.v.outputs.code }}${{ steps.key.outputs.official == 'yes' && '' || '_TEST' }}.apk
+          name=Mercury_Response_${{ steps.v.outputs.code }}${{ steps.key.outputs.official != 'yes' && '_TEST' || '' }}.apk
           mv out/mercury.apk out/$name && (cd out && sha256sum $name | tee $name.sha256)
           echo "file=$name" >> $GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4
@@ -121,7 +121,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create apk-${{ steps.v.outputs.code }} out/${{ steps.check.outputs.file }} out/${{ steps.check.outputs.file }}.sha256 \
-            --prerelease --target ${{ github.sha }} --title "APK ${{ steps.v.outputs.code }} (${{ steps.v.outputs.name }})${{ steps.key.outputs.official == 'yes' && '' || ' — TEST, другой ключ' }}" \
+            --prerelease --target ${{ github.sha }} --title "APK ${{ steps.v.outputs.code }} (${{ steps.v.outputs.name }})${{ steps.key.outputs.official != 'yes' && ' — TEST, другой ключ' || '' }}" \
             --notes "Собрано автоматически из ${{ github.sha }} (claude/native-fixes). Ключ: ${{ steps.key.outputs.official == 'yes' && 'основной' || 'ТЕСТОВЫЙ — не ставить поверх установленной игры' }}. Сертификат: $(head -2 out/certificate.txt | tr '\n' ' ')"
       - name: Update channel (public repository osminoog09-star/meridian-watch-apk)
         if: steps.key.outputs.official == 'yes'
