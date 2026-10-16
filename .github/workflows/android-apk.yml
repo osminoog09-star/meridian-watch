@@ -68,14 +68,17 @@ jobs:
             echo "::warning::No ANDROID_KEYSTORE_BASE64 secret — the APK is signed with a TEST key and cannot update the installed game."
           fi
       - name: Export
+        shell: bash
         run: |
           cd build/native-map
           export XDG_CONFIG_HOME=$RUNNER_TEMP/config
           python3 ../../ci/android_presets.py . --version-code ${{ steps.v.outputs.code }} --version-name ${{ steps.v.outputs.name }} --out $GITHUB_WORKSPACE/out/mercury.apk --config $XDG_CONFIG_HOME
           mkdir -p $GITHUB_WORKSPACE/out
-          ~/godot/godot --headless --path . --import > $RUNNER_TEMP/import.log 2>&1 || (tail -50 $RUNNER_TEMP/import.log; true)
-          ~/godot/godot --headless --path . --install-android-build-template > $RUNNER_TEMP/template.log 2>&1 || true
-          ~/godot/godot --headless --path . --export-release "Android" $GITHUB_WORKSPACE/out/mercury.apk > $RUNNER_TEMP/export.log 2>&1 || true
+          step(){ name=$1; shift; start=$(date +%s); timeout $1 "${@:2}" > $RUNNER_TEMP/$name.log 2>&1; rc=$?; echo "::notice::$name: exit $rc after $(($(date +%s)-start)) s; tail: $(tail -6 $RUNNER_TEMP/$name.log | tr '\n' ' ' | cut -c1-900)"; return 0; }
+          step import 900 ~/godot/godot --headless --path . --import
+          step template 300 ~/godot/godot --headless --path . --install-android-build-template
+          ls android/build 2>/dev/null | head -5 | tr '\n' ' ' | sed 's/^/::notice::android\/build: /'; echo
+          step export 1500 ~/godot/godot --headless --path . --export-release "Android" $GITHUB_WORKSPACE/out/mercury.apk
           if [ ! -s $GITHUB_WORKSPACE/out/mercury.apk ]; then
             grep -iE "error|fail|exception|could not|unable" $RUNNER_TEMP/template.log $RUNNER_TEMP/export.log | head -25 | while read -r l; do echo "::error::$l"; done
             echo "::error::export log tail: $(tail -15 $RUNNER_TEMP/export.log | tr '\n' ' ' | cut -c1-1500)"
