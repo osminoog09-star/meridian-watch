@@ -3,7 +3,7 @@
 # 0.9.2-a already contains everything up to Release E (C2 and E included): do not run apply-claude-091.sh
 # or older chains on it.
 # Usage: python3 -I source-import.py && sh patches/apply-claude-092.sh [last]
-#   last = release-f | release-g | release-h | release-i | release-j | release-j1 | release-j2 | release-j3 | release-j4 | release-j5 | release-j6 | release-k | release-k2 (default: the last step)
+#   last = release-f | release-g | release-h | release-i | release-j | release-j1 | release-j2 | release-j3 | release-j4 | release-j5 | release-j6 | release-k | release-k2 | release-l (default: the last step)
 #   release-f  — «Истории города»: multi-shift city stories with chapters, lookouts, press and aftermath
 #   release-g  — the chief's first week; pedestrians wait at the kerb for sirens
 #   release-h  — «Спасатели»: a separate rescue service with its own career, chief mode, fire model and calls
@@ -17,12 +17,13 @@
 #   release-j6 — trust shown as a whole percent (the header showed 90.52977267860129 %)
 #   release-k  — «Совместные происшествия»: crashes with a trapped driver and house fires with casualties — police, rescuers and an ambulance on one scene, dependencies and a common debrief
 #   release-k2 — joint calls on the 112 desk: ask about trapped people, notify the other services; not notified — the lead crew calls them from the scene
-# Checked by Claude on a clean 0.9.2-a import: 585/585 JS; dist/tests byte-identical to claude/release-k (with j1–j6, k, k2)
+#   release-l  — «Руководитель центра 112»: chief mode for 112 — operators (hire, train, dismiss), seats, centre upgrades, non-emergency calls, the shift's numbers
+# Checked by Claude on a clean 0.9.2-a import: 589/589 JS; dist/tests byte-identical to claude/release-k (with j1–j6, k, k2, l)
 # except Codex's version strings. tests/deploy test_real_release fails until the new APK is built.
 set -e
 cd "$(dirname "$0")/.."
-steps="release-f:claude-release-f-090 release-g:claude-release-g-090 release-h:claude-release-h-090 release-i:claude-release-i-090 release-j:claude-release-j-090 release-j1:claude-release-j1-090 release-j2:claude-release-j2-090 release-j3:claude-release-j3-090 release-j4:claude-release-j4-090 release-j5:claude-release-j5-090 release-j6:claude-release-j6-090 release-k:claude-release-k-090 release-k2:claude-release-k2-090"
-last="${1:-release-k2}"
+steps="release-f:claude-release-f-090 release-g:claude-release-g-090 release-h:claude-release-h-090 release-i:claude-release-i-090 release-j:claude-release-j-090 release-j1:claude-release-j1-090 release-j2:claude-release-j2-090 release-j3:claude-release-j3-090 release-j4:claude-release-j4-090 release-j5:claude-release-j5-090 release-j6:claude-release-j6-090 release-k:claude-release-k-090 release-k2:claude-release-k2-090 release-l:claude-release-l-090"
+last="${1:-release-l}"
 case " $(echo "$steps" | sed 's/:[^ ]*//g') " in *" $last "*) ;; *) echo "Unknown patch stage: $last" >&2; exit 2 ;; esac
 for step in $steps; do
   name="${step%%:*}"; file="patches/${step#*:}.patch"
