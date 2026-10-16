@@ -16,6 +16,7 @@ export_path="{a.out}"
 [preset.0.options]
 gradle_build/use_gradle_build=true
 gradle_build/export_format=0
+gradle_build/min_sdk="26"
 architectures/armeabi-v7a=false
 architectures/arm64-v8a=true
 architectures/x86=false
