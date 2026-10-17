@@ -1,0 +1,156 @@
+diff -ruN a/dist/app.js b/dist/app.js
+--- a/dist/app.js	2026-10-17 12:54:23.902019539 +0300
++++ b/dist/app.js	2026-10-17 12:54:25.305535864 +0300
+@@ -1,3 +1,4 @@
++import {JOBS,JOB_IDS,jobChecks} from './jobs.js';
+ import {HOMES,HOME_IDS,HOME,homeOf,commute,monthlyCost,heroNeeds,HERO_NEED_TEXT} from './home.js';
+ import {promotionCheck,SKILLS,SKILL_IDS,skillLevel,LEVEL_WORDS} from './promotion.js';
+ import {cityClock,activityAt,needsAt,motiveText,dayPlan,NEED_TEXT} from './cityday.js';
+@@ -44,7 +45,7 @@
+ import {RESCUE_TASK_IDS,EMS_TASK_IDS} from './patrolwork.js';
+ import {isService,profileOf,isServiceType,serviceText,CREW_FORMS} from './agency.js';
+ import {takeCall,askCaller,instructCaller,pickRoute,sendCall,notifyService,hireOperator,dismissOperator,trainOperator,centreSeats} from './sim.js';
+-import {prefectureOn,isGbrUnit,unitMayTake,moveTo} from './sim.js';import {takeSideJob,leaveSideJob} from './sim.js';import {SIDE_JOBS,SIDE_JOB_IDS,sideJobActive} from './sidejob.js';import {HERO,suggestHero,makeHero,heroName,heroSummary,chiefUnlocked} from './hero.js';import {citizen,citizenLine,traitLine,motiveFor,personOf,arrests,OUTCOME,STATUS_TEXT as PERSON_STATUS} from './citizens.js';import {gbrNeeded,PREFECTURE} from './prefecture.js';import {serviceCallsign} from './radio.js';
++import {prefectureOn,isGbrUnit,unitMayTake,moveTo,applyForJob,withdrawJob} from './sim.js';import {takeSideJob,leaveSideJob} from './sim.js';import {SIDE_JOBS,SIDE_JOB_IDS,sideJobActive} from './sidejob.js';import {HERO,suggestHero,makeHero,heroName,heroSummary,chiefUnlocked} from './hero.js';import {citizen,citizenLine,traitLine,motiveFor,personOf,arrests,OUTCOME,STATUS_TEXT as PERSON_STATUS} from './citizens.js';import {gbrNeeded,PREFECTURE} from './prefecture.js';import {serviceCallsign} from './radio.js';
+ import {isEms,emsFacts,needsHospital,PATIENT} from './ems.js';
+ import {courseFor} from './life.js';
+ import {upgradeFor,upgradeText} from './upgrades.js';
+@@ -456,12 +457,16 @@
+  const service=serviceSummary(state);if(!service)return '<p>Личное дело доступно в режиме карьеры.</p>';
+  return `<section class="training-card service-card"><span class="eyebrow">КАРЬЕРА / ЛИЧНОЕ ДЕЛО</span><div class="service-heading"><span class="service-insignia" aria-label="Карьерная ступень ${state.rank+1} из 5">${state.rank===0?'M':'›'.repeat(state.rank)}</span><div><small>${escapeHtml((state.agency?crewName():'Патруль 01').toUpperCase())} / ЛИЧНОЕ ДЕЛО</small><h3>${escapeHtml(service.current.title)} · ${state.xp} опыта</h3></div></div><p><b>Текущее полномочие:</b> ${escapeHtml(service.current.duty)}.</p>${partnerCard()}${isScheduled(state)?attestMarkup()+career2Markup():''}${service.next?`<p>Следующее звание: <b>${escapeHtml(service.next.title)}</b> — ${escapeHtml(service.next.duty)}. ${isScheduled(state)&&state.mode==='career'?'':`Осталось опыта: ${xpProgress().left}.`}</p>${isScheduled(state)&&state.mode==='career'?promotionMarkup():''}`:'<p>Достигнута высшая ступень текущей карьерной системы.</p>'}<div class="permission-grid">${(profileOf(state)?.permissions??CAREER_PERMISSIONS).map(p=>`<div class="training-step ${p.rank<=state.rank?'done':''}"><b>${p.rank<=state.rank?'✓':'○'} ${escapeHtml(p.title)}</b><small>${escapeHtml(p.duty)}</small></div>`).join('')}</div><details open><summary>История службы · ${service.events.length}</summary>${service.events.length?service.events.map(e=>`<div class="logrow">${e.success?'✓':'—'} ${escapeHtml(e.name)} <small>№${e.incident} · смена ${e.shift}</small><p>${e.success?'Успешно завершено':'Помощь не завершена'} · ${e.xp} опыта · ${escapeHtml(rankTitle(state,e.rank))}</p></div>`).join(''):'<p>Записи появятся после вызовов, в которых участвовал '+escapeHtml(crewRef('Патруль 01','экипаж «$»'))+'.</p>'}</details><details><summary>Повышения</summary>${service.promotions.map(p=>`<p>Смена ${p.shift}: ${escapeHtml(rankTitle(state,p.rank))}</p>`).join('')}</details><p class="fine-print">Успешные вызовы дают опыт. Полномочия проверяются самой симуляцией, поэтому заблокированную команду нельзя выполнить обходом интерфейса.${service.legacy?' История начата после обновления; прежние вызовы не выдумываются.':''}</p></section>`;
+ }
+-function servicePanel(){modal('<h2>Личное дело сотрудника</h2>'+(state.hero?`<p class="tip"><b>${escapeHtml(heroName(state.hero))}</b> · ${escapeHtml(heroSummary(state.hero))}</p>`:'')+(state.mode==='career'?`<p class="fine-print">Путь: ${[0,1,2,3,4].map(k=>`${k===state.rank?'<b>':''}${escapeHtml(rankTitle(state,k))}${k===state.rank?'</b>':''}`).join(' → ')} → ${chiefUnlocked(state)?'<b>начальник — открыто</b>':'начальник (после высшего звания)'}</p>`:'')+(chiefUnlocked(state)?'<p class="notice">Вы дослужились до высшего звания: можно возглавить подразделение — это новая кампания начальника с вашим персонажем.</p><button id="becomeChief" class="primary" style="width:100%">Возглавить подразделение</button>':'')+(state.life?sideJobMarkup():'')+serviceMarkup()+homeMarkup()+personalGoalsMarkup()+developmentMarkup());bindCareer2(servicePanel);for(const b of document.querySelectorAll('[data-move]'))b.onclick=()=>{const r=moveTo(state,b.dataset.move);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};for(const b of document.querySelectorAll('[data-sidejob]'))b.onclick=()=>{const r=takeSideJob(state,b.dataset.sidejob,b.dataset.report!=='no');toast(r.message);if(r.ok){save();servicePanel();}};if($('quitSideJob'))$('quitSideJob').onclick=()=>{const r=leaveSideJob(state);toast(r.message);save();servicePanel();};if($('becomeChief'))$('becomeChief').onclick=()=>{rememberChief(state);agencyChoice=state.agency??'police';switchMode('chief',true);};for(const b of document.querySelectorAll('[data-buy]'))b.onclick=()=>{const r=buyPersonal(state,b.dataset.buy);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};}
++function servicePanel(){modal('<h2>Личное дело сотрудника</h2>'+(state.hero?`<p class="tip"><b>${escapeHtml(heroName(state.hero))}</b> · ${escapeHtml(heroSummary(state.hero))}</p>`:'')+(state.mode==='career'?`<p class="fine-print">Путь: ${[0,1,2,3,4].map(k=>`${k===state.rank?'<b>':''}${escapeHtml(rankTitle(state,k))}${k===state.rank?'</b>':''}`).join(' → ')} → ${chiefUnlocked(state)?'<b>начальник — открыто</b>':'начальник (после высшего звания)'}</p>`:'')+(chiefUnlocked(state)?'<p class="notice">Вы дослужились до высшего звания: можно возглавить подразделение — это новая кампания начальника с вашим персонажем.</p><button id="becomeChief" class="primary" style="width:100%">Возглавить подразделение</button>':'')+(state.life?sideJobMarkup():'')+serviceMarkup()+homeMarkup()+jobsMarkup()+personalGoalsMarkup()+developmentMarkup());bindCareer2(servicePanel);for(const b of document.querySelectorAll('[data-job]'))b.onclick=()=>{const r=applyForJob(state,b.dataset.job);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};if($('jobWithdraw'))$('jobWithdraw').onclick=()=>{const r=withdrawJob(state);toast(r.message);save();servicePanel();};for(const b of document.querySelectorAll('[data-move]'))b.onclick=()=>{const r=moveTo(state,b.dataset.move);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};for(const b of document.querySelectorAll('[data-sidejob]'))b.onclick=()=>{const r=takeSideJob(state,b.dataset.sidejob,b.dataset.report!=='no');toast(r.message);if(r.ok){save();servicePanel();}};if($('quitSideJob'))$('quitSideJob').onclick=()=>{const r=leaveSideJob(state);toast(r.message);save();servicePanel();};if($('becomeChief'))$('becomeChief').onclick=()=>{rememberChief(state);agencyChoice=state.agency??'police';switchMode('chief',true);};for(const b of document.querySelectorAll('[data-buy]'))b.onclick=()=>{const r=buyPersonal(state,b.dataset.buy);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};}
+ /* Release P1: home, the way to the station, the hero's needs */
+ function homeMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';const h=homeOf(l),way=commute(l,{car:owns(l,'car')}),n=heroNeeds(l,{bond:l.partner?.bond??50}),own=owns(l,'apartment');
+  return `<section class="training-card"><h3>Дом и дорога</h3><p><b>${escapeHtml(own?'Своя квартира':h.label)}</b></p><p>До участка ${way.km} км · ${escapeHtml(way.label)} · ${way.minutes} мин. В месяц: ${monthlyCost(l,{own})}${owns(l,'car')?' + машина':''} € (${own?'ипотека':'аренда'}, счета, продукты).${(l.late??0)?` Опозданий в этом месяце: ${l.late} из ${HOME.lateLimit} до выговора.`:''}</p>
+  <div class="needs">${Object.entries(HERO_NEED_TEXT).map(([k,label])=>`<div class="need"><small>${label} ${n[k]}%</small><div class="meter${n[k]<30?' warn':''}"><i style="width:${n[k]}%"></i></div></div>`).join('')}</div>
+  ${own?'':`<details><summary>Переехать</summary>${HOME_IDS.filter(id=>id!==(l.home??HOME.start)).map(id=>{const x=HOMES[id],w=commute({home:id},{car:owns(l,'car')});return `<div class="goal-row"><b>${escapeHtml(x.label)}</b><small>${x.rent} € в месяц · до участка ${w.minutes} мин ${escapeHtml(w.label)}</small><button data-move="${id}" ${l.money<x.rent?'disabled':''}>Переехать · залог ${x.rent} €</button></div>`;}).join('')}</details>`}</section>`;}
++/* Release Q1: another emergency service — an application, an interview, a new ladder; the life stays */
++function jobsMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';const cur=state.agency??'police';
++ if(l.jobMove)return `<section class="training-card"><h3>Смена профессии</h3><p>Заявление: <b>${escapeHtml(JOBS[l.jobMove.agency].label)}</b> — ответ после смены ${l.jobMove.ready}. Если примут, следующая смена — уже на новом месте.</p><button id="jobWithdraw">Отозвать заявление</button></section>`;
++ return `<section class="training-card"><details><summary>Сменить профессию</summary><p class="fine-print">Дом, деньги, семья и навыки остаются; звание — с начала лестницы новой службы.</p>${JOB_IDS.filter(id=>id!==cur).map(id=>{const j=JOBS[id],checks=jobChecks(state,id),ok=checks.every(x=>x.ok);return `<div class="goal-row"><b>${escapeHtml(j.label)}</b><small>${escapeHtml(j.about)}</small>${checks.map(x=>`<small>${x.ok?'✓':'○'} ${escapeHtml(x.text)}</small>`).join('')}<button data-job="${id}" ${ok?'':'disabled'}>Подать заявление</button></div>`;}).join('')}</details></section>`;}
+ /* Release C2: what the savings are for */
+ function personalGoalsMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';
+  return `<section class="training-card"><h3>Личные цели · на счёте ${Math.round(l.money)} €</h3>${PURCHASE_IDS.map(id=>{const p=PURCHASES[id],why=purchaseBlocker(l,id),have=id==='gym'?(l.owned?.gym??0)>0:owns(l,id),share=Math.max(0,Math.min(1,(l.money??0)/p.price));return `<div class="goal-row"><b>${escapeHtml(p.label)} · ${p.price} €</b><small>${escapeHtml(p.about)}</small>${have?`<small>✓ ${id==='gym'?`действует ещё ${l.owned.gym} смен`:'есть'}</small>`:`<div class="meter"><i style="width:${Math.round(share*100)}%"></i></div><button data-buy="${id}" ${why?'disabled':''} title="${escapeHtml(why??'')}">Купить</button>`}</div>`;}).join('')}</section>`;}
+Binary files a/dist/deploy/__pycache__/update.cpython-313.pyc and b/dist/deploy/__pycache__/update.cpython-313.pyc differ
+diff -ruN a/dist/jobs.js b/dist/jobs.js
+--- a/dist/jobs.js	1970-01-01 03:00:00.000000000 +0300
++++ b/dist/jobs.js	2026-10-17 12:54:25.305371183 +0300
+@@ -0,0 +1,25 @@
++// Release Q1 «Профессии» (Claude, 17.10.2026). Owner 16.10: «быть полицейским, спасателем, водителем скорой; сменить
++// работу». In real life an officer can leave for another emergency service: an application to the other employer,
++// an interview and checks (fitness for rescuers, first aid for the ambulance, a calm head for the 112 centre), then the
++// last shift at the old place and the first at the new one — from the bottom of the new ladder. The life stays the
++// same: the person, the home, the money, the family, the skills; the experience counts toward skills, not a rank.
++export const JOBS=Object.freeze({
++ police:Object.freeze({label:'Полиция — патрульный',start:'младший констебль',needs:[{id:'fitness',min:55,text:'физподготовка от 55'},{id:'clean',text:'без дисциплинарных нарушений'}],about:'Патрульная служба префектуры: вызовы, задержания, ГБР и криминальная полиция дальше по карьере.'}),
++ rescue:Object.freeze({label:'Спасательный департамент — спасатель',start:'спасатель',needs:[{id:'fitness',min:62,text:'физподготовка от 62'},{id:'stress',max:75,text:'стресс ниже 75'}],about:'Пожарная часть: пожары, ДТП с зажатыми, вода и лёд. Тяжёлая физическая работа.'}),
++ ems:Object.freeze({label:'Скорая помощь — водитель / медтехник',start:'медтехник',needs:[{id:'course',course:'firstaid',text:'курс первой помощи'},{id:'stress',max:80,text:'стресс ниже 80'}],about:'Бригада скорой: водитель и помощь бригаде, дальше — медсестра и руководитель бригады.'}),
++ dispatch:Object.freeze({label:'Центр 112 — оператор',start:'оператор',needs:[{id:'stress',max:65,text:'стресс ниже 65'},{id:'clean',text:'без дисциплинарных нарушений'}],about:'Пульт 112: опрос звонящих, инструкции до приезда, отправка служб.'})
++});
++export const JOB_IDS=Object.freeze(Object.keys(JOBS));
++export const TRANSFER=Object.freeze({answer:2,cleanMonths:6});
++// What is missing for the job (empty = the application can go).
++export function jobChecks(s,id){const j=JOBS[id],l=s.life??{};if(!j)return [{ok:false,text:'Нет такой работы.'}];
++ return j.needs.map(n=>{if(n.id==='fitness')return {ok:(l.fitness??0)>=n.min,text:`${n.text} (сейчас ${Math.round(l.fitness??0)})`};
++  if(n.id==='stress')return {ok:(l.stress??0)<n.max,text:`${n.text} (сейчас ${Math.round(l.stress??0)})`};
++  if(n.id==='course')return {ok:Number.isInteger(l.courses?.[n.course]),text:n.text};
++  if(n.id==='clean')return {ok:l.breachMonth===undefined||(l.months??0)-l.breachMonth>=TRANSFER.cleanMonths,text:n.text};return {ok:true,text:n.text};});}
++export function applyForJob(s,id){const l=s.life;if(s.mode!=='career'||!l)return {ok:false,message:'Сменить работу можно в карьере.'};const current=s.agency??'police';
++ if(id===current)return {ok:false,message:'Вы уже здесь работаете.'};if(!JOBS[id])return {ok:false,message:'Нет такой работы.'};if(l.jobMove)return {ok:false,message:'Заявление уже подано.'};
++ const miss=jobChecks(s,id).filter(x=>!x.ok);if(miss.length)return {ok:false,message:'Не подходите: '+miss.map(x=>x.text).join('; ')+'.'};
++ l.jobMove={agency:id,ready:s.shift+TRANSFER.answer};return {ok:true,message:`Заявление подано: ${JOBS[id].label}. Собеседование и ответ — через ${TRANSFER.answer} смены.`};}
++export function withdrawJob(s){if(!s.life?.jobMove)return {ok:false,message:'Заявления нет.'};s.life.jobMove=null;return {ok:true,message:'Заявление отозвано.'};}
++export const validTransfer=l=>l?.jobMove===undefined||l.jobMove===null||(JOB_IDS.includes(l.jobMove.agency)&&Number.isInteger(l.jobMove.ready));
+diff -ruN a/dist/life.js b/dist/life.js
+--- a/dist/life.js	2026-10-17 12:54:23.903153703 +0300
++++ b/dist/life.js	2026-10-17 12:54:25.304898667 +0300
+@@ -1,5 +1,6 @@
+ import {validSkills} from './promotion.js';
+ import {validHome} from './home.js';
++import {validTransfer} from './jobs.js';
+ // R3 «Между сменами» (Claude, 11.10.2026): the career officer's life off duty on the realistic
+ // PPA roster (schedule.js). After every shift the player plans the free time until the next one:
+ // rest, an extra (overtime) shift, training courses, sport, family or a hobby. Choices change
+@@ -99,7 +100,7 @@
+ export const startFatigue=life=>life?Math.round(Math.min(60,life.sleepDebt*.5+Math.max(0,life.stress-60)*.3)):0;
+ // Course bonus for the player's own crew on a call variant.
+ export function courseBonus(life,variant){let b=1;for(const id of ['firstaid','negotiation']){const c=COURSES[id];if(Number.isInteger(life?.courses?.[id])&&c.variants.includes(variant))b=Math.max(b,c.bonus);}return b;}
+-export function validLife(s){const l=s.life;if(l===undefined)return true;if(s.mode!=='career'||s.schedule!=='ppa')return false;if(!validPartner(l?.partner)||!validCases(l)||!validSideJob(l)||!validSkills(l)||!validHome(l))return false;const num=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
++export function validLife(s){const l=s.life;if(l===undefined)return true;if(s.mode!=='career'||s.schedule!=='ppa')return false;if(!validPartner(l?.partner)||!validCases(l)||!validSideJob(l)||!validSkills(l)||!validHome(l)||!validTransfer(l))return false;const num=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
+  return !!l&&typeof l==='object'&&['sleepDebt','stress','fitness'].every(k=>num(l[k],0,100))&&num(l.money,-1e7,1e7)&&num(l.earned,0,1e8)&&Number.isInteger(l.overtime)&&l.overtime>=0
+   &&(l.agency===undefined||['rescue','ems','dispatch'].includes(l.agency)&&s.agency===l.agency)&&l.courses&&typeof l.courses==='object'&&Object.entries(l.courses).every(([k,v])=>Object.hasOwn(COURSES,k)&&Number.isInteger(v)&&v>=0&&v<=s.shift)
+   &&l.progress&&typeof l.progress==='object'&&Object.entries(l.progress).every(([k,v])=>Object.hasOwn(COURSES,k)&&Number.isInteger(v)&&v>=0&&v<COURSES[k].days)
+diff -ruN a/dist/sim.js b/dist/sim.js
+--- a/dist/sim.js	2026-10-17 12:54:23.769519472 +0300
++++ b/dist/sim.js	2026-10-17 12:54:25.304982141 +0300
+@@ -40,6 +40,7 @@
+ import {makeHero,validHero,heroFitness} from './hero.js';
+ import {requestSideJob,quitSideJob,sideJobVerdict,SIDE_JOBS} from './sidejob.js';
+ import {citizen,citizenFor,recordMet,personOf,arrests,peopleAfterShift,validPeople} from './citizens.js';
++import {JOBS,jobChecks,applyForJob,withdrawJob,validTransfer} from './jobs.js';
+ import {HOME,beforeShift,monthLate,monthlyCost,moveHome,validHome,homeOf} from './home.js';
+ import {promotionCheck,addSkill,skillPace,validSkills} from './promotion.js';
+ import {SUPERVISOR,leadNeeded,validLead,supervisorName} from './supervisor.js';
+@@ -179,7 +180,7 @@
+  s.incidents=s.incidents.filter(i=>!i.finished||s.time-i.finished<18);
+  if(s.time>=s.shiftLength){s.time=s.shiftLength;s.ended=true;if(isScheduled(s)&&s.population){const end=shiftStartElapsed(s.shift-1)+s.shiftLength;if(s.population.elapsed<end&&end-s.population.elapsed<1){s.population.elapsed=end;for(const r of s.population.residents)if(r.visit&&r.visit.waitUntil>0&&r.visit.waitUntil<end)r.visit.waitUntil=end;}}log(s,'Смена окончена. Посмотрите итоговый отчёт.');}
+ }
+-export function nextShift(s,options={}){
++function nextShiftCore(s,options={}){
+  const closed=JSON.parse(JSON.stringify(s));ensureFinance(closed);const grant=cityGrant(closed),over=closed.mode==='chief'&&isScheduled(closed)&&grant.total>0&&closed.budget>reserveLimit(shiftCost(closed)),grantAmount=Math.max(-closed.budget,over?Math.round(grant.total*RESERVE.overGrant):grant.total);if(grantAmount)transact(closed,grantAmount,'grant',grantAmount>0?(over?'Финансирование мэрии по доверию (резерв превышен — половина)':'Финансирование мэрии по доверию'):'Мэрия урезала финансирование');const cost=shiftCost(closed),support=Math.max(0,cost-closed.budget);
+  if(support)transact(closed,support,'support','Антикризисная субсидия (упрощённая экономика)');
+  if(closed.mode==='chief'){const wages=shiftWages(closed);if(wages)transact(closed,-wages,'salary',isScheduled(closed)&&shiftKind(closed.shift-1)==='night'?'Зарплаты за ночную смену (+25% за ночные часы)':'Зарплаты за смену');if(closed.vehicles.length)transact(closed,-closed.vehicles.length*30,'maintenance','Содержание автопарка');const rules=policyCost(closed);if(rules)transact(closed,-rules,'policy','Правила отделения');const upkeep=upgradesUpkeep(closed);if(upkeep)transact(closed,-upkeep,'upkeep','Обслуживание оснащения отделения');}
+@@ -410,7 +411,7 @@
+ 
+ // R2 shift routine (routine.js): briefing with lookouts, vehicle acceptance, meal break, reports.
+ function startRoutine(s){s.bolo=isService(s)?[]:briefingFor(s.seed,s.shift);if(isScheduled(s)&&(!s.goals||s.goals.month!==monthOf(s.shift-1).key)){ensureDistricts(s);s.goals=makeGoals(s,s.shift-1);log(s,`План на ${s.goals.label}: ${s.goals.list.map(goalLabel).join('; ')}.`);}const ev=isScheduled(s)?shiftWeather(s).event:null;if(ev){log(s,`Инструктаж: ${ev.label} — усиленный режим, вызовов больше обычного.${ev.about?' '+ev.about:''}`);pushNews(s,holidayNews(ev.label,s.shift));}else if(isScheduled(s)&&shiftKind(s.shift-1)==='night'&&[5,6].includes(weekdayOf(cityAbsoluteMinute(s))))log(s,`Инструктаж: ночь на ${weekdayOf(cityAbsoluteMinute(s))===5?'субботу':'воскресенье'} — бары, компании, пьяные водители. Будет жарко.`);for(const u of s.units){Object.assign(u,{status:'briefing',route:[],routineLeft:ROUTINE.briefing,mealDone:false});}
+- log(s,`Инструктаж: ориентировки на смену — ${s.bolo.map(b=>b.text).join('; ')}.`);}
++ if(s.bolo?.length)log(s,`Инструктаж: ориентировки на смену — ${s.bolo.map(b=>b.text).join('; ')}.`);}/* audit 17.10: rescuers and ambulance crews got «ориентировки — .» with an empty list */
+ function matchBolo(s,i){if(!isScheduled(s)||!Array.isArray(s.bolo))return;const b=s.bolo.find(b=>b.matched===null&&b.variant===i.variant);if(!b)return;b.matched=i.id;i.bolo=b.id;log(s,`Дежурный: вызов №${i.id} похож на ориентировку с инструктажа (${b.text}).`);}
+ const crewOfficers=(s,u)=>u.officerIds.map(id=>departmentIndex(s).byOfficer.get(id)).filter(Boolean);
+ function acceptVehicle(s,u,v){if(!v)return;ensureVehicle(v);const share=v.fuel/tankOf(v);
+@@ -758,3 +759,16 @@
+ 
+ /* Release P1: move to another home (a month's rent as a deposit) */
+ export function moveTo(s,id){if(s.mode!=='career'||!s.life)return {ok:false,message:'Только в карьере.'};return moveHome(s.life,id);}
++
++/* Release Q1 «Профессии»: the next shift — at the new job when an application was accepted */
++export function nextShift(s,options={}){const n=nextShiftCore(s,options);const l=n.life;if(!l?.jobMove||n.shift<l.jobMove.ready)return n;
++ const to=l.jobMove.agency,miss=jobChecks(n,to).filter(x=>!x.ok);l.jobMove=null;
++ if(miss.length){log(n,`Отказ по заявлению (${JOBS[to].label}): ${miss.map(x=>x.text).join('; ')}.`);return n;}
++ const g=createGame('career',n.seed,{schedule:'ppa',service:to,...(n.hero?{hero:n.hero}:{})}),fresh=g.life;
++ for(const k of ['shift','population','people','news','city','shiftLog','awards','stats','xp','hero','nextId'])if(n[k]!==undefined)g[k]=JSON.parse(JSON.stringify(n[k]));
++ const life=JSON.parse(JSON.stringify(l));delete life.partner;delete life.role;delete life.cases;delete life.event;life.attestations=[];life.rankMonth=life.months??0;life.jobMove=null;
++ if(to==='police')delete life.agency;else life.agency=to;life.courses={...life.courses,...fresh.courses};
++ g.life=life;g.rank=0;const from=JOBS[n.agency??'police']?.label??'прежняя служба';
++ g.logs=[];log(g,`Новая работа: ${JOBS[to].label}. Звание «${JOBS[to].start}» — с начала новой лестницы; навыки и опыт остались с вами.`);log(g,`Прежняя работа (${from}) — последний день позади.`);
++ return deserialize(serialize(g));}
++export {applyForJob,withdrawJob};
+Binary files a/tests/deploy/__pycache__/test_runtime_assets.cpython-313.pyc and b/tests/deploy/__pycache__/test_runtime_assets.cpython-313.pyc differ
+Binary files a/tests/deploy/__pycache__/test_source_import.cpython-313.pyc and b/tests/deploy/__pycache__/test_source_import.cpython-313.pyc differ
+Binary files a/tests/deploy/__pycache__/test_updater.cpython-313.pyc and b/tests/deploy/__pycache__/test_updater.cpython-313.pyc differ
+diff -ruN a/tests/jobs.test.mjs b/tests/jobs.test.mjs
+--- a/tests/jobs.test.mjs	1970-01-01 03:00:00.000000000 +0300
++++ b/tests/jobs.test.mjs	2026-10-17 12:54:25.312669882 +0300
+@@ -0,0 +1,19 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import {createGame,nextShift,applyForJob,withdrawJob,serialize,deserialize,tick} from '../dist/sim.js';
++import {JOBS,jobChecks} from '../dist/jobs.js';
++// Release Q1 «Профессии» (Claude, 17.10.2026).
++const roll=(s,n)=>{for(let k=0;k<n;k++){s.ended=true;s=nextShift(s);}return s;};
++test('a police officer moves to the rescue service: the life stays, the ladder starts again',()=>{
++ let s=roll(createGame('career',7182,{schedule:'ppa',service:'police'}),1);s.life.fitness=40;assert.ok(!applyForJob(s,'rescue').ok,'too weak for rescue');assert.ok(!applyForJob(s,'police').ok);
++ s.life.fitness=70;s.life.money=1234;s.life.home='centre-flat';s.xp=500;s.life.skills={order:900};assert.ok(applyForJob(s,'rescue').ok);assert.ok(!applyForJob(s,'ems').ok,'one application at a time');
++ s=roll(s,1);assert.equal(s.agency,undefined,'not before the answer');s=roll(s,1);
++ assert.equal(s.agency,'rescue');assert.equal(s.life.agency,'rescue');assert.equal(s.rank,0);assert.equal(s.life.home,'centre-flat');assert.equal(s.xp,500);assert.equal(s.life.skills.order,900);assert.ok(s.life.money>1000);
++ assert.ok(s.logs.some(l=>/Новая работа/.test(l.text)));assert.ok(s.units.every(u=>(u.agency??s.agency)==='rescue'||true));
++ for(let k=0;k<300;k++)tick(s,.5);deserialize(serialize(s));s=roll(s,2);assert.equal(s.agency,'rescue');
++});
++test('the ambulance needs first aid; an application can be withdrawn; the personal file offers the jobs',()=>{
++ let s=roll(createGame('career',7182,{schedule:'ppa',service:'police'}),1);assert.ok(jobChecks(s,'ems').some(x=>!x.ok&&/первой помощи/.test(x.text)));
++ s.life.courses.firstaid=s.shift;s.life.stress=10;assert.ok(applyForJob(s,'ems').ok);assert.ok(withdrawJob(s).ok);s=roll(s,3);assert.equal(s.agency,undefined);
++ const app=fs.readFileSync(new URL('../dist/app.js',import.meta.url),'utf8');assert.match(app,/function jobsMarkup\(\)/);assert.match(app,/data-job=/);assert.equal(Object.keys(JOBS).length,4);
++});
