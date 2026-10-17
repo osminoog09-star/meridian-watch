@@ -1,0 +1,38 @@
+diff -ruN a/dist/sim.js b/dist/sim.js
+--- a/dist/sim.js	2026-10-17 13:49:34.751596960 +0300
++++ b/dist/sim.js	2026-10-17 16:45:22.922288269 +0300
+@@ -293,7 +293,9 @@
+  i.custodyChoice=choice;log(s,`${u.name}: ${choice==='arrest'?'задерживаем участника, повезём в участок':'отпустим с предупреждением'} (вызов №${i.id}).`);return true;}
+ 
+ // 0.7.1 v1 ambulance service: hospital -> scene (treat) -> hospital (handover) -> done.
+-export const HOSPITAL=point(byId('raama'));
++/* Claude 17.10 (owner: «ГБР и больница в странных местах»): the bases stand at real buildings of the map — the hospital
++   complex, a depot on Uus-Sauga, the prefecture team's base in the south-east quarter — at the driveway to each, not at district centres */
++export const HOSPITAL=Object.freeze({x:3.243877,y:2.453984});
+ /* Release J: the 112 desk — who may take a call, a crew sent to the wrong kind of call, the operators */
+ function dispatchReady(s,u,i){if(!isDispatch(s))return true;const c=i.call;return !!c&&c.status==='routed'&&s.time>=(c.release??0)&&c.sent===unitAgency(s,u);}
+ function wrongCrew(s,u,i){if(!isDispatch(s)||unitAgency(s,u)===typeAgency(i.type))return false;const right=typeAgency(i.type);pushRadio(s,callsign(u),`На месте. Это не наш вызов — нужна ${SERVICES[right].toLowerCase()}. Передайте в 112.`);log(s,`${u.name}: вызов №${i.id} не по профилю, нужна ${SERVICES[right].toLowerCase()}. Вызов передан заново.`);
+@@ -349,9 +351,9 @@
+ export const serviceStatus=a=>SERVICE_TEXT[a.kind??'ambulance']?.[a.status]??'';
+ 
+ // 0.7.2 v1 rescue service: station -> scene (safe zone, work) -> station.
+-export const FIRE_STATION=point(byId('ulejoe'));
++export const FIRE_STATION=Object.freeze({x:1.263073,y:2.12888});
+ /* Release K: the city partners of a joint call; retried while a service limit is full */
+-export const GBR_BASE=point(byId('papiniidu')),KK_BASE=point(byId('raekula'));
++export const GBR_BASE=Object.freeze({x:3.339858,y:3.166839}),KK_BASE=point(byId('raekula'));
+ /* Release M: the command centre sends the rapid response team (the player's car if the player serves in it) and, at a barricade, K-Komando */
+ function stormNote(s,i){if(i.stormed||!gbrStorms(i,i.age*WORLD_SECONDS_PER_TICK_SECOND/60)||kkOnScene(i))return;i.stormed=true;log(s,`ГБР: на вызове №${i.id} угроза жизни заложника — действуем сами, не дожидаясь K-Komando.`);pushRadio(s,'ГБР','Угроза жизни, заходим. Оцепление держать.');}
+ function prefectureCalls(s){for(const i of s.incidents){if(['resolved','missed'].includes(i.state))continue;
+diff -ruN a/tests/prefecture.test.mjs b/tests/prefecture.test.mjs
+--- a/tests/prefecture.test.mjs	2026-10-17 13:49:34.744067943 +0300
++++ b/tests/prefecture.test.mjs	2026-10-17 16:48:09.634709370 +0300
+@@ -19,7 +19,7 @@
+ });
+ 
+ test('a patrol alone keeps distance at an armed call; the command centre sends the team; the call closes only with it',()=>{
+- const s=career();s.units.forEach(u=>{u.auto=false;u.status='patrol';delete u.routineLeft;});const i=armedCall(s);
++ const s=career();s.nextIncident=9000;s.units.forEach(u=>{u.auto=false;u.status='patrol';delete u.routineLeft;});const i=armedCall(s);
+  assert.equal(prefectureCap(i),PREFECTURE.holdCap);assert.ok(gbrNeeded(i));assert.match(callName(i),/^Нож: /);
+  tick(s,.5);const team=s.services.find(a=>a.kind==='gbr'&&a.incident===i.id);assert.ok(team,'the team is on its way');assert.equal(i.gbr,'called');
+  assert.ok(assign(s,1,i.id,true));s.units[0].auto=true;let held=false;
