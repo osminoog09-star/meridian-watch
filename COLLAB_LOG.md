@@ -1,7 +1,8 @@
-## 2026-10-17 21:50 Tallinn · Claude · ветка claude/native-fixes
+## 2026-10-17 22:50 Tallinn · Claude · ветка claude/native-fixes
 
-- **Поворот экрана** (владелец: «переворачиваю экран, игра не поворачивается ни на бок, ни наоборот»): в `project.godot` не было ориентации (по умолчанию фиксированная). Теперь `display/window/handheld/orientation=6` — по датчику: портрет, альбом и оба переворота. Интерфейс уже перестраивается при смене размера (`native_ui.gd` resized → refresh; масштаб — `map.gd configure_mobile_scale`); на боку — боковая панель (17:55).
-- Выпуск вместе с G5: APK 123.
+- **Release T1 «Люди отдела»** в нативе: `story.js`, `career2.js`, `sim.js`, `life.js` в simulation/source и ui/source; `app.js` слит (finemerge, конфликтов 0); бандлы, `source-sha256.json` (71 файл, T1), паритет пересобран. Сцена на смене 4 видна и отвечается из личного дела, раздел «Люди» в личном деле.
+- **Проверки:** JS 630/630; аудит 51/51; длинные смены 7/7.
+- **Статус:** commit → CI → APK 124 → канал.
 
 ## 2026-10-17 16:30 Tallinn · Claude · ветка claude/native-fixes
 
