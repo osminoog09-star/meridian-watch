@@ -1,6 +1,6 @@
 diff -ruN a/dist/app.js b/dist/app.js
 --- a/dist/app.js	2026-10-17 06:12:17.338216077 +0300
-+++ b/dist/app.js	2026-10-17 06:12:17.546188290 +0300
++++ b/dist/app.js	2026-10-17 07:04:38.993001650 +0300
 @@ -1,3 +1,4 @@
 +import {promotionCheck,SKILLS,SKILL_IDS,skillLevel,LEVEL_WORDS} from './promotion.js';
  import {cityClock,activityAt,needsAt,motiveText,dayPlan,NEED_TEXT} from './cityday.js';
@@ -45,15 +45,64 @@ diff -ruN a/dist/app.js b/dist/app.js
  }
  function servicePanel(){modal('<h2>Личное дело сотрудника</h2>'+(state.hero?`<p class="tip"><b>${escapeHtml(heroName(state.hero))}</b> · ${escapeHtml(heroSummary(state.hero))}</p>`:'')+(state.mode==='career'?`<p class="fine-print">Путь: ${[0,1,2,3,4].map(k=>`${k===state.rank?'<b>':''}${escapeHtml(rankTitle(state,k))}${k===state.rank?'</b>':''}`).join(' → ')} → ${chiefUnlocked(state)?'<b>начальник — открыто</b>':'начальник (после высшего звания)'}</p>`:'')+(chiefUnlocked(state)?'<p class="notice">Вы дослужились до высшего звания: можно возглавить подразделение — это новая кампания начальника с вашим персонажем.</p><button id="becomeChief" class="primary" style="width:100%">Возглавить подразделение</button>':'')+(state.life?sideJobMarkup():'')+serviceMarkup()+personalGoalsMarkup()+developmentMarkup());bindCareer2(servicePanel);for(const b of document.querySelectorAll('[data-sidejob]'))b.onclick=()=>{const r=takeSideJob(state,b.dataset.sidejob,b.dataset.report!=='no');toast(r.message);if(r.ok){save();servicePanel();}};if($('quitSideJob'))$('quitSideJob').onclick=()=>{const r=leaveSideJob(state);toast(r.message);save();servicePanel();};if($('becomeChief'))$('becomeChief').onclick=()=>{rememberChief(state);agencyChoice=state.agency??'police';switchMode('chief',true);};for(const b of document.querySelectorAll('[data-buy]'))b.onclick=()=>{const r=buyPersonal(state,b.dataset.buy);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};}
  /* Release C2: what the savings are for */
+diff -ruN a/dist/cityday.js b/dist/cityday.js
+--- a/dist/cityday.js	2026-10-17 06:12:17.521611336 +0300
++++ b/dist/cityday.js	2026-10-17 07:04:38.992982800 +0300
+@@ -89,6 +89,14 @@
+   else continue;
+   const d=Math.hypot(pos.x-focus.x,pos.y-focus.y);if(d>radius)continue;out.push({id:c.id,name:c.name,x:pos.x,y:pos.y,heading:pos.heading,car:!!a.car&&a.trip,status:a.text,d});}
+  return out.sort((a,b)=>a.d-b.d).slice(0,limit);}
++/* Performance (audit 17.10: routing walkers every frame cost 50+ ms in QuickJS on the phone): a plan of the people
++   near the camera keeps each person's route; positions between plans are cheap (no routing). */
++export function streetPlan(elapsed,focus,{rain=false,limit=CITYDAY.visible,radius=CITYDAY.radius,routes=1}={}){budget=routes;if(!focus||!Number.isFinite(focus.x))return [];const {minute,day}=cityClock(elapsed),out=[];
++ for(let k=0;k<CITYDAY.pool;k++){const c=person(k);if(!c)continue;const box=bounds(c);if(focus.x<box[0]-radius||focus.x>box[2]+radius||focus.y<box[1]-radius||focus.y>box[3]+radius)continue;let a=memo[k];if(!a||a.day!==day||a.rain!==rain||minute>=a.until||minute<a.since){a=activityAt(c,minute,day,{rain});a.day=day;a.rain=rain;a.since=minute;memo[k]=a;}
++  let r=null,walk=false;if(a.trip){if(segment(focus,a.from,a.to)>radius*1.3)continue;r=route(a.from,a.to);}else if(a.activity==='walk'){if(Math.hypot(a.at.x-focus.x,a.at.y-focus.y)>radius)continue;r=route(a.at,places(c).shop);walk=true;}else continue;if(!r)continue;
++  const e={id:c.id,name:c.name,car:!!a.car&&a.trip,status:a.text,r,walk,start:a.start??0,minutes:a.minutes??1,until:a.until,day,seed:c.id%40};const p=planPosition(e,minute);const d=Math.hypot(p.x-focus.x,p.y-focus.y);if(d>radius*1.2)continue;e.d=d;out.push(e);}
++ return out.sort((a,b)=>a.d-b.d).slice(0,limit);}
++export function planPosition(e,minute){if(e.walk){const f=Math.min(1,.0035/(e.r.len||1))*(.5-.5*Math.cos(2*Math.PI*(minute+e.seed)/40));return along(e.r,f);}return along(e.r,Math.max(0,Math.min(1,(minute-e.start)/e.minutes)));}
+ /* true when the last streetLife ran out of its route budget: call again to fill the street */
+ export const streetPending=()=>budget<=0;
+ export const validCityday=()=>true;
 Binary files a/dist/deploy/__pycache__/update.cpython-313.pyc and b/dist/deploy/__pycache__/update.cpython-313.pyc differ
 diff -ruN a/dist/life.js b/dist/life.js
 --- a/dist/life.js	2026-10-17 06:12:17.354868214 +0300
-+++ b/dist/life.js	2026-10-17 06:12:17.544966393 +0300
++++ b/dist/life.js	2026-10-17 07:04:38.992860347 +0300
 @@ -1,3 +1,4 @@
 +import {validSkills} from './promotion.js';
  // R3 «Между сменами» (Claude, 11.10.2026): the career officer's life off duty on the realistic
  // PPA roster (schedule.js). After every shift the player plans the free time until the next one:
  // rest, an extra (overtime) shift, training courses, sport, family or a hobby. Choices change
+@@ -12,8 +13,8 @@
+ // Courses: days needed, what they give. `valid` = how many shifts a mandatory check stays valid
+ // (a year of service compressed for play: 24 shifts = six roster cycles).
+ export const COURSES=Object.freeze({
+- firearms:{agency:'police',label:'Стрельбы (ежегодный допуск)',days:1,mandatory:true,valid:24,about:'Обязательная проверка: без действующего допуска не будет повышения.'},
+- fitness:{agency:['police','rescue','ems'],label:'Физподготовка (ежегодный тест)',days:1,mandatory:true,valid:24,about:'Обязательный тест. Чем лучше форма, тем легче сдать.',minFitness:35},
++ firearms:{agency:'police',label:'Стрельбы (ежегодный допуск)',days:1,mandatory:true,valid:180,about:'Обязательная проверка: без действующего допуска не будет повышения.'},
++ fitness:{agency:['police','rescue','ems'],label:'Физподготовка (ежегодный тест)',days:1,mandatory:true,valid:180,about:'Обязательный тест. Чем лучше форма, тем легче сдать.',minFitness:35},
+  firstaid:{label:'Первая помощь',days:2,about:'Ваш экипаж на 10% быстрее работает с пострадавшими (ДТП, драка, человеку плохо).',variants:['crash','street-fight','drunk-person'],bonus:1.1},
+  driving:{agency:'police',label:'Вождение спецмашины',days:2,about:'Плавная срочная езда: на срочных выездах ваша машина расходует топливо и изнашивается как в обычном патруле.'},
+  tactics:{agency:'police',label:'Тактика задержания (ГБР)',days:3,about:'Допуск в группу быстрого реагирования (нужны звание «Старший констебль», форма от 70 и действующие стрельбы).'},
+@@ -23,16 +24,16 @@
+  negotiation:{agency:'police',label:'Переговоры и деэскалация',days:3,about:'Ваш экипаж на 10% быстрее на конфликтах, семейных ссорах и шуме.',variants:['street-fight','domestic','noise-venue','noise-flat','yard-company'],bonus:1.1},
+  traffic:{agency:'police',label:'Дорожный надзор',days:2,about:'Допуск к переводу в дорожную полицию: алкотестер, измерение скорости, оформление ДТП (нужно звание «Констебль»).'},
+  // Release H rescuers (Päästeamet): breathing apparatus is the yearly mandatory check, like shooting for the police.
+- ba:{agency:'rescue',label:'Дыхательный аппарат (ежегодный допуск)',days:1,mandatory:true,valid:24,about:'Обязательная проверка: работа в задымлении в дыхательном аппарате. Без допуска не будет повышения.'},
++ ba:{agency:'rescue',label:'Дыхательный аппарат (ежегодный допуск)',days:1,mandatory:true,valid:180,about:'Обязательная проверка: работа в задымлении в дыхательном аппарате. Без допуска не будет повышения.'},
+  water:{agency:'rescue',label:'Спасение на воде и льду',days:3,about:'Гидрокостюм, лодка, спасение со льда. Допуск к роли водного спасателя (нужно звание «Спасатель»).'},
+  height:{agency:'rescue',label:'Высотные и верёвочные работы',days:3,about:'Работа на высоте и с верёвками: лифты, крыши, колодцы. Допуск к роли спасателя-высотника.'},
+  // Release I ambulance crews: advanced resuscitation is the mandatory yearly check of an ambulance worker.
+- als:{agency:'ems',label:'Расширенная реанимация (ежегодный допуск)',days:1,mandatory:true,valid:24,about:'Обязательная проверка: дефибриллятор, препараты, работа в команде при остановке сердца. Без допуска не будет повышения.'},
++ als:{agency:'ems',label:'Расширенная реанимация (ежегодный допуск)',days:1,mandatory:true,valid:180,about:'Обязательная проверка: дефибриллятор, препараты, работа в команде при остановке сердца. Без допуска не будет повышения.'},
+  trauma:{agency:'ems',label:'Травма на догоспитальном этапе',days:3,about:'Тяжёлая травма, шина, щит, остановка кровотечения. Допуск к роли бригады травмы (нужно звание «Медтехник»).'},
+  peds:{agency:'ems',label:'Неотложная педиатрия',days:3,about:'Дети: дыхание, ожоги, судороги, роды. Допуск к роли педиатрической бригады.'},
+  ambdrive:{agency:'ems',label:'Водитель скорой',days:2,about:'Плавная срочная езда с пациентом: на выездах с сиреной расход топлива и износ как в обычной поездке.'},
+  // Release J 112 operators: the call-taking protocol is the yearly check.
+- protocol:{agency:'dispatch',label:'Протоколы опроса 112 (ежегодный допуск)',days:1,mandatory:true,valid:24,about:'Обязательная проверка: структурированный опрос, приоритеты, передача вызова службам. Без допуска не будет повышения.'},
++ protocol:{agency:'dispatch',label:'Протоколы опроса 112 (ежегодный допуск)',days:1,mandatory:true,valid:180,about:'Обязательная проверка: структурированный опрос, приоритеты, передача вызова службам. Без допуска не будет повышения.'},
+  tcpr:{agency:'dispatch',label:'Реанимация по телефону',days:2,about:'Инструкция «массаж сердца» занимает вдвое меньше времени разговора.'},
+  crisis:{agency:'dispatch',label:'Тяжёлые звонки и стресс',days:2,about:'Звонки о смерти, детях и пожарах дают вдвое меньше стресса.'},
+  heavy:{agency:'rescue',label:'Водитель тяжёлой машины',days:2,about:'Плавная срочная езда на тяжёлой машине: на выездах с сиреной расход топлива и износ как в обычной поездке.'}
 @@ -97,7 +98,7 @@
  export const startFatigue=life=>life?Math.round(Math.min(60,life.sleepDebt*.5+Math.max(0,life.stress-60)*.3)):0;
  // Course bonus for the player's own crew on a call variant.
@@ -77,8 +126,8 @@ diff -ruN a/dist/life.js b/dist/life.js
  // rapid response, dog handler, drone operator (karjaar.politsei.ee). Each role needs a rank and
 diff -ruN a/dist/promotion.js b/dist/promotion.js
 --- a/dist/promotion.js	1970-01-01 03:00:00.000000000 +0300
-+++ b/dist/promotion.js	2026-10-17 06:12:17.546085988 +0300
-@@ -0,0 +1,35 @@
++++ b/dist/promotion.js	2026-10-17 07:04:38.992889464 +0300
+@@ -0,0 +1,36 @@
 +// Release R3 «Звания как в жизни» (Claude, 17.10.2026). Owner 17.10: «система повышения за опыт неправильная — надо
 +// как в реальной жизни, а опыт пусть прокачивает навыки». In the Estonian police (PPVS, PPA) a personal rank is not
 +// earned by points: the head of the agency confers the next rank to an officer who has served the minimum time in the
@@ -98,10 +147,11 @@ diff -ruN a/dist/promotion.js b/dist/promotion.js
 +export const SKILL_IDS=Object.freeze(Object.keys(SKILLS));
 +const TYPE_SKILL=['order','traffic','search','theft','order','traffic','rescue','rescue','rescue','rescue','medical','medical','medical','medical'];
 +export const skillOf=type=>TYPE_SKILL[type]??'order';
-+export const skillLevel=points=>Math.min(10,Math.floor(Math.sqrt(Math.max(0,points)/12)));
++/* level 10 needs about two years of calls of one kind (audit 17.10: the old curve was full in a few months) */
++export const skillLevel=points=>Math.min(10,Math.floor(Math.sqrt(Math.max(0,points)/250)));
 +export const skillPace=(life,type)=>1+.02*skillLevel(life?.skills?.[skillOf(type)]??0);
 +export const LEVEL_WORDS=['новичок','новичок','начинающий','начинающий','уверенный','уверенный','опытный','опытный','мастер','мастер','эксперт'];
-+export function addSkill(life,type,xp){if(!life||!(xp>0))return;life.skills=life.skills??{};const k=skillOf(type);life.skills[k]=Math.min(5000,(life.skills[k]??0)+xp);}
++export function addSkill(life,type,xp){if(!life||!(xp>0))return;life.skills=life.skills??{};const k=skillOf(type);life.skills[k]=Math.min(50000,(life.skills[k]??0)+xp);}
 +// The conditions for the next rank, each with ok and a short text.
 +export function promotionCheck(s,{mandatory=true,courses=0,awards=0}={}){const next=(s.rank??0)+1,rule=PROMOTION[next];if(!rule)return null;const l=s.life??{},att=l.attestations??[],months=(l.months??0)-(l.rankMonth??0),last=att.at(-1),prev=att.at(-2);
 + const breach=(l.breachMonth!==undefined&&(l.months??0)-l.breachMonth<rule.clean);
@@ -113,10 +163,10 @@ diff -ruN a/dist/promotion.js b/dist/promotion.js
 +  ...(rule.award?[{id:'award',ok:awards>0,text:'Служебная награда'}]:[]),
 +  {id:'clean',ok:!breach,text:`Без дисциплинарных нарушений ${rule.clean} мес.`}];
 + return {rank:next,rule,items,ok:items.every(x=>x.ok)};}
-+export function validSkills(l){const k=l?.skills;if(k===undefined)return true;return !!k&&typeof k==='object'&&Object.entries(k).every(([id,v])=>SKILL_IDS.includes(id)&&Number.isFinite(v)&&v>=0&&v<=5000)&&(l.rankMonth===undefined||Number.isInteger(l.rankMonth)&&l.rankMonth>=0)&&(l.breachMonth===undefined||Number.isInteger(l.breachMonth)&&l.breachMonth>=0);}
++export function validSkills(l){const k=l?.skills;if(k===undefined)return true;return !!k&&typeof k==='object'&&Object.entries(k).every(([id,v])=>SKILL_IDS.includes(id)&&Number.isFinite(v)&&v>=0&&v<=50000)&&(l.rankMonth===undefined||Number.isInteger(l.rankMonth)&&l.rankMonth>=0)&&(l.breachMonth===undefined||Number.isInteger(l.breachMonth)&&l.breachMonth>=0);}
 diff -ruN a/dist/sim.js b/dist/sim.js
 --- a/dist/sim.js	2026-10-17 06:12:17.369345276 +0300
-+++ b/dist/sim.js	2026-10-17 06:12:17.546103895 +0300
++++ b/dist/sim.js	2026-10-17 07:04:38.992903665 +0300
 @@ -40,6 +40,7 @@
  import {makeHero,validHero,heroFitness} from './hero.js';
  import {requestSideJob,quitSideJob,sideJobVerdict,SIDE_JOBS} from './sidejob.js';
@@ -179,7 +229,7 @@ Binary files a/tests/deploy/__pycache__/test_source_import.cpython-313.pyc and b
 Binary files a/tests/deploy/__pycache__/test_updater.cpython-313.pyc and b/tests/deploy/__pycache__/test_updater.cpython-313.pyc differ
 diff -ruN a/tests/life.test.mjs b/tests/life.test.mjs
 --- a/tests/life.test.mjs	2026-10-17 06:12:17.530240539 +0300
-+++ b/tests/life.test.mjs	2026-10-17 06:12:17.546888659 +0300
++++ b/tests/life.test.mjs	2026-10-17 07:04:38.993662527 +0300
 @@ -30,11 +30,9 @@
   assert.equal(courseBonus({courses:{negotiation:3}},'domestic'),COURSES.negotiation.bonus);assert.equal(courseBonus({courses:{}},'domestic'),1);
  });
@@ -196,7 +246,7 @@ diff -ruN a/tests/life.test.mjs b/tests/life.test.mjs
  
 diff -ruN a/tests/promotion.test.mjs b/tests/promotion.test.mjs
 --- a/tests/promotion.test.mjs	1970-01-01 03:00:00.000000000 +0300
-+++ b/tests/promotion.test.mjs	2026-10-17 06:12:17.548964617 +0300
++++ b/tests/promotion.test.mjs	2026-10-17 07:04:38.994567444 +0300
 @@ -0,0 +1,20 @@
 +import test from 'node:test';import assert from 'node:assert/strict';
 +import {createGame,nextShift,serialize,deserialize,tick,spawnIncident,assign} from '../dist/sim.js';
@@ -212,8 +262,8 @@ diff -ruN a/tests/promotion.test.mjs b/tests/promotion.test.mjs
 + s.rank=4;assert.equal(promotionCheck(s),null,'the top');assert.equal(PROMOTION.length,5);
 +});
 +test('experience grows skills by the kind of call; a skilled officer works faster',()=>{
-+ const l={};for(let k=0;k<40;k++)addSkill(l,1,10);assert.ok(l.skills.traffic>0&&!l.skills.order);assert.equal(skillOf(4),'order');
-+ assert.ok(skillPace(l,1)>1&&skillPace(l,0)===1);assert.ok(skillLevel(5000)===10&&skillLevel(0)===0);
++ const l={};for(let k=0;k<40;k++)addSkill(l,1,25);assert.ok(l.skills.traffic>0&&!l.skills.order);assert.equal(skillOf(4),'order');
++ assert.ok(skillPace(l,1)>1&&skillPace(l,0)===1);assert.ok(skillLevel(25000)===10&&skillLevel(0)===0&&skillLevel(1000)===2);
 + const s=career();s.units.forEach(u=>{u.status='patrol';delete u.routineLeft;});const i=spawnIncident(s,0);assign(s,1,i.id,true);for(let k=0;k<3000&&i.state!=='resolved';k++)tick(s,.5);
 + assert.equal(i.state,'resolved');assert.ok((s.life.skills?.order??0)>0,'the call trained public order');deserialize(serialize(s));
 + const bad=JSON.parse(serialize(s));bad.life.skills={magic:5};assert.throws(()=>deserialize(JSON.stringify(bad)));assert.equal(Object.keys(SKILLS).length,6);
