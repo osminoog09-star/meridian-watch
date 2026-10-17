@@ -1,0 +1,132 @@
+diff -ruN a/dist/app.js b/dist/app.js
+--- a/dist/app.js	2026-10-17 13:49:34.544901419 +0300
++++ b/dist/app.js	2026-10-17 13:49:34.630333424 +0300
+@@ -1,3 +1,4 @@
++import {ASPIRATIONS,ASPIRATION_IDS} from './aspirations.js';
+ import {JOBS,JOB_IDS,jobChecks} from './jobs.js';
+ import {HOMES,HOME_IDS,HOME,homeOf,commute,monthlyCost,heroNeeds,HERO_NEED_TEXT} from './home.js';
+ import {promotionCheck,SKILLS,SKILL_IDS,skillLevel,LEVEL_WORDS} from './promotion.js';
+@@ -45,7 +46,7 @@
+ import {RESCUE_TASK_IDS,EMS_TASK_IDS} from './patrolwork.js';
+ import {isService,profileOf,isServiceType,serviceText,CREW_FORMS} from './agency.js';
+ import {takeCall,askCaller,instructCaller,pickRoute,sendCall,notifyService,hireOperator,dismissOperator,trainOperator,centreSeats} from './sim.js';
+-import {prefectureOn,isGbrUnit,unitMayTake,moveTo,applyForJob,withdrawJob} from './sim.js';import {takeSideJob,leaveSideJob} from './sim.js';import {SIDE_JOBS,SIDE_JOB_IDS,sideJobActive} from './sidejob.js';import {HERO,suggestHero,makeHero,heroName,heroSummary,chiefUnlocked} from './hero.js';import {citizen,citizenLine,traitLine,motiveFor,personOf,arrests,OUTCOME,STATUS_TEXT as PERSON_STATUS} from './citizens.js';import {gbrNeeded,PREFECTURE} from './prefecture.js';import {serviceCallsign} from './radio.js';
++import {prefectureOn,isGbrUnit,unitMayTake,moveTo,applyForJob,withdrawJob,chooseAspiration} from './sim.js';import {takeSideJob,leaveSideJob} from './sim.js';import {SIDE_JOBS,SIDE_JOB_IDS,sideJobActive} from './sidejob.js';import {HERO,suggestHero,makeHero,heroName,heroSummary,chiefUnlocked} from './hero.js';import {citizen,citizenLine,traitLine,motiveFor,personOf,arrests,OUTCOME,STATUS_TEXT as PERSON_STATUS} from './citizens.js';import {gbrNeeded,PREFECTURE} from './prefecture.js';import {serviceCallsign} from './radio.js';
+ import {isEms,emsFacts,needsHospital,PATIENT} from './ems.js';
+ import {courseFor} from './life.js';
+ import {upgradeFor,upgradeText} from './upgrades.js';
+@@ -457,12 +458,16 @@
+  const service=serviceSummary(state);if(!service)return '<p>Личное дело доступно в режиме карьеры.</p>';
+  return `<section class="training-card service-card"><span class="eyebrow">КАРЬЕРА / ЛИЧНОЕ ДЕЛО</span><div class="service-heading"><span class="service-insignia" aria-label="Карьерная ступень ${state.rank+1} из 5">${state.rank===0?'M':'›'.repeat(state.rank)}</span><div><small>${escapeHtml((state.agency?crewName():'Патруль 01').toUpperCase())} / ЛИЧНОЕ ДЕЛО</small><h3>${escapeHtml(service.current.title)} · ${state.xp} опыта</h3></div></div><p><b>Текущее полномочие:</b> ${escapeHtml(service.current.duty)}.</p>${partnerCard()}${isScheduled(state)?attestMarkup()+career2Markup():''}${service.next?`<p>Следующее звание: <b>${escapeHtml(service.next.title)}</b> — ${escapeHtml(service.next.duty)}. ${isScheduled(state)&&state.mode==='career'?'':`Осталось опыта: ${xpProgress().left}.`}</p>${isScheduled(state)&&state.mode==='career'?promotionMarkup():''}`:'<p>Достигнута высшая ступень текущей карьерной системы.</p>'}<div class="permission-grid">${(profileOf(state)?.permissions??CAREER_PERMISSIONS).map(p=>`<div class="training-step ${p.rank<=state.rank?'done':''}"><b>${p.rank<=state.rank?'✓':'○'} ${escapeHtml(p.title)}</b><small>${escapeHtml(p.duty)}</small></div>`).join('')}</div><details open><summary>История службы · ${service.events.length}</summary>${service.events.length?service.events.map(e=>`<div class="logrow">${e.success?'✓':'—'} ${escapeHtml(e.name)} <small>№${e.incident} · смена ${e.shift}</small><p>${e.success?'Успешно завершено':'Помощь не завершена'} · ${e.xp} опыта · ${escapeHtml(rankTitle(state,e.rank))}</p></div>`).join(''):'<p>Записи появятся после вызовов, в которых участвовал '+escapeHtml(crewRef('Патруль 01','экипаж «$»'))+'.</p>'}</details><details><summary>Повышения</summary>${service.promotions.map(p=>`<p>Смена ${p.shift}: ${escapeHtml(rankTitle(state,p.rank))}</p>`).join('')}</details><p class="fine-print">Успешные вызовы дают опыт. Полномочия проверяются самой симуляцией, поэтому заблокированную команду нельзя выполнить обходом интерфейса.${service.legacy?' История начата после обновления; прежние вызовы не выдумываются.':''}</p></section>`;
+ }
+-function servicePanel(){modal('<h2>Личное дело сотрудника</h2>'+(state.hero?`<p class="tip"><b>${escapeHtml(heroName(state.hero))}</b> · ${escapeHtml(heroSummary(state.hero))}</p>`:'')+(state.mode==='career'?`<p class="fine-print">Путь: ${[0,1,2,3,4].map(k=>`${k===state.rank?'<b>':''}${escapeHtml(rankTitle(state,k))}${k===state.rank?'</b>':''}`).join(' → ')} → ${chiefUnlocked(state)?'<b>начальник — открыто</b>':'начальник (после высшего звания)'}</p>`:'')+(chiefUnlocked(state)?'<p class="notice">Вы дослужились до высшего звания: можно возглавить подразделение — это новая кампания начальника с вашим персонажем.</p><button id="becomeChief" class="primary" style="width:100%">Возглавить подразделение</button>':'')+(state.life?sideJobMarkup():'')+serviceMarkup()+homeMarkup()+jobsMarkup()+personalGoalsMarkup()+developmentMarkup());bindCareer2(servicePanel);for(const b of document.querySelectorAll('[data-job]'))b.onclick=()=>{const r=applyForJob(state,b.dataset.job);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};if($('jobWithdraw'))$('jobWithdraw').onclick=()=>{const r=withdrawJob(state);toast(r.message);save();servicePanel();};for(const b of document.querySelectorAll('[data-move]'))b.onclick=()=>{const r=moveTo(state,b.dataset.move);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};for(const b of document.querySelectorAll('[data-sidejob]'))b.onclick=()=>{const r=takeSideJob(state,b.dataset.sidejob,b.dataset.report!=='no');toast(r.message);if(r.ok){save();servicePanel();}};if($('quitSideJob'))$('quitSideJob').onclick=()=>{const r=leaveSideJob(state);toast(r.message);save();servicePanel();};if($('becomeChief'))$('becomeChief').onclick=()=>{rememberChief(state);agencyChoice=state.agency??'police';switchMode('chief',true);};for(const b of document.querySelectorAll('[data-buy]'))b.onclick=()=>{const r=buyPersonal(state,b.dataset.buy);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};}
++function servicePanel(){modal('<h2>Личное дело сотрудника</h2>'+(state.hero?`<p class="tip"><b>${escapeHtml(heroName(state.hero))}</b> · ${escapeHtml(heroSummary(state.hero))}</p>`:'')+(state.mode==='career'?`<p class="fine-print">Путь: ${[0,1,2,3,4].map(k=>`${k===state.rank?'<b>':''}${escapeHtml(rankTitle(state,k))}${k===state.rank?'</b>':''}`).join(' → ')} → ${chiefUnlocked(state)?'<b>начальник — открыто</b>':'начальник (после высшего звания)'}</p>`:'')+(chiefUnlocked(state)?'<p class="notice">Вы дослужились до высшего звания: можно возглавить подразделение — это новая кампания начальника с вашим персонажем.</p><button id="becomeChief" class="primary" style="width:100%">Возглавить подразделение</button>':'')+(state.life?sideJobMarkup():'')+dreamMarkup()+serviceMarkup()+homeMarkup()+jobsMarkup()+personalGoalsMarkup()+developmentMarkup());bindCareer2(servicePanel);for(const b of document.querySelectorAll('[data-dream]'))b.onclick=()=>{const r=chooseAspiration(state,b.dataset.dream);toast(r.message);if(r.ok){save();servicePanel();}};for(const b of document.querySelectorAll('[data-job]'))b.onclick=()=>{const r=applyForJob(state,b.dataset.job);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};if($('jobWithdraw'))$('jobWithdraw').onclick=()=>{const r=withdrawJob(state);toast(r.message);save();servicePanel();};for(const b of document.querySelectorAll('[data-move]'))b.onclick=()=>{const r=moveTo(state,b.dataset.move);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};for(const b of document.querySelectorAll('[data-sidejob]'))b.onclick=()=>{const r=takeSideJob(state,b.dataset.sidejob,b.dataset.report!=='no');toast(r.message);if(r.ok){save();servicePanel();}};if($('quitSideJob'))$('quitSideJob').onclick=()=>{const r=leaveSideJob(state);toast(r.message);save();servicePanel();};if($('becomeChief'))$('becomeChief').onclick=()=>{rememberChief(state);agencyChoice=state.agency??'police';switchMode('chief',true);};for(const b of document.querySelectorAll('[data-buy]'))b.onclick=()=>{const r=buyPersonal(state,b.dataset.buy);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};}
+ /* Release P1: home, the way to the station, the hero's needs */
+ function homeMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';const h=homeOf(l),way=commute(l,{car:owns(l,'car')}),n=heroNeeds(l,{bond:l.partner?.bond??50}),own=owns(l,'apartment');
+  return `<section class="training-card"><h3>Дом и дорога</h3><p><b>${escapeHtml(own?'Своя квартира':h.label)}</b></p><p>До участка ${way.km} км · ${escapeHtml(way.label)} · ${way.minutes} мин. В месяц: ${monthlyCost(l,{own})}${owns(l,'car')?' + машина':''} € (${own?'ипотека':'аренда'}, счета, продукты).${(l.late??0)?` Опозданий в этом месяце: ${l.late} из ${HOME.lateLimit} до выговора.`:''}</p>
+  <div class="needs">${Object.entries(HERO_NEED_TEXT).map(([k,label])=>`<div class="need"><small>${label} ${n[k]}%</small><div class="meter${n[k]<30?' warn':''}"><i style="width:${n[k]}%"></i></div></div>`).join('')}</div>
+  ${own?'':`<details><summary>Переехать</summary>${HOME_IDS.filter(id=>id!==(l.home??HOME.start)).map(id=>{const x=HOMES[id],w=commute({home:id},{car:owns(l,'car')});return `<div class="goal-row"><b>${escapeHtml(x.label)}</b><small>${x.rent} € в месяц · до участка ${w.minutes} мин ${escapeHtml(w.label)}</small><button data-move="${id}" ${l.money<x.rent?'disabled':''}>Переехать · залог ${x.rent} €</button></div>`;}).join('')}</details>`}</section>`;}
++/* Release S1: the dream the hero lives for */
++function dreamMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';const cur=l.aspiration&&ASPIRATIONS[l.aspiration.id],done=l.dreams??[];
++ if(cur){const p=Math.round(cur.progress(state)*100);return `<section class="training-card"><h3>Мечта: ${escapeHtml(cur.label)}</h3><p>${escapeHtml(cur.about)}</p><div class="meter"><i style="width:${p}%"></i></div><small>${p}% пути${done.length?` · сбылось: ${done.length}`:''}</small></section>`;}
++ return `<section class="training-card"><h3>Ради чего вы служите?</h3><p class="fine-print">Выберите мечту — долгую цель на месяцы. Когда сбудется, станет легче, а дальше можно выбрать новую.</p>${ASPIRATION_IDS.filter(id=>!done.includes(id)).map(id=>`<div class="goal-row"><b>${escapeHtml(ASPIRATIONS[id].label)}</b><small>${escapeHtml(ASPIRATIONS[id].about)}</small><button data-dream="${id}">Выбрать</button></div>`).join('')}${done.length?`<small>Сбылось: ${done.map(id=>escapeHtml(ASPIRATIONS[id].label)).join(', ')}</small>`:''}</section>`;}
+ /* Release Q1: another emergency service — an application, an interview, a new ladder; the life stays */
+ function jobsMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';const cur=state.agency??'police';
+  if(l.jobMove)return `<section class="training-card"><h3>Смена профессии</h3><p>Заявление: <b>${escapeHtml(JOBS[l.jobMove.agency].label)}</b> — ответ после смены ${l.jobMove.ready}. Если примут, следующая смена — уже на новом месте.</p><button id="jobWithdraw">Отозвать заявление</button></section>`;
+diff -ruN a/dist/aspirations.js b/dist/aspirations.js
+--- a/dist/aspirations.js	1970-01-01 03:00:00.000000000 +0300
++++ b/dist/aspirations.js	2026-10-17 13:49:34.630437556 +0300
+@@ -0,0 +1,22 @@
++// Release S1 «Мечта» (Claude, 17.10.2026). Roadmap S, owner 16.10: «долгая цель, смысл играть месяцами». Like the
++// aspirations of The Sims: the player picks what the hero lives for, sees the way there, and when it comes true the
++// hero is happier (stress and debt of sleep go down), the city paper writes about it and the next dream can be chosen.
++import {owns} from './service2.js';
++import {skillLevel} from './promotion.js';
++const pct=v=>Math.max(0,Math.min(1,v));
++export const ASPIRATIONS=Object.freeze({
++ commissar:Object.freeze({label:'Дослужиться до высшего звания',about:'С самых низов — до комиссара (или высшего звания своей службы).',progress:s=>pct((s.rank??0)/4),done:s=>(s.rank??0)>=4}),
++ flat:Object.freeze({label:'Своя квартира',about:'Перестать снимать: первый взнос 15 000 € и своя квартира.',progress:s=>owns(s.life,'apartment')?1:pct((s.life?.money??0)/15000),done:s=>owns(s.life,'apartment')}),
++ savings:Object.freeze({label:'Подушка безопасности',about:'10 000 € на счёте — на чёрный день.',progress:s=>pct((s.life?.money??0)/10000),done:s=>(s.life?.money??0)>=10000}),
++ master:Object.freeze({label:'Мастер своего дела',about:'Довести любой навык до 8 из 10.',progress:s=>pct(Math.max(0,...Object.values(s.life?.skills??{}).map(skillLevel))/8),done:s=>Math.max(0,...Object.values(s.life?.skills??{}).map(skillLevel))>=8}),
++ clean:Object.freeze({label:'Год без единого замечания',about:'Двенадцать месяцев подряд без выговоров и опозданий по три за месяц.',progress:s=>{const l=s.life??{},from=Math.max(l.breachMonth??0,l.aspiration?.month??0);return pct(((l.months??0)-from)/12);},done:s=>{const l=s.life??{},from=Math.max(l.breachMonth??0,l.aspiration?.month??0);return (l.months??0)-from>=12;}}),
++ fit:Object.freeze({label:'Лучшая форма в отделе',about:'Физподготовка 90 и выше.',progress:s=>pct((s.life?.fitness??0)/90),done:s=>(s.life?.fitness??0)>=90})
++});
++export const ASPIRATION_IDS=Object.freeze(Object.keys(ASPIRATIONS));
++export const DREAM=Object.freeze({stress:-25,sleep:-15});
++export function chooseAspiration(s,id){const l=s.life;if(s.mode!=='career'||!l)return {ok:false,message:'Мечта — в карьере.'};const a=ASPIRATIONS[id];if(!a)return {ok:false,message:'Нет такой мечты.'};
++ if((l.dreams??[]).includes(id))return {ok:false,message:'Это уже сбылось.'};l.aspiration={id,shift:s.shift,month:l.months??0};return {ok:true,message:`Мечта: ${a.label}.`};}
++// After a shift: has the dream come true?
++export function checkAspiration(s){const l=s.life,a=l?.aspiration&&ASPIRATIONS[l.aspiration.id];if(!a||!a.done(s))return null;
++ l.dreams=[...(l.dreams??[]),l.aspiration.id].slice(-ASPIRATION_IDS.length);l.aspiration=null;l.stress=Math.max(0,(l.stress??0)+DREAM.stress);l.sleepDebt=Math.max(0,(l.sleepDebt??0)+DREAM.sleep);return a;}
++export const validAspiration=l=>(l?.aspiration===undefined||l.aspiration===null||(ASPIRATION_IDS.includes(l.aspiration.id)&&Number.isInteger(l.aspiration.shift)&&Number.isInteger(l.aspiration.month)))&&(l?.dreams===undefined||Array.isArray(l.dreams)&&l.dreams.every(id=>ASPIRATION_IDS.includes(id)));
+Binary files a/dist/deploy/__pycache__/update.cpython-313.pyc and b/dist/deploy/__pycache__/update.cpython-313.pyc differ
+diff -ruN a/dist/life.js b/dist/life.js
+--- a/dist/life.js	2026-10-17 13:49:34.545591742 +0300
++++ b/dist/life.js	2026-10-17 13:49:34.629959512 +0300
+@@ -1,6 +1,7 @@
+ import {validSkills} from './promotion.js';
+ import {validHome} from './home.js';
+ import {validTransfer} from './jobs.js';
++import {validAspiration} from './aspirations.js';
+ // R3 «Между сменами» (Claude, 11.10.2026): the career officer's life off duty on the realistic
+ // PPA roster (schedule.js). After every shift the player plans the free time until the next one:
+ // rest, an extra (overtime) shift, training courses, sport, family or a hobby. Choices change
+@@ -100,7 +101,7 @@
+ export const startFatigue=life=>life?Math.round(Math.min(60,life.sleepDebt*.5+Math.max(0,life.stress-60)*.3)):0;
+ // Course bonus for the player's own crew on a call variant.
+ export function courseBonus(life,variant){let b=1;for(const id of ['firstaid','negotiation']){const c=COURSES[id];if(Number.isInteger(life?.courses?.[id])&&c.variants.includes(variant))b=Math.max(b,c.bonus);}return b;}
+-export function validLife(s){const l=s.life;if(l===undefined)return true;if(s.mode!=='career'||s.schedule!=='ppa')return false;if(!validPartner(l?.partner)||!validCases(l)||!validSideJob(l)||!validSkills(l)||!validHome(l)||!validTransfer(l))return false;const num=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
++export function validLife(s){const l=s.life;if(l===undefined)return true;if(s.mode!=='career'||s.schedule!=='ppa')return false;if(!validPartner(l?.partner)||!validCases(l)||!validSideJob(l)||!validSkills(l)||!validHome(l)||!validTransfer(l)||!validAspiration(l))return false;const num=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
+  return !!l&&typeof l==='object'&&['sleepDebt','stress','fitness'].every(k=>num(l[k],0,100))&&num(l.money,-1e7,1e7)&&num(l.earned,0,1e8)&&Number.isInteger(l.overtime)&&l.overtime>=0
+   &&(l.agency===undefined||['rescue','ems','dispatch'].includes(l.agency)&&s.agency===l.agency)&&l.courses&&typeof l.courses==='object'&&Object.entries(l.courses).every(([k,v])=>Object.hasOwn(COURSES,k)&&Number.isInteger(v)&&v>=0&&v<=s.shift)
+   &&l.progress&&typeof l.progress==='object'&&Object.entries(l.progress).every(([k,v])=>Object.hasOwn(COURSES,k)&&Number.isInteger(v)&&v>=0&&v<COURSES[k].days)
+diff -ruN a/dist/sim.js b/dist/sim.js
+--- a/dist/sim.js	2026-10-17 13:49:34.544437679 +0300
++++ b/dist/sim.js	2026-10-17 13:49:34.630112092 +0300
+@@ -40,6 +40,7 @@
+ import {makeHero,validHero,heroFitness} from './hero.js';
+ import {requestSideJob,quitSideJob,sideJobVerdict,SIDE_JOBS} from './sidejob.js';
+ import {citizen,citizenFor,recordMet,personOf,arrests,peopleAfterShift,validPeople} from './citizens.js';
++import {checkAspiration,chooseAspiration} from './aspirations.js';
+ import {JOBS,jobChecks,applyForJob,withdrawJob,validTransfer} from './jobs.js';
+ import {HOME,beforeShift,monthLate,monthlyCost,moveHome,validHome,homeOf} from './home.js';
+ import {promotionCheck,addSkill,skillPace,validSkills} from './promotion.js';
+@@ -761,7 +762,10 @@
+ export function moveTo(s,id){if(s.mode!=='career'||!s.life)return {ok:false,message:'Только в карьере.'};return moveHome(s.life,id);}
+ 
+ /* Release Q1 «Профессии»: the next shift — at the new job when an application was accepted */
+-export function nextShift(s,options={}){const n=nextShiftCore(s,options);const l=n.life;if(!l?.jobMove||n.shift<l.jobMove.ready)return n;
++export function nextShift(s,options={}){return dreamAfter(nextShiftMove(s,options));}
++/* Release S1: a dream that came true */
++function dreamAfter(n){if(n.mode!=='career'||!n.life)return n;const a=checkAspiration(n);if(a){log(n,`Мечта сбылась: ${a.label}. Стресс и усталость отпустили — можно выбрать новую мечту в личном деле.`);pushNews(n,{title:`Сотрудник ${n.hero?n.hero.first+' '+n.hero.last:'отделения'}: «${a.label.toLowerCase()}» — сбылось`,tone:'good',media:'Вестник Меридиана'});}return n;}
++function nextShiftMove(s,options={}){const n=nextShiftCore(s,options);const l=n.life;if(!l?.jobMove||n.shift<l.jobMove.ready)return n;
+  const to=l.jobMove.agency,miss=jobChecks(n,to).filter(x=>!x.ok);l.jobMove=null;
+  if(miss.length){log(n,`Отказ по заявлению (${JOBS[to].label}): ${miss.map(x=>x.text).join('; ')}.`);return n;}
+  const g=createGame('career',n.seed,{schedule:'ppa',service:to,...(n.hero?{hero:n.hero}:{})}),fresh=g.life;
+@@ -771,4 +775,4 @@
+  g.life=life;g.rank=0;const from=JOBS[n.agency??'police']?.label??'прежняя служба';
+  g.logs=[];log(g,`Новая работа: ${JOBS[to].label}. Звание «${JOBS[to].start}» — с начала новой лестницы; навыки и опыт остались с вами.`);log(g,`Прежняя работа (${from}) — последний день позади.`);
+  return deserialize(serialize(g));}
+-export {applyForJob,withdrawJob};
++export {applyForJob,withdrawJob,chooseAspiration};
+diff -ruN a/tests/aspirations.test.mjs b/tests/aspirations.test.mjs
+--- a/tests/aspirations.test.mjs	1970-01-01 03:00:00.000000000 +0300
++++ b/tests/aspirations.test.mjs	2026-10-17 13:49:34.634760984 +0300
+@@ -0,0 +1,14 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import {createGame,nextShift,chooseAspiration,serialize,deserialize} from '../dist/sim.js';
++import {ASPIRATIONS} from '../dist/aspirations.js';
++// Release S1 «Мечта» (Claude, 17.10.2026).
++const roll=(s,n)=>{for(let k=0;k<n;k++){s.ended=true;s=nextShift(s);}return s;};
++test('a dream is chosen, shows its way, comes true with relief and news, and the next one can be chosen',()=>{
++ let s=roll(createGame('career',7182,{schedule:'ppa'}),1);assert.ok(chooseAspiration(s,'savings').ok);assert.ok(!chooseAspiration(s,'nope').ok);
++ s.life.money=5000;assert.equal(ASPIRATIONS.savings.progress(s),.5);s.life.stress=60;
++ s.life.money=20000;s=roll(s,1);assert.equal(s.life.aspiration,null);assert.deepEqual(s.life.dreams,['savings']);assert.ok(s.life.stress<60);
++ assert.ok(s.logs.some(l=>/Мечта сбылась/.test(l.text)));assert.ok(!chooseAspiration(s,'savings').ok,'already true');assert.ok(chooseAspiration(s,'fit').ok);
++ deserialize(serialize(s));const bad=JSON.parse(serialize(s));bad.life.aspiration={id:'moon',shift:1,month:0};assert.throws(()=>deserialize(JSON.stringify(bad)));
++ const app=fs.readFileSync(new URL('../dist/app.js',import.meta.url),'utf8');assert.match(app,/function dreamMarkup\(\)/);assert.match(app,/data-dream=/);
++});
+Binary files a/tests/deploy/__pycache__/test_runtime_assets.cpython-313.pyc and b/tests/deploy/__pycache__/test_runtime_assets.cpython-313.pyc differ
+Binary files a/tests/deploy/__pycache__/test_source_import.cpython-313.pyc and b/tests/deploy/__pycache__/test_source_import.cpython-313.pyc differ
+Binary files a/tests/deploy/__pycache__/test_updater.cpython-313.pyc and b/tests/deploy/__pycache__/test_updater.cpython-313.pyc differ
