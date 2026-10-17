@@ -1,0 +1,228 @@
+diff -ruN a/dist/app.js b/dist/app.js
+--- a/dist/app.js	2026-10-17 13:49:34.750546406 +0300
++++ b/dist/app.js	2026-10-17 21:18:48.308972475 +0300
+@@ -1,3 +1,4 @@
++import {STORY_EVENTS,PEOPLE,rivalName,mentorName,rivalRank,standing,storyText} from './story.js';
+ import {ASPIRATIONS,ASPIRATION_IDS} from './aspirations.js';
+ import {JOBS,JOB_IDS,jobChecks} from './jobs.js';
+ import {HOMES,HOME_IDS,HOME,homeOf,commute,monthlyCost,heroNeeds,HERO_NEED_TEXT} from './home.js';
+@@ -13,7 +14,7 @@
+ import {nextTip,markTip} from './tips.js';
+ import {CASE_KINDS,arrestReady} from './detective.js';
+ import {currentStage,optionOpen} from './dialogues.js';
+-import {FOCUS,FOCUS_IDS,canSetFocus,COUNCIL,COUNCIL_IDS,LIFE_EVENTS,ATTEST,morale} from './career2.js';
++import {FOCUS,FOCUS_IDS,canSetFocus,COUNCIL,COUNCIL_IDS,LIFE_EVENTS,lifeEvent,ATTEST,morale} from './career2.js';
+ import {isScheduled,nextShiftInfo,SHIFT_LABEL,shiftKind} from './schedule.js';
+ import {officerView,ROSTER} from './roster.js';
+ import {mandatoryOk,ACTIVITIES,ACTIVITY_IDS,COURSES,COURSE_IDS,courseValid,shiftNet,startFatigue,RANK_XP,ROLES,ROLE_IDS,roleBlocker,LEAVE,canTakeVacation} from './life.js';
+@@ -318,7 +319,7 @@
+ function career2Markup(){const parts=[];
+  if(canSetFocus(state))parts.push(`<div class="brief-row"><b>Задача смены</b><div class="focus-list">${FOCUS_IDS.map(id=>`<button data-focus="${id}" class="${(state.shiftFocus??'balanced')===id?'active':''}" title="${escapeHtml(FOCUS[id].about)}">${escapeHtml(FOCUS[id].label)}</button>`).join('')}</div><small>${escapeHtml(FOCUS[state.shiftFocus??'balanced'].about)}</small></div>`);
+  const c=state.council;if(state.mode==='chief'&&c?.choice==='pending')parts.push(`<div class="brief-row event"><b>Встреча в мэрии · ${escapeHtml(c.label)}</b>${COUNCIL_IDS.map(id=>`<button data-council="${id}"><b>${escapeHtml(COUNCIL[id].label)}</b><small>${escapeHtml(COUNCIL[id].about)}</small></button>`).join('')}</div>`);
+- const e=state.life?.event,ev=e&&LIFE_EVENTS[e.id];if(ev)parts.push(`<div class="brief-row event"><b>${escapeHtml(ev.title)}</b><small>${escapeHtml(ev.text)}</small>${ev.options.map(o=>`<button data-life="${o.id}"><b>${escapeHtml(o.label)}</b>${o.hint?`<small>${escapeHtml(o.hint)}</small>`:''}</button>`).join('')}</div>`);
++ const e=state.life?.event,ev=e&&lifeEvent(e.id);if(ev)parts.push(`<div class="brief-row event"><b>${escapeHtml(ev.title)}</b><small>${escapeHtml(storyText(ev.text,state))}</small>${ev.options.map(o=>`<button data-life="${o.id}"><b>${escapeHtml(storyText(o.label,state))}</b>${o.hint?`<small>${escapeHtml(o.hint)}</small>`:''}</button>`).join('')}</div>`);
+  if(state.mode==='chief'&&isScheduled(state)){const m=state.morale??morale(state);parts.push(`<div class="brief-row${m<35?' event':''}"><b>Моральный дух отделения: ${m}%</b><small>${m<35?'Люди на пределе: выгоревшие сотрудники могут уволиться. Дайте отпуск, комнату отдыха, снизьте нагрузку.':m<45?'Усталость копится: отправляйте экипажи на отдых, иначе люди начнут уходить.':m>=70?'Команда в форме: работают на 4% быстрее.':'Рабочее настроение.'}</small></div>`);}
+  return parts.join('');}
+ function bindCareer2(again){for(const b of document.querySelectorAll('[data-focus]'))b.onclick=()=>{const r=setShiftFocus(state,b.dataset.focus);toast(r.message);if(r.ok){save();again();}};
+@@ -458,12 +459,17 @@
+  const service=serviceSummary(state);if(!service)return '<p>Личное дело доступно в режиме карьеры.</p>';
+  return `<section class="training-card service-card"><span class="eyebrow">КАРЬЕРА / ЛИЧНОЕ ДЕЛО</span><div class="service-heading"><span class="service-insignia" aria-label="Карьерная ступень ${state.rank+1} из 5">${state.rank===0?'M':'›'.repeat(state.rank)}</span><div><small>${escapeHtml((state.agency?crewName():'Патруль 01').toUpperCase())} / ЛИЧНОЕ ДЕЛО</small><h3>${escapeHtml(service.current.title)} · ${state.xp} опыта</h3></div></div><p><b>Текущее полномочие:</b> ${escapeHtml(service.current.duty)}.</p>${partnerCard()}${isScheduled(state)?attestMarkup()+career2Markup():''}${service.next?`<p>Следующее звание: <b>${escapeHtml(service.next.title)}</b> — ${escapeHtml(service.next.duty)}. ${isScheduled(state)&&state.mode==='career'?'':`Осталось опыта: ${xpProgress().left}.`}</p>${isScheduled(state)&&state.mode==='career'?promotionMarkup():''}`:'<p>Достигнута высшая ступень текущей карьерной системы.</p>'}<div class="permission-grid">${(profileOf(state)?.permissions??CAREER_PERMISSIONS).map(p=>`<div class="training-step ${p.rank<=state.rank?'done':''}"><b>${p.rank<=state.rank?'✓':'○'} ${escapeHtml(p.title)}</b><small>${escapeHtml(p.duty)}</small></div>`).join('')}</div><details open><summary>История службы · ${service.events.length}</summary>${service.events.length?service.events.map(e=>`<div class="logrow">${e.success?'✓':'—'} ${escapeHtml(e.name)} <small>№${e.incident} · смена ${e.shift}</small><p>${e.success?'Успешно завершено':'Помощь не завершена'} · ${e.xp} опыта · ${escapeHtml(rankTitle(state,e.rank))}</p></div>`).join(''):'<p>Записи появятся после вызовов, в которых участвовал '+escapeHtml(crewRef('Патруль 01','экипаж «$»'))+'.</p>'}</details><details><summary>Повышения</summary>${service.promotions.map(p=>`<p>Смена ${p.shift}: ${escapeHtml(rankTitle(state,p.rank))}</p>`).join('')}</details><p class="fine-print">Успешные вызовы дают опыт. Полномочия проверяются самой симуляцией, поэтому заблокированную команду нельзя выполнить обходом интерфейса.${service.legacy?' История начата после обновления; прежние вызовы не выдумываются.':''}</p></section>`;
+ }
+-function servicePanel(){modal('<h2>Личное дело сотрудника</h2>'+(state.hero?`<p class="tip"><b>${escapeHtml(heroName(state.hero))}</b> · ${escapeHtml(heroSummary(state.hero))}</p>`:'')+(state.mode==='career'?`<p class="fine-print">Путь: ${[0,1,2,3,4].map(k=>`${k===state.rank?'<b>':''}${escapeHtml(rankTitle(state,k))}${k===state.rank?'</b>':''}`).join(' → ')} → ${chiefUnlocked(state)?'<b>начальник — открыто</b>':'начальник (после высшего звания)'}</p>`:'')+(chiefUnlocked(state)?'<p class="notice">Вы дослужились до высшего звания: можно возглавить подразделение — это новая кампания начальника с вашим персонажем.</p><button id="becomeChief" class="primary" style="width:100%">Возглавить подразделение</button>':'')+(state.life?sideJobMarkup():'')+dreamMarkup()+serviceMarkup()+homeMarkup()+jobsMarkup()+personalGoalsMarkup()+developmentMarkup());bindCareer2(servicePanel);for(const b of document.querySelectorAll('[data-dream]'))b.onclick=()=>{const r=chooseAspiration(state,b.dataset.dream);toast(r.message);if(r.ok){save();servicePanel();}};for(const b of document.querySelectorAll('[data-job]'))b.onclick=()=>{const r=applyForJob(state,b.dataset.job);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};if($('jobWithdraw'))$('jobWithdraw').onclick=()=>{const r=withdrawJob(state);toast(r.message);save();servicePanel();};for(const b of document.querySelectorAll('[data-move]'))b.onclick=()=>{const r=moveTo(state,b.dataset.move);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};for(const b of document.querySelectorAll('[data-sidejob]'))b.onclick=()=>{const r=takeSideJob(state,b.dataset.sidejob,b.dataset.report!=='no');toast(r.message);if(r.ok){save();servicePanel();}};if($('quitSideJob'))$('quitSideJob').onclick=()=>{const r=leaveSideJob(state);toast(r.message);save();servicePanel();};if($('becomeChief'))$('becomeChief').onclick=()=>{rememberChief(state);agencyChoice=state.agency??'police';switchMode('chief',true);};for(const b of document.querySelectorAll('[data-buy]'))b.onclick=()=>{const r=buyPersonal(state,b.dataset.buy);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};}
++function servicePanel(){modal('<h2>Личное дело сотрудника</h2>'+(state.hero?`<p class="tip"><b>${escapeHtml(heroName(state.hero))}</b> · ${escapeHtml(heroSummary(state.hero))}</p>`:'')+(state.mode==='career'?`<p class="fine-print">Путь: ${[0,1,2,3,4].map(k=>`${k===state.rank?'<b>':''}${escapeHtml(rankTitle(state,k))}${k===state.rank?'</b>':''}`).join(' → ')} → ${chiefUnlocked(state)?'<b>начальник — открыто</b>':'начальник (после высшего звания)'}</p>`:'')+(chiefUnlocked(state)?'<p class="notice">Вы дослужились до высшего звания: можно возглавить подразделение — это новая кампания начальника с вашим персонажем.</p><button id="becomeChief" class="primary" style="width:100%">Возглавить подразделение</button>':'')+(state.life?sideJobMarkup():'')+dreamMarkup()+peopleMarkup()+serviceMarkup()+homeMarkup()+jobsMarkup()+personalGoalsMarkup()+developmentMarkup());bindCareer2(servicePanel);for(const b of document.querySelectorAll('[data-dream]'))b.onclick=()=>{const r=chooseAspiration(state,b.dataset.dream);toast(r.message);if(r.ok){save();servicePanel();}};for(const b of document.querySelectorAll('[data-job]'))b.onclick=()=>{const r=applyForJob(state,b.dataset.job);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};if($('jobWithdraw'))$('jobWithdraw').onclick=()=>{const r=withdrawJob(state);toast(r.message);save();servicePanel();};for(const b of document.querySelectorAll('[data-move]'))b.onclick=()=>{const r=moveTo(state,b.dataset.move);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};for(const b of document.querySelectorAll('[data-sidejob]'))b.onclick=()=>{const r=takeSideJob(state,b.dataset.sidejob,b.dataset.report!=='no');toast(r.message);if(r.ok){save();servicePanel();}};if($('quitSideJob'))$('quitSideJob').onclick=()=>{const r=leaveSideJob(state);toast(r.message);save();servicePanel();};if($('becomeChief'))$('becomeChief').onclick=()=>{rememberChief(state);agencyChoice=state.agency??'police';switchMode('chief',true);};for(const b of document.querySelectorAll('[data-buy]'))b.onclick=()=>{const r=buyPersonal(state,b.dataset.buy);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};}
+ /* Release P1: home, the way to the station, the hero's needs */
+ function homeMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';const h=homeOf(l),way=commute(l,{car:owns(l,'car')}),n=heroNeeds(l,{bond:l.partner?.bond??50}),own=owns(l,'apartment');
+  return `<section class="training-card"><h3>Дом и дорога</h3><p><b>${escapeHtml(own?'Своя квартира':h.label)}</b></p><p>До участка ${way.km} км · ${escapeHtml(way.label)} · ${way.minutes} мин. В месяц: ${monthlyCost(l,{own})}${owns(l,'car')?' + машина':''} € (${own?'ипотека':'аренда'}, счета, продукты).${(l.late??0)?` Опозданий в этом месяце: ${l.late} из ${HOME.lateLimit} до выговора.`:''}</p>
+  <div class="needs">${Object.entries(HERO_NEED_TEXT).map(([k,label])=>`<div class="need"><small>${label} ${n[k]}%</small><div class="meter${n[k]<30?' warn':''}"><i style="width:${n[k]}%"></i></div></div>`).join('')}</div>
+  ${own?'':`<details><summary>Переехать</summary>${HOME_IDS.filter(id=>id!==(l.home??HOME.start)).map(id=>{const x=HOMES[id],w=commute({home:id},{car:owns(l,'car')});return `<div class="goal-row"><b>${escapeHtml(x.label)}</b><small>${x.rent} € в месяц · до участка ${w.minutes} мин ${escapeHtml(w.label)}</small><button data-move="${id}" ${l.money<x.rent?'disabled':''}>Переехать · залог ${x.rent} €</button></div>`;}).join('')}</details>`}</section>`;}
++/* Release T1: the people of the department — the mentor, the partner, the classmate who wants the rank first */
++function peopleMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';const p=l.people??{rival:PEOPLE.start.rival,mentor:PEOPLE.start.mentor,log:[]},r=rivalName(state.seed,l.agency??state.agency),m=mentorName(l),rr=rivalRank(state);
++ const row=(name,role,v)=>`<div class="goal-row"><b>${escapeHtml(name)}</b><small>${escapeHtml(role)} · ${escapeHtml(standing(v))}</small><div class="meter"><i style="width:${v}%"></i></div></div>`;
++ const story=p.log.map(e=>{const ev=STORY_EVENTS[e.id],o=ev?.options.find(x=>x.id===e.choice);return ev&&o?`<p class="fine-print">Смена ${e.shift} · ${escapeHtml(ev.title)}: ${escapeHtml(storyText(o.label,state))}</p>`:'';}).join('');
++ return `<section class="training-card"><h3>Люди</h3>${row(m,(state.shift>=STORY_EVENTS['story-retire'].shift&&p.log.some(e=>e.id==='story-retire'))?'наставник, на пенсии':'наставник',p.mentor)}${l.partner&&l.partner.name!==m?row(l.partner.name,'напарник',Math.round(l.partner.bond??50)):''}${row(r,`однокурсник · ${rankTitle(state,rr)}`,p.rival)}${story?`<details><summary>История</summary>${story}</details>`:'<p class="fine-print">Сюжет начнётся на ближайших сменах.</p>'}</section>`;}
+ /* Release S1: the dream the hero lives for */
+ function dreamMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';const cur=l.aspiration&&ASPIRATIONS[l.aspiration.id],done=l.dreams??[];
+  if(cur){const p=Math.round(cur.progress(state)*100);return `<section class="training-card"><h3>Мечта: ${escapeHtml(cur.label)}</h3><p>${escapeHtml(cur.about)}</p><div class="meter"><i style="width:${p}%"></i></div><small>${p}% пути${done.length?` · сбылось: ${done.length}`:''}</small></section>`;}
+diff -ruN a/dist/career2.js b/dist/career2.js
+--- a/dist/career2.js	2026-10-17 13:49:34.742804304 +0300
++++ b/dist/career2.js	2026-10-17 21:18:48.301790630 +0300
+@@ -11,6 +11,7 @@
+ //  · Рынок кандидатов: new applicants every month, not a fixed list.
+ //  · Полицейский года: the year closes with a summary and an award.
+ // All draws are hashes of seed and shift/month (no rng). Roster campaigns only.
++import {STORY_EVENTS} from './story.js';
+ import {DISTRICT_IDS} from './calls.js';
+ const hash=(a,b)=>{let h=Math.imul((a|0)+613,2654435761)^Math.imul((b|0)+59,1597334677);h^=h>>>15;h=Math.imul(h,2246822519);return ((h^h>>>13)>>>0)/4294967296;};
+ // ── Задача смены ───────────────────────────────────────────────────────────────────────────────
+@@ -61,6 +62,8 @@
+   {id:'no',label:'Дома дела',fx:{}}]}
+ });
+ export const LIFE_EVENT_IDS=Object.freeze(Object.keys(LIFE_EVENTS).filter(k=>k!=='supervisor'));/* R1: the talk is scheduled, not random */
++/* Release T1: the scenes of the story use the same card */
++export const lifeEvent=id=>LIFE_EVENTS[id]??STORY_EVENTS[id]??null;
+ export const LIFE_EVENT_EVERY=6;// about one situation per six shifts
+ export const lifeEventFor=(seed,shift)=>hash(seed,shift*7)<1/LIFE_EVENT_EVERY?LIFE_EVENT_IDS[Math.floor(hash(shift,seed)*LIFE_EVENT_IDS.length)]:null;
+ export const INTEGRITY=Object.freeze({xp:-150,stress:15,trust:-2});
+@@ -88,7 +91,7 @@
+  if(s.lastQuit!==undefined&&!int(s.lastQuit))return false;
+  if(s.stats?.ownFounded!==undefined&&!int(s.stats.ownFounded))return false;
+  if(s.promise!==undefined&&!(s.promise&&int(s.promise.month)&&int(s.promise.limit)))return false;
+- if(l?.event!==undefined&&l.event!==null&&!(Object.hasOwn(LIFE_EVENTS,l.event.id)&&int(l.event.shift)))return false;
++ if(l?.event!==undefined&&l.event!==null&&!((Object.hasOwn(LIFE_EVENTS,l.event.id)||Object.hasOwn(STORY_EVENTS,l.event.id))&&int(l.event.shift)))return false;
+  if(l?.attestations!==undefined&&!(Array.isArray(l.attestations)&&l.attestations.length<=ATTEST.limit&&l.attestations.every(a=>a&&['A','B','C','D'].includes(a.grade)&&int(a.score)&&typeof a.label==='string'&&a.label.length<=30)))return false;
+  return true;}
+ export {DISTRICT_IDS};
+diff -ruN a/dist/life.js b/dist/life.js
+--- a/dist/life.js	2026-10-17 13:49:34.751260100 +0300
++++ b/dist/life.js	2026-10-17 21:18:48.306577839 +0300
+@@ -1,3 +1,4 @@
++import {validPeople} from './story.js';
+ import {validSkills} from './promotion.js';
+ import {validHome} from './home.js';
+ import {validTransfer} from './jobs.js';
+@@ -101,7 +102,7 @@
+ export const startFatigue=life=>life?Math.round(Math.min(60,life.sleepDebt*.5+Math.max(0,life.stress-60)*.3)):0;
+ // Course bonus for the player's own crew on a call variant.
+ export function courseBonus(life,variant){let b=1;for(const id of ['firstaid','negotiation']){const c=COURSES[id];if(Number.isInteger(life?.courses?.[id])&&c.variants.includes(variant))b=Math.max(b,c.bonus);}return b;}
+-export function validLife(s){const l=s.life;if(l===undefined)return true;if(s.mode!=='career'||s.schedule!=='ppa')return false;if(!validPartner(l?.partner)||!validCases(l)||!validSideJob(l)||!validSkills(l)||!validHome(l)||!validTransfer(l)||!validAspiration(l))return false;const num=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
++export function validLife(s){const l=s.life;if(l===undefined)return true;if(s.mode!=='career'||s.schedule!=='ppa')return false;if(!validPartner(l?.partner)||!validCases(l)||!validSideJob(l)||!validSkills(l)||!validHome(l)||!validTransfer(l)||!validAspiration(l)||!validPeople(l))return false;const num=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
+  return !!l&&typeof l==='object'&&['sleepDebt','stress','fitness'].every(k=>num(l[k],0,100))&&num(l.money,-1e7,1e7)&&num(l.earned,0,1e8)&&Number.isInteger(l.overtime)&&l.overtime>=0
+   &&(l.agency===undefined||['rescue','ems','dispatch'].includes(l.agency)&&s.agency===l.agency)&&l.courses&&typeof l.courses==='object'&&Object.entries(l.courses).every(([k,v])=>Object.hasOwn(COURSES,k)&&Number.isInteger(v)&&v>=0&&v<=s.shift)
+   &&l.progress&&typeof l.progress==='object'&&Object.entries(l.progress).every(([k,v])=>Object.hasOwn(COURSES,k)&&Number.isInteger(v)&&v>=0&&v<COURSES[k].days)
+diff -ruN a/dist/sim.js b/dist/sim.js
+--- a/dist/sim.js	2026-10-17 16:45:22.922288269 +0300
++++ b/dist/sim.js	2026-10-17 21:18:48.304215194 +0300
+@@ -9,7 +9,8 @@
+ import {ROUTINE,STATUS_TEXT,statusText,briefingFor,validBolo,validRoutine} from './routine.js';
+ import {TASKS,taskTicks,taskResult,taskReward,autoTaskFor,autoTaskRoll,preventionMods,validTask,validPatrolWork,TASK_RULES} from './patrolwork.js';
+ import {specialEvent} from './events.js';
+-import {FOCUS,canSetFocus,ATTEST,attestation,LIFE_EVENTS,lifeEventFor,INTEGRITY,COUNCIL,morale,MORALE,newCandidates,validCareer2} from './career2.js';
++import {storyBeat,storyAnswer,storyText,STORY_EVENTS} from './story.js';
++import {FOCUS,canSetFocus,ATTEST,attestation,LIFE_EVENTS,lifeEvent,lifeEventFor,INTEGRITY,COUNCIL,morale,MORALE,newCandidates,validCareer2} from './career2.js';
+ import {ARCS,CITY,chapterOf,spawnAt,arcPoint,nextArc,validCity,DONE_LIMIT,EFFECT,cityMods} from './arcs.js';
+ import {WEEK,STORY,weekActive,storyDay,storyPoint,dayResult,weekVerdict,validWeek,CHIEF_WEEK,CHIEF_REWARD,validChiefWeek} from './firstweek.js';
+ import {DUTY,onDuty,unavailable,CALLED_IN_STRESS,dutyWage,STAFF_COURSES,studyBlocker,studyShift,TRANSFER,transferVerdict,PURCHASES,purchaseBlocker,owns,livingCost,WORKSHOP,validService2} from './service2.js';
+@@ -746,14 +747,15 @@
+  else if(id==='promise'){const lim=Math.max(2,Math.floor((s.goals?.list?.find(g=>g.id==='missed')?.target??8)/2));s.promise={month:c.month,limit:lim};log(s,`Мэрия: вы пообещали не больше ${lim} сорванных вызовов за ${c.label}.`);}
+  else{transact(s,k.money,'council','Отчёт перед мэрией');addTrust(s,k.trust);log(s,'Мэрия: спокойная встреча, отчёт принят.');}
+  return {ok:true,message:k.label};}
+-export function chooseLifeEvent(s,optionId){const l=s.life,e=l?.event,ev=e&&LIFE_EVENTS[e.id];if(!ev)return {ok:false,message:'Нет ситуации.'};const o=ev.options.find(x=>x.id===optionId);if(!o)return {ok:false,message:'Нет такого варианта.'};applyLifeFx(s,l,o.fx,ev.title);l.event=null;return {ok:true,message:o.label};}
++export function chooseLifeEvent(s,optionId){const l=s.life,e=l?.event,ev=e&&lifeEvent(e.id);if(!ev)return {ok:false,message:'Нет ситуации.'};const o=ev.options.find(x=>x.id===optionId);if(!o)return {ok:false,message:'Нет такого варианта.'};applyLifeFx(s,l,o.fx,ev.title);if(STORY_EVENTS[e.id])storyAnswer(l,e.id,o.id,s.shift,o.fx);l.event=null;return {ok:true,message:storyText(o.label,s)};}
+ function applyLifeFx(s,l,fx,title){const c=v=>Math.max(0,Math.min(100,v));if(fx.money)l.money+=fx.money;if(fx.stress)l.stress=c(l.stress+fx.stress);if(fx.sleep)l.sleepDebt=c(l.sleepDebt+fx.sleep);if(fx.bond&&l.partner)l.partner.bond=c(l.partner.bond+fx.bond);if(fx.xp){s.xp+=fx.xp;s.rank=rankOf(s);}
+  if(fx.health){if((l.healthDays??0)>0)l.healthDays--;else l.money-=100;}if(fx.course&&LIFE_COURSES[fx.course]){const d=(l.progress?.[fx.course]??0)+1;l.progress=l.progress??{};if(d>=LIFE_COURSES[fx.course].days){l.courses[fx.course]=s.shift;delete l.progress[fx.course];}else l.progress[fx.course]=d;}
+  if(fx.integrity)l.integrity=(l.integrity??0)+1;log(s,`Жизнь: ${title} — ${Object.entries(fx).filter(([k])=>['money','stress'].includes(k)).map(([k,v])=>k==='money'?`${v>0?'+':''}${v} €`:`стресс ${v>0?'+':''}${v}`).join(', ')||'решено'}.`);}
+ function career2Shift(s,n){if(s.lastQuit!==undefined)n.lastQuit=s.lastQuit;if(isScheduled(s)&&s.shiftFocus)n.shiftFocus=s.shiftFocus;if(s.council)n.council=n.council?.month>s.council.month?n.council:{...s.council};if(s.promise)n.promise={...s.promise};
+- if(n.mode==='career'&&n.life){const l=n.life;if(l.event){const ev=LIFE_EVENTS[l.event.id];if(ev)applyLifeFx(n,l,ev.options[ev.options.length>2?2:0].fx,ev.title);l.event=null;}/* unanswered: the safe default */
++ if(n.mode==='career'&&n.life){const l=n.life;if(l.event){const ev=lifeEvent(l.event.id);if(ev){const o=ev.options[ev.options.length>2?2:0];applyLifeFx(n,l,o.fx,ev.title);if(STORY_EVENTS[l.event.id])storyAnswer(l,l.event.id,o.id,n.shift,o.fx);}l.event=null;}/* unanswered: the safe default */
+   if(l.integrity){if(lifeEventFor(n.seed+77,n.shift)!==null||n.shift%3===0){n.xp=Math.max(0,n.xp+INTEGRITY.xp);l.stress=Math.min(100,l.stress+INTEGRITY.stress);addTrust(n,INTEGRITY.trust);log(n,'Внутренний контроль: выявлено нарушение служебной дисциплины — выговор, опыт −150.');l.breachMonth=l.months??0;pushNews(n,{title:'Проверка выявила нарушение дисциплины полицейским',tone:'bad',media:'Меридиан Online'});l.integrity=0;}}
+-  const id0=lifeEventFor(n.seed,n.shift),id=id0==='car-broke'&&!owns(l,'car')?null:id0;/* Release C2: no car, no broken car */const talk=!id&&(n.rank??0)<3&&n.shift>0&&n.shift%SUPERVISOR.talkEvery===0;if(talk){l.event={id:'supervisor',shift:n.shift};log(n,`Руководитель смены ${supervisorName(n.seed)} зовёт на разговор (личное дело).`);}
++  /* Release T1: a scene of the story comes first on its shift */const beat=storyBeat(n);if(beat){l.event={id:beat,shift:n.shift};log(n,`Люди: ${STORY_EVENTS[beat].title}. Решите до конца смены (инструктаж или личное дело).`);}
++  const id0=beat?null:lifeEventFor(n.seed,n.shift),id=id0==='car-broke'&&!owns(l,'car')?null:id0;/* Release C2: no car, no broken car */const talk=!id&&!beat&&(n.rank??0)<3&&n.shift>0&&n.shift%SUPERVISOR.talkEvery===0;if(talk){l.event={id:'supervisor',shift:n.shift};log(n,`Руководитель смены ${supervisorName(n.seed)} зовёт на разговор (личное дело).`);}
+   if(id){l.event={id,shift:n.shift};log(n,`Жизнь: ${LIFE_EVENTS[id].title}. Решите до конца смены (инструктаж или личное дело).`);}
+   /* Release P1: home and the way to the station */
+   if(isScheduled(n)){if(l.home===undefined)l.home=HOME.start;const way=beforeShift(l,n.seed,n.shift,{car:owns(l,'car'),weather:shiftWeather(n)?.kind??'clear'});for(const line of way.lines)log(n,line);if(way.late)pushRadio(n,'Руководитель смены','Опоздание на инструктаж — записал. Не повторяйте.');}}
+diff -ruN a/dist/story.js b/dist/story.js
+--- a/dist/story.js	1970-01-01 03:00:00.000000000 +0300
++++ b/dist/story.js	2026-10-17 21:18:48.299395356 +0300
+@@ -0,0 +1,68 @@
++// Release T1 «Люди отдела» (Claude, 17.10.2026). Roadmap (owner 16.10: «сюжет: наставник, соперник, итоги года»).
++// The career gets people who stay: the mentor of the first months and a classmate from the academy who serves in the
++// next shift and wants the next rank first. Scenes come at fixed points of the career (one every 5–10 shifts) through
++// the same «situation» card as the life events: two or three answers, each with an effect on the hero and on the
++// relationship. The answers are remembered; the personal file shows the people, how things stand with them and the
++// story so far. Names are fictional. Deterministic: the rival is picked by the seed; no rng.
++import {mentorOf,PARTNERS} from './partner.js';
++const RIVALS=Object.freeze({
++ police:['Маркус Тальвик','Ева Кальюранд','Артур Рейнсалу','Лийна Пяхкель'],
++ rescue:['Кевин Ымблус','Хелен Тамме','Сийм Ваарик','Анна Лепик'],
++ ems:['Кристель Ниргисто','Олег Савчук','Мария Таммисте','Роберт Ялаканн'],
++ dispatch:['Кайре Сильдвеэ','Игорь Белов','Мерилин Ыунап','Тарво Кийск']
++});
++const pick=(list,seed)=>{let h=Math.imul((seed|0)+911,2654435761);h^=h>>>15;return list[(h>>>0)%list.length];};
++export const rivalName=(seed,agency)=>pick((RIVALS[agency]??RIVALS.police).filter(n=>!PARTNERS.some(p=>p.name===n)),seed);
++export const mentorName=life=>mentorOf(life).name;
++export const PEOPLE=Object.freeze({start:{rival:50,mentor:60},limit:12});
++// An unanswered scene takes options[2] (or options[0] of two), like the life events: the order keeps that default calm.
++export const STORY_EVENTS=Object.freeze({
++ 'story-rival':{shift:4,title:'Однокурсник',text:'На построении соседней смены — {rival}, вы вместе учились в академии. Громко, на весь коридор: «Ну что, кто первым получит следующее звание?»',options:[
++  {id:'bet',label:'Поспорить на ужин',fx:{rival:5,xp:10,stress:-2},hint:'спор так спор'},
++  {id:'laugh',label:'Посмеяться: «Посмотрим»',fx:{rival:10,stress:-3}},
++  {id:'quiet',label:'Промолчать',fx:{rival:-5}}]},
++ 'story-swap':{shift:10,title:'Подменить в ночь',text:'{rival} просит подменить в ночь на субботу: у ребёнка день рождения, больше некого.',options:[
++  {id:'no',label:'Отказать: самому нужен отдых',fx:{rival:-10,stress:-2}},
++  {id:'swap',label:'Подменить',fx:{rival:20,sleep:20,stress:4,money:150},hint:'ночь вне графика оплачивается'}]},
++ 'story-mentor':{shift:16,title:'Совет наставника',text:'{mentor} звонит после смены: «Прочитал твой рапорт по последней драке. Есть пара мыслей — хочешь?»',options:[
++  {id:'later',label:'«Давай в другой раз»',fx:{mentor:-5}},
++  {id:'listen',label:'Послушать',fx:{mentor:10,xp:40,stress:-4},hint:'разбор с опытным коллегой'}]},
++ 'story-credit':{shift:22,title:'Чужая заслуга',text:'В сводке за месяц задержание на Ремесленной записано на {rival}, хотя работал ваш экипаж.',options:[
++  {id:'report',label:'Написать руководителю смены',fx:{rival:-25,xp:30,stress:2},hint:'по правилам, но отношения испортятся'},
++  {id:'talk',label:'Поговорить с {rival} с глазу на глаз',fx:{rival:10,xp:15,stress:-2}},
++  {id:'let',label:'Махнуть рукой',fx:{rival:5,stress:6}}]},
++ 'story-car':{shift:30,title:'Ключи от машины',text:'После корпоратива {rival} садится за руль. Видно, что выпил.',options:[
++  {id:'keys',label:'Забрать ключи и отвезти домой',fx:{rival:15,sleep:6,mentor:5},hint:'по-человечески и по закону'},
++  {id:'report',label:'Сообщить дежурному',fx:{rival:-30,xp:40},hint:'его остановит патруль'},
++  {id:'taxi',label:'Вызвать такси за свой счёт',fx:{rival:5,money:-15}},
++  {id:'ignore',label:'Не моё дело',fx:{integrity:true,rival:2},hint:'промолчать о пьяном водителе — нарушение'}]},
++ 'story-retire':{shift:40,title:'Наставник уходит',text:'{mentor} уходит на пенсию. В пятницу — прощальный вечер в участке, будет вся смена.',options:[
++  {id:'speech',label:'Сказать тост',fx:{mentor:15,stress:-10,money:-20},hint:'он это запомнит'},
++  {id:'gift',label:'Скинуться на подарок и прийти',fx:{mentor:8,stress:-6,money:-30}},
++  {id:'sleep',label:'Не пойти: нужно выспаться',fx:{mentor:-10,sleep:-10}}]},
++ 'story-pair':{shift:48,title:'Одна пара',text:'Из-за болезней вас с {rival} ставят в одну пару на ночную смену.',options:[
++  {id:'lead',label:'Взять старшинство на себя',fx:{rival:-5,xp:30,stress:3}},
++  {id:'equal',label:'Работать на равных',fx:{rival:12,xp:20,stress:-2}}]},
++ 'story-letter':{shift:60,title:'Письмо от наставника',text:'Открытка от {mentor}: «Слышал, как ты работаешь. Не торопись со званиями — торопись с людьми». И номер телефона: «Звони, если что».',options:[
++  {id:'call',label:'Позвонить и поблагодарить',fx:{mentor:10,stress:-8}},
++  {id:'keep',label:'Убрать открытку в шкафчик',fx:{stress:-3}}]},
++ 'story-year':{shift:72,title:'Год службы',text:'Год назад вы пришли в участок. {rival} подходит с кофе: «Ну что, кто кого?» — и впервые без подколки.',options:[
++  {id:'toast',label:'«Ничья. Пойдём поужинаем»',fx:{rival:15,stress:-8,money:-25}},
++  {id:'score',label:'Сравнить звания и вызовы',fx:{rival:-5,xp:20}}]}
++});
++export const STORY_IDS=Object.freeze(Object.keys(STORY_EVENTS));
++const BEAT_AT=new Map(STORY_IDS.map(id=>[STORY_EVENTS[id].shift,id]));
++// The scene due on this shift (the career's shift counter), or null.
++export function storyBeat(s){const l=s.life;if(s.mode!=='career'||!l)return null;const id=BEAT_AT.get(s.shift);if(!id||(l.people?.log??[]).some(e=>e.id===id))return null;return id;}
++export function ensurePeople(life){if(!life)return null;if(!life.people||typeof life.people!=='object')life.people={rival:PEOPLE.start.rival,mentor:PEOPLE.start.mentor,log:[]};return life.people;}
++const clamp=v=>Math.max(0,Math.min(100,Math.round(v)));
++// The answer: relationships move, the scene goes into the story log.
++export function storyAnswer(life,id,choice,shift,fx){const p=ensurePeople(life);if(fx.rival)p.rival=clamp(p.rival+fx.rival);if(fx.mentor)p.mentor=clamp(p.mentor+fx.mentor);
++ p.log=[...p.log.filter(e=>e.id!==id),{id,choice,shift}].slice(-PEOPLE.limit);}
++export function storyText(str,s){return String(str).replaceAll('{rival}',rivalName(s.seed,s.life?.agency??s.agency)).replaceAll('{mentor}',mentorName(s.life));}
++// How the hero stands with a person, in words.
++export const standing=v=>v>=80?'близкие люди':v>=60?'хорошие отношения':v>=40?'ровно':v>=20?'холодно':'в ссоре';
++// The rival's own career: by the hero's rank and the relationship — a rival who is helped tends to keep pace.
++export function rivalRank(s){const r=s.rank??0,p=s.life?.people?.rival??50,h=(Math.imul((s.seed|0)+5,2246822519)>>>0)%3;return Math.max(0,Math.min(4,r+(h===0?1:h===1?0:-1)+(p>=70?0:p<30?-1:0)));}
++export function validPeople(l){const p=l?.people;if(p===undefined)return true;const int=(x,a,b)=>Number.isInteger(x)&&x>=a&&x<=b;
++ return !!p&&typeof p==='object'&&int(p.rival,0,100)&&int(p.mentor,0,100)&&Array.isArray(p.log)&&p.log.length<=PEOPLE.limit&&p.log.every(e=>e&&STORY_IDS.includes(e.id)&&typeof e.choice==='string'&&STORY_EVENTS[e.id].options.some(o=>o.id===e.choice)&&int(e.shift,0,1e6));}
+diff -ruN a/tests/story.test.mjs b/tests/story.test.mjs
+--- a/tests/story.test.mjs	1970-01-01 03:00:00.000000000 +0300
++++ b/tests/story.test.mjs	2026-10-17 21:18:48.311532986 +0300
+@@ -0,0 +1,29 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,nextShift,chooseLifeEvent,serialize,deserialize} from '../dist/sim.js';
++import {STORY_EVENTS,STORY_IDS,rivalName,mentorName,storyText,rivalRank,standing,PEOPLE} from '../dist/story.js';
++import {PARTNERS} from '../dist/partner.js';
++// Release T1 «Люди отдела» (Claude, 17.10.2026).
++const roll=(s,n,answer=null)=>{for(let k=0;k<n;k++){s.ended=true;s=nextShift(s);if(answer&&s.life.event&&STORY_EVENTS[s.life.event.id])chooseLifeEvent(s,answer(s.life.event.id));}return s;};
++test('the scenes come on their shifts, the answer moves the relationship and is remembered',()=>{
++ let s=createGame('career',7182,{schedule:'ppa'});
++ s=roll(s,STORY_EVENTS['story-rival'].shift-1);assert.equal(s.shift,4);assert.equal(s.life.event?.id,'story-rival');
++ const r=chooseLifeEvent(s,'laugh');assert.ok(r.ok);assert.equal(s.life.people.rival,PEOPLE.start.rival+10);assert.deepEqual(s.life.people.log.map(e=>[e.id,e.choice]),[['story-rival','laugh']]);
++ assert.equal(s.life.event,null);deserialize(serialize(s));
++ s=roll(s,STORY_EVENTS['story-swap'].shift-s.shift);assert.equal(s.life.event?.id,'story-swap');
++ s=roll(s,1);assert.equal(s.life.people.log.at(-1).choice,'no','unanswered: the calm default');assert.equal(s.life.people.rival,PEOPLE.start.rival);
++});
++test('every scene of a long career fires once; the default answers are safe; saves stay valid',()=>{
++ let s=createGame('career',4242,{schedule:'ppa'});s=roll(s,80,id=>STORY_EVENTS[id].options[0].id);
++ assert.deepEqual(s.life.people.log.map(e=>e.id).sort(),[...STORY_IDS].sort());deserialize(serialize(s));
++ for(const id of STORY_IDS){const o=STORY_EVENTS[id].options,d=o[o.length>2?2:0];assert.ok(!d.fx.integrity,`${id}: the default is not a breach`);}
++ const bad=JSON.parse(serialize(s));bad.life.people.log.push({id:'story-moon',choice:'x',shift:1});assert.throws(()=>deserialize(JSON.stringify(bad)));
++ const bad2=JSON.parse(serialize(s));bad2.life.people.rival=140;assert.throws(()=>deserialize(JSON.stringify(bad2)));
++});
++test('names: the rival is never a partner, the text speaks of real people; the rival has a rank of their own',()=>{
++ for(let seed=1;seed<40;seed++)for(const agency of ['police','rescue','ems','dispatch']){const n=rivalName(seed,agency);assert.ok(n&&!PARTNERS.some(p=>p.name===n));}
++ const s=createGame('career',7182,{schedule:'ppa'});const t=storyText(STORY_EVENTS['story-car'].text,s);assert.ok(!t.includes('{'));assert.ok(t.includes(rivalName(7182,'police')));
++ assert.equal(mentorName(s.life),'Алексей Морозов');assert.ok(rivalRank(s)>=0&&rivalRank(s)<=4);assert.equal(standing(85),'близкие люди');
++});
++test('chief and old campaigns have no story scenes',()=>{
++ let c=createGame('chief',7182,{schedule:'ppa'});for(let k=0;k<6;k++){c.ended=true;c=nextShift(c);}assert.ok(!c.life?.event||!STORY_EVENTS[c.life.event.id]);
++});
