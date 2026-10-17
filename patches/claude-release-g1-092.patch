@@ -1,0 +1,109 @@
+diff -ruN a/dist/app.js b/dist/app.js
+--- a/dist/app.js	2026-10-18 01:21:39.431573987 +0300
++++ b/dist/app.js	2026-10-18 02:02:02.948443394 +0300
+@@ -476,7 +476,7 @@
+ function peopleMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';const p=l.people??{rival:PEOPLE.start.rival,mentor:PEOPLE.start.mentor,log:[]},r=rivalName(state.seed,l.agency??state.agency),m=mentorName(l),rr=rivalRank(state);
+  const row=(name,role,v)=>`<div class="goal-row"><b>${escapeHtml(name)}</b><small>${escapeHtml(role)} · ${escapeHtml(standing(v))}</small><div class="meter"><i style="width:${v}%"></i></div></div>`;
+  const story=p.log.map(e=>{const ev=STORY_EVENTS[e.id],o=ev?.options.find(x=>x.id===e.choice);return ev&&o?`<p class="fine-print">Смена ${e.shift} · ${escapeHtml(ev.title)}: ${escapeHtml(storyText(o.label,state))}</p>`:'';}).join('');
+- return `<section class="training-card"><h3>Люди</h3>${row(m,(state.shift>=STORY_EVENTS['story-retire'].shift&&p.log.some(e=>e.id==='story-retire'))?'наставник, на пенсии':'наставник',p.mentor)}${l.partner&&l.partner.name!==m?row(l.partner.name,'напарник',Math.round(l.partner.bond??50)):''}${row(r,`однокурсник · ${rankTitle(state,rr)}`,p.rival)}${story?`<details><summary>История</summary>${story}</details>`:'<p class="fine-print">Сюжет начнётся на ближайших сменах.</p>'}</section>`;}
++ return `<section class="training-card"><h3>Люди</h3>${row(m,(state.shift>=STORY_EVENTS['story-retire'].shift&&p.log.some(e=>e.id==='story-retire'))?'наставник, на пенсии':'наставник',p.mentor)}${l.partner&&l.partner.name!==m?row(l.partner.name,'напарник',Math.round(l.partner.bond??50)):''}${row(r,`однокурсник · ${rankTitle(state,rr)}`,p.rival)}${story?`<details><summary>История</summary>${story}</details>`:'<p class="fine-print">Сюжет начнётся на ближайших сменах.</p>'}${(l.years??[]).length?`<details><summary>Годы службы · ${l.years.length}</summary>${l.years.slice().reverse().map(y=>`<p class="fine-print"><b>${escapeHtml(y.label)}</b>: ${y.resolved} вызовов, ${y.rate}% успеха${y.award?' · «Полицейский года»':''}${y.rank?' · '+escapeHtml(y.rank):''}. ${escapeHtml(y.mentorFate)} ${escapeHtml(y.rivalFate)}</p>`).join('')}</details>`:''}</section>`;}
+ /* Release S1: the dream the hero lives for */
+ function dreamMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';const cur=l.aspiration&&ASPIRATIONS[l.aspiration.id],done=l.dreams??[];
+  if(cur){const p=Math.round(cur.progress(state)*100);return `<section class="training-card"><h3>Мечта: ${escapeHtml(cur.label)}</h3><p>${escapeHtml(cur.about)}</p><div class="meter"><i style="width:${p}%"></i></div><small>${p}% пути${done.length?` · сбылось: ${done.length}`:''}</small></section>`;}
+diff -ruN a/dist/sim.js b/dist/sim.js
+--- a/dist/sim.js	2026-10-18 01:32:43.678666255 +0300
++++ b/dist/sim.js	2026-10-18 02:02:02.945821405 +0300
+@@ -10,7 +10,7 @@
+ import {TASKS,taskTicks,taskResult,taskReward,autoTaskFor,autoTaskRoll,preventionMods,validTask,validPatrolWork,TASK_RULES} from './patrolwork.js';
+ import {specialEvent} from './events.js';
+ import {isTaxi,newTaxi,ensureTaxi,taxiTick,taxiUnit,taxiReason,taxiRank,acceptOrder,declineOrder,validTaxi,setTaxiHospital} from './taxi.js';
+-import {storyBeat,storyAnswer,storyText,STORY_EVENTS} from './story.js';
++import {storyBeat,storyAnswer,storyText,STORY_EVENTS,yearReview} from './story.js';
+ import {FOCUS,canSetFocus,ATTEST,attestation,LIFE_EVENTS,lifeEvent,lifeEventFor,INTEGRITY,COUNCIL,morale,MORALE,newCandidates,validCareer2} from './career2.js';
+ import {ARCS,CITY,chapterOf,spawnAt,arcPoint,nextArc,validCity,DONE_LIMIT,EFFECT,cityMods} from './arcs.js';
+ import {WEEK,STORY,weekActive,storyDay,storyPoint,dayResult,weekVerdict,validWeek,CHIEF_WEEK,CHIEF_REWARD,validChiefWeek} from './firstweek.js';
+@@ -651,7 +651,8 @@
+  if(now.key!==was.key){summary=monthSummary(n.shiftLog,was.key,was.label);if(n.mode==='career'&&n.life){const living=(isScheduled(n)?monthlyCost(n.life,{own:owns(n.life,'apartment')}):livingCost(n.life,LIVING.monthly))+(owns(n.life,'car')?PURCHASES.car.monthly:0);n.life.money-=living;log(n,`${owns(n.life,'apartment')?'Ипотека':'Аренда ('+homeOf(n.life).label.toLowerCase()+')'}, счета и продукты${owns(n.life,'car')?', машина':''} за ${was.label}: −${living} €. На счёте ${Math.round(n.life.money)} €.`);if(monthLate(n.life)){n.life.breachMonth=n.life.months??0;log(n,'Три опоздания за месяц — выговор от руководства. Повышение отложено.');}if(n.life.money<0){n.life.stress=Math.min(100,n.life.stress+LIVING.debtStress);log(n,'Денег не хватает: долги добавляют стресса.');}}if(n.goals?.month===was.key)goals=closeGoals(n,st);delete n.goals;yearCtx=career2Month(s,n,st,was,now,goals);st.cleanMonths=st.monthFounded===0?st.cleanMonths+1:0;st.monthFounded=0;}
+  n.stats=st;const fresh=newAwards({s:n,stats:st,summary,year:yearCtx},n.awards);
+  for(const a of fresh){n.awards.push({id:a.id,shift:s.shift,...(summary?{month:summary.label}:{})});if(n.mode==='career')n.xp+=AWARD_REWARD.xp;else n.budget+=AWARD_REWARD.budget;log(n,`Награда: ${a.label}. ${a.about}`);pushNews(n,awardNews(a.label,n.shift));}
+- if(n.awards.length>AWARD_LIMIT)n.awards.splice(0,n.awards.length-AWARD_LIMIT);n.rank=rankOf(n);
++ if(n.awards.length>AWARD_LIMIT)n.awards.splice(0,n.awards.length-AWARD_LIMIT);
++ /* Release G1: the year of service in review — the numbers and what became of the people */if(yearCtx&&n.mode==='career'&&n.life){const y=yearReview(n,yearCtx,{award:fresh.some(a=>a.id==='year-best'),rankTitle:(PROFILES[n.agency]?.ranks??RANKS)[n.rank??0]??''});if(y)pushNews(n,{title:`Год службы: ${y.resolved} закрытых вызовов, ${y.rate}% успеха`,tone:y.rate>=90?'good':'neutral',media:'Вестник Меридиана'});}n.rank=rankOf(n);
+  if(summary){n.monthReport={...summary,shift:n.shift,awards:fresh.map(a=>a.id),...(goals?{goals}:{})};log(n,`Итоги месяца (${summary.label}): смен ${summary.shifts}, закрыто ${summary.resolved}, сорвано ${summary.missed} — ${summary.rate}% успеха.`);}}
+ 
+ // R15 trust balance (Claude, 11.10.2026). With 25–35 calls in a 12-hour roster shift, +2 per call kept
+@@ -758,8 +759,9 @@
+ function career2Shift(s,n){if(s.lastQuit!==undefined)n.lastQuit=s.lastQuit;if(isScheduled(s)&&s.shiftFocus)n.shiftFocus=s.shiftFocus;if(s.council)n.council=n.council?.month>s.council.month?n.council:{...s.council};if(s.promise)n.promise={...s.promise};
+  if(n.mode==='career'&&n.life){const l=n.life;if(l.event){const ev=lifeEvent(l.event.id);if(ev){const o=ev.options[ev.options.length>2?2:0];applyLifeFx(n,l,o.fx,ev.title);if(STORY_EVENTS[l.event.id])storyAnswer(l,l.event.id,o.id,n.shift,o.fx);}l.event=null;}/* unanswered: the safe default */
+   if(l.integrity){if(lifeEventFor(n.seed+77,n.shift)!==null||n.shift%3===0){n.xp=Math.max(0,n.xp+INTEGRITY.xp);l.stress=Math.min(100,l.stress+INTEGRITY.stress);addTrust(n,INTEGRITY.trust);log(n,'Внутренний контроль: выявлено нарушение служебной дисциплины — выговор, опыт −150.');l.breachMonth=l.months??0;pushNews(n,{title:'Проверка выявила нарушение дисциплины полицейским',tone:'bad',media:'Меридиан Online'});l.integrity=0;}}
+-  /* Release T1: a scene of the story comes first on its shift */const beat=storyBeat(n);if(beat){l.event={id:beat,shift:n.shift};log(n,`Люди: ${STORY_EVENTS[beat].title}. Решите до конца смены (инструктаж или личное дело).`);}
+-  const id0=beat?null:lifeEventFor(n.seed,n.shift),id=id0==='car-broke'&&!owns(l,'car')?null:id0;/* Release C2: no car, no broken car */const talk=!id&&!beat&&(n.rank??0)<3&&n.shift>0&&n.shift%SUPERVISOR.talkEvery===0;if(talk){l.event={id:'supervisor',shift:n.shift};log(n,`Руководитель смены ${supervisorName(n.seed)} зовёт на разговор (личное дело).`);}
++  /* Release G1: the year in review comes first */if(l.yearPending){delete l.yearPending;l.event={id:'story-yearend',shift:n.shift};log(n,'Люди: итоги года — в личном деле и на инструктаже.');}
++  /* Release T1: a scene of the story comes first on its shift */const beat=l.event?null:storyBeat(n);if(beat){l.event={id:beat,shift:n.shift};log(n,`Люди: ${STORY_EVENTS[beat].title}. Решите до конца смены (инструктаж или личное дело).`);}
++  const id0=(beat||l.event)?null:lifeEventFor(n.seed,n.shift),id=id0==='car-broke'&&!owns(l,'car')?null:id0;/* Release C2: no car, no broken car */const talk=!id&&!beat&&!l.event&&(n.rank??0)<3&&n.shift>0&&n.shift%SUPERVISOR.talkEvery===0;if(talk){l.event={id:'supervisor',shift:n.shift};log(n,`Руководитель смены ${supervisorName(n.seed)} зовёт на разговор (личное дело).`);}
+   if(id){l.event={id,shift:n.shift};log(n,`Жизнь: ${LIFE_EVENTS[id].title}. Решите до конца смены (инструктаж или личное дело).`);}
+   /* Release P1: home and the way to the station */
+   if(isScheduled(n)){if(l.home===undefined)l.home=HOME.start;const way=beforeShift(l,n.seed,n.shift,{car:owns(l,'car'),weather:shiftWeather(n)?.kind??'clear'});for(const line of way.lines)log(n,line);if(way.late)pushRadio(n,'Руководитель смены','Опоздание на инструктаж — записал. Не повторяйте.');}}
+diff -ruN a/dist/story.js b/dist/story.js
+--- a/dist/story.js	2026-10-17 21:18:48.299395356 +0300
++++ b/dist/story.js	2026-10-18 02:02:02.942727110 +0300
+@@ -46,12 +46,17 @@
+  'story-letter':{shift:60,title:'Письмо от наставника',text:'Открытка от {mentor}: «Слышал, как ты работаешь. Не торопись со званиями — торопись с людьми». И номер телефона: «Звони, если что».',options:[
+   {id:'call',label:'Позвонить и поблагодарить',fx:{mentor:10,stress:-8}},
+   {id:'keep',label:'Убрать открытку в шкафчик',fx:{stress:-3}}]},
++ /* Release G1: the end of every year of service — the numbers and what became of the people; fills from life.years */
++ 'story-yearend':{shift:null,title:'Итоги года',text:'Год {year} позади: {resolved} закрытых вызовов, {rate}% успеха{award}. {mentorFate} {rivalFate}',options:[
++  {id:'celebrate',label:'Отметить с коллегами',fx:{money:-40,stress:-12,rival:5,mentor:5},hint:'вечер в кафе у участка'},
++  {id:'change',label:'Подумать, не сменить ли работу',fx:{stress:-3},hint:'личное дело → «Сменить профессию»'},
++  {id:'continue',label:'Ещё год — дальше в службе',fx:{stress:-5}}]},
+  'story-year':{shift:72,title:'Год службы',text:'Год назад вы пришли в участок. {rival} подходит с кофе: «Ну что, кто кого?» — и впервые без подколки.',options:[
+   {id:'toast',label:'«Ничья. Пойдём поужинаем»',fx:{rival:15,stress:-8,money:-25}},
+   {id:'score',label:'Сравнить звания и вызовы',fx:{rival:-5,xp:20}}]}
+ });
+ export const STORY_IDS=Object.freeze(Object.keys(STORY_EVENTS));
+-const BEAT_AT=new Map(STORY_IDS.map(id=>[STORY_EVENTS[id].shift,id]));
++const BEAT_AT=new Map(STORY_IDS.filter(id=>STORY_EVENTS[id].shift).map(id=>[STORY_EVENTS[id].shift,id]));
+ // The scene due on this shift (the career's shift counter), or null.
+ export function storyBeat(s){const l=s.life;if(s.mode!=='career'||!l)return null;const id=BEAT_AT.get(s.shift);if(!id||(l.people?.log??[]).some(e=>e.id===id))return null;return id;}
+ export function ensurePeople(life){if(!life)return null;if(!life.people||typeof life.people!=='object')life.people={rival:PEOPLE.start.rival,mentor:PEOPLE.start.mentor,log:[]};return life.people;}
+@@ -59,10 +64,20 @@
+ // The answer: relationships move, the scene goes into the story log.
+ export function storyAnswer(life,id,choice,shift,fx){const p=ensurePeople(life);if(fx.rival)p.rival=clamp(p.rival+fx.rival);if(fx.mentor)p.mentor=clamp(p.mentor+fx.mentor);
+  p.log=[...p.log.filter(e=>e.id!==id),{id,choice,shift}].slice(-PEOPLE.limit);}
+-export function storyText(str,s){return String(str).replaceAll('{rival}',rivalName(s.seed,s.life?.agency??s.agency)).replaceAll('{mentor}',mentorName(s.life));}
++export function storyText(str,s){const y=s.life?.years?.at(-1)??{};let t=String(str);for(const [k,v] of Object.entries({year:y.label??'',resolved:y.resolved??0,rate:y.rate??0,award:y.award?' — и награда «Полицейский года»':'',mentorFate:y.mentorFate??'',rivalFate:y.rivalFate??''}))t=t.replaceAll('{'+k+'}',String(v));
++ return t.replaceAll('{rival}',rivalName(s.seed,s.life?.agency??s.agency)).replaceAll('{mentor}',mentorName(s.life));}
++// Release G1 «Итоги года»: the year in numbers and the fates of the people, kept for the personal file (last 5 years).
++export const YEARS_LIMIT=5;
++export function yearReview(s,year,{award=false,rankTitle=''}={}){const l=s.life;if(s.mode!=='career'||!l||!year)return null;const p=ensurePeople(l),r=rivalName(s.seed,l.agency??s.agency),m=mentorName(l);
++ const retired=(p.log??[]).some(e=>e.id==='story-retire'),rr=rivalRank(s),mine=s.rank??0;
++ const mentorFate=retired?(p.mentor>=70?`${m} на пенсии, но заходит в участок на праздники и спрашивает о вас.`:p.mentor<40?`${m} на пенсии; с проводов вы не созванивались.`:`${m} на пенсии: дача, внуки, иногда звонит.`):`${m} всё ещё в участке, ${standing(p.mentor)}.`;
++ const rivalFate=p.rival>=75?`${r} теперь друг: просит ставить вас в одну смену.`:p.rival<25?`${r} — рапорт о переводе в другой отдел: работать рядом с вами не хочет.`:rr>mine?`${r} обходит вас по званию — пока.`:rr<mine?`Вы обошли ${r} по званию.`:`С ${r} идёте вровень.`;
++ const rec={label:year.label,resolved:year.resolved,rate:year.rate,award:!!award,rank:rankTitle,money:Math.round(l.money??0),mentorFate,rivalFate};
++ l.years=[...(l.years??[]),rec].slice(-YEARS_LIMIT);l.yearPending=true;return rec;}
++export const validYears=l=>(l?.years===undefined||Array.isArray(l.years)&&l.years.length<=YEARS_LIMIT&&l.years.every(y=>y&&typeof y.label==='string'&&Number.isFinite(y.resolved)&&Number.isFinite(y.rate)&&typeof y.mentorFate==='string'&&y.mentorFate.length<300&&typeof y.rivalFate==='string'&&y.rivalFate.length<300))&&(l?.yearPending===undefined||typeof l.yearPending==='boolean');
+ // How the hero stands with a person, in words.
+ export const standing=v=>v>=80?'близкие люди':v>=60?'хорошие отношения':v>=40?'ровно':v>=20?'холодно':'в ссоре';
+ // The rival's own career: by the hero's rank and the relationship — a rival who is helped tends to keep pace.
+ export function rivalRank(s){const r=s.rank??0,p=s.life?.people?.rival??50,h=(Math.imul((s.seed|0)+5,2246822519)>>>0)%3;return Math.max(0,Math.min(4,r+(h===0?1:h===1?0:-1)+(p>=70?0:p<30?-1:0)));}
+-export function validPeople(l){const p=l?.people;if(p===undefined)return true;const int=(x,a,b)=>Number.isInteger(x)&&x>=a&&x<=b;
++export function validPeople(l){if(!validYears(l))return false;const p=l?.people;if(p===undefined)return true;const int=(x,a,b)=>Number.isInteger(x)&&x>=a&&x<=b;
+  return !!p&&typeof p==='object'&&int(p.rival,0,100)&&int(p.mentor,0,100)&&Array.isArray(p.log)&&p.log.length<=PEOPLE.limit&&p.log.every(e=>e&&STORY_IDS.includes(e.id)&&typeof e.choice==='string'&&STORY_EVENTS[e.id].options.some(o=>o.id===e.choice)&&int(e.shift,0,1e6));}
+diff -ruN a/tests/yearend.test.mjs b/tests/yearend.test.mjs
+--- a/tests/yearend.test.mjs	1970-01-01 03:00:00.000000000 +0300
++++ b/tests/yearend.test.mjs	2026-10-18 02:02:02.951182688 +0300
+@@ -0,0 +1,14 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,nextShift,chooseLifeEvent,serialize,deserialize} from '../dist/sim.js';
++import {STORY_EVENTS,storyText,YEARS_LIMIT} from '../dist/story.js';
++// Release G1 «Итоги года» (Claude, 18.10.2026).
++test('a year of service closes with the numbers and the fates of the mentor and the classmate; the review is a scene',()=>{
++ let s=createGame('career',7182,{schedule:'ppa'});let seen=null;
++ for(let k=0;k<400&&!seen;k++){s.resolved=8;s.missed=k%5===0?1:0;s.ended=true;s=nextShift(s);if(s.life.event?.id==='story-yearend')seen=s;else if(s.life.event&&STORY_EVENTS[s.life.event.id])chooseLifeEvent(s,STORY_EVENTS[s.life.event.id].options[0].id);}
++ assert.ok(seen,'the year closes within the first 400 shifts');const y=seen.life.years.at(-1);
++ assert.ok(y.resolved>0&&y.rate>0&&y.rate<=100);assert.ok(y.mentorFate.length>10&&y.rivalFate.length>10);
++ const text=storyText(STORY_EVENTS['story-yearend'].text,seen);assert.ok(!text.includes('{'),text);assert.match(text,/закрытых вызовов/);
++ assert.ok(chooseLifeEvent(seen,'celebrate').ok);assert.equal(seen.life.event,null);deserialize(serialize(seen));
++ assert.ok(seen.news?.some(n=>/Год службы/.test(n.title))??true);
++ const bad=JSON.parse(serialize(seen));bad.life.years=Array.from({length:YEARS_LIMIT+1},()=>y);assert.throws(()=>deserialize(JSON.stringify(bad)));
++});
