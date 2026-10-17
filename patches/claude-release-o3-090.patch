@@ -1,0 +1,166 @@
+diff -ruN a/dist/app.js b/dist/app.js
+--- a/dist/app.js	2026-10-17 03:10:44.049897992 +0300
++++ b/dist/app.js	2026-10-17 03:31:29.171311608 +0300
+@@ -1,3 +1,4 @@
++import {cityClock,activityAt,needsAt,motiveText,dayPlan,NEED_TEXT} from './cityday.js';
+ import {POLICIES,POLICY_IDS,PRIORITY_RULES,policyCost} from './policy.js';
+ import {UPGRADES,UPGRADE_IDS,upgradesUpkeep} from './upgrades.js';
+ import {dateOf} from './season.js';
+@@ -124,7 +125,7 @@
+ let savedAudio=null;try{savedAudio=localStorage.getItem(AUDIO_KEY);}catch{}const audio=createAudio({preferences:audioPreferences(savedAudio)});
+ const status={patrol:'Патрулирование',idle:'Свободен',responding:'На вызов',decision:'Нужно решение',working:'На месте',returning:'В участок',resting:'Отдых',transporting:'Доставка',handover:'Передача',servicing:'Обслуживание',briefing:'Инструктаж',break:'Обед',reports:'Рапорты',proactive:'Работа между вызовами'};
+ $('loadingScreen').hidden=true;
+-const renderer=createRenderer($('map'),hit=>{if(hit.kind==='resident'){selectedResident=hit.id;residentsPanel(hit.id);return;}if(hit.kind==='unit'){selectedUnit=hit.id;setTab('units');}else{selectedCall=hit.id;setTab('calls');}refresh(true);},{maxSurfacePixels:/Android|MercuryResponseAndroid/i.test(navigator.userAgent)?2000000:Infinity});
++const renderer=createRenderer($('map'),hit=>{if(hit.kind==='citizen'){personPanel(hit.id);return;}if(hit.kind==='resident'){selectedResident=hit.id;residentsPanel(hit.id);return;}if(hit.kind==='unit'){selectedUnit=hit.id;setTab('units');}else{selectedCall=hit.id;setTab('calls');}refresh(true);},{maxSurfacePixels:/Android|MercuryResponseAndroid/i.test(navigator.userAgent)?2000000:Infinity});
+ const locationCache=new WeakMap();function locationLabel(p){const cached=locationCache.get(p);if(cached&&cached.x===p.x&&cached.y===p.y)return cached.label;const road=nearestRoad(p),label=road.name==='Местная улица'?nearest(p).name:road.name;locationCache.set(p,{x:p.x,y:p.y,label});return label;}
+ function setHtml(id,value){const e=$(id);if(e.innerHTML!==value)e.innerHTML=value;}
+ function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+@@ -171,8 +172,12 @@
+ /* Release P1: the second job in the personal file */
+ function sideJobMarkup(){const j=state.life.sideJob,cur=j&&SIDE_JOBS[j.kind],st={pending:`уведомление у начальника, ответ к смене ${j?.ready}`,approved:'согласована',refused:`отказ: ${j?.reason??''}`,unreported:'без уведомления — риск выговора'};
+  return `<details class="dept-section"${j?' open':''}><summary><b>Вторая работа</b>${cur?' · '+escapeHtml(cur.label)+' · '+escapeHtml(st[j.status]):''}</summary><p>Госслужащий обязан письменно уведомить начальника о побочной работе (закон о публичной службе, § 60). Начальник может запретить её, если она мешает службе или создаёт конфликт интересов. Работать без уведомления — нарушение дисциплины. Подработка — только в выходные, в планировщике «Подработка (вечер)», не больше двух вечеров за выходные.</p>${cur&&j.status!=='refused'?`<p>Отработано вечеров: ${j.days}, заработано: ${Math.round(j.earned)} €.</p><button id="quitSideJob">Оставить подработку</button>`:SIDE_JOB_IDS.map(k=>`<div class="logrow"><b>${escapeHtml(SIDE_JOBS[k].label)}</b> — ${escapeHtml(SIDE_JOBS[k].about)}<div class="modal-actions"><button data-sidejob="${k}" id="sideJob-${k}" class="primary">Уведомить начальника</button><button data-sidejob="${k}" data-report="no" id="sideJobQuiet-${k}">Без уведомления</button></div></div>`).join('')}</details>`;}
++/* Release O3 «Живой город»: what the person does now, why, and how they are */
++function dayLine(c,r){if(r&&['custody','prison'].includes(r.status))return '';const el=state.population?.elapsed??((state.shift-1)*state.shiftLength+state.time),{minute,day}=cityClock(el),a=activityAt(c,minute,day),n=needsAt(c,minute,day),why=motiveText(c,a,n);
++ return `<p class="tip">Сейчас: ${escapeHtml(a.text)}${why?` — ${escapeHtml(why)}`:''}.</p><div class="needs">${Object.entries(NEED_TEXT).map(([k,label])=>`<div class="need"><small>${label} ${n[k]}%</small><div class="meter${n[k]<30?' warn':''}"><i style="width:${n[k]}%"></i></div></div>`).join('')}</div><p class="fine-print">День: ${dayPlan(c,day).filter((e,k,all)=>k===0||e[1]!==all[k-1][1]).map(([m,x])=>`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')} ${DAY_WORDS[x]??x}`).join(' · ')}</p>`;}
++const DAY_WORDS={sleep:'сон',home:'дом',work:'работа',school:'школа',study:'учёба',shop:'магазин',walk:'прогулка',visit:'гости',bar:'бар',gym:'спортзал',kindergarten:'садик'};
+ function personPanel(id,back=null){const c=citizen(id);if(!c)return;const r=personOf(state,id),call=state.incidents.find(i=>i.scene?.participants?.some(a=>a.citizen===id));
+- modal(`<span class="eyebrow">ДОСЬЕ · ${escapeHtml(PERSON_STATUS[r?.status??'free']).toUpperCase()}</span><h2>${escapeHtml(c.name)}</h2><p>${escapeHtml(citizenLine(c))}</p><p>Характер: ${escapeHtml(traitLine(c))}.</p>${call&&call.scene.participants[0]?.citizen===id?`<p class="tip">Что происходит: ${escapeHtml(motiveFor(call.variant,c))}.</p>`:''}${r?.lostJob?'<p class="notice">Потерял(а) работу после задержаний.</p>':''}${r?.fines?`<p>Штрафы по решениям суда: ${r.fines} €.</p>`:''}
++ modal(`<span class="eyebrow">ДОСЬЕ · ${escapeHtml(PERSON_STATUS[r?.status??'free']).toUpperCase()}</span><h2>${escapeHtml(c.name)}</h2><p>${escapeHtml(citizenLine(c))}</p><p>Характер: ${escapeHtml(traitLine(c))}.</p>${dayLine(c,r)}${call&&call.scene.participants[0]?.citizen===id?`<p class="tip">Что происходит: ${escapeHtml(motiveFor(call.variant,c))}.</p>`:''}${r?.lostJob?'<p class="notice">Потерял(а) работу после задержаний.</p>':''}${r?.fines?`<p>Штрафы по решениям суда: ${r.fines} €.</p>`:''}
+  <h3>Встречи с вами (${r?.met?.length??0})</h3>${(r?.met??[]).map(m=>`<div class="logrow"><small>Смена ${m.shift} · №${m.call}</small> ${escapeHtml(m.role)} — <b>${escapeHtml(OUTCOME[m.outcome]??m.outcome)}</b></div>`).join('')||'<p>Раньше не встречались.</p>'}<p class="fine-print">Город и его жители вымышлены.</p><div class="modal-actions">${back?'<button id="personBack">К списку</button>':''}<button id="personClose" class="primary">Закрыть</button></div>`);
+  if($('personBack'))$('personBack').onclick=back;$('personClose').onclick=close;}
+ function peoplePanel(){const list=Object.entries(state.people??{}).map(([id,r])=>({id:+id,r,c:citizen(+id)})).filter(x=>x.c).sort((a,b)=>(b.r.met[0]?.shift??0)-(a.r.met[0]?.shift??0)||(b.r.met[0]?.call??0)-(a.r.met[0]?.call??0));
+diff -ruN a/dist/cityday.js b/dist/cityday.js
+--- a/dist/cityday.js	1970-01-01 03:00:00.000000000 +0300
++++ b/dist/cityday.js	2026-10-17 03:31:29.171388120 +0300
+@@ -0,0 +1,94 @@
++// Release O3 «Живой город» (Claude, 17.10.2026). Owner 16.10: «город должен стать реалистичным: реальные граждане,
++// имена, работа, потребности — как в Sims». Every citizen of the registry (citizens.js) lives a day by their age,
++// job, household and character: sleep, breakfast, the way to work or school, work, lunch, shops, a walk, friends,
++// the bar, home. Needs (energy, hunger, company, rest, money) rise and fall through that day and explain what a
++// person does now («идёт в магазин — закончились продукты»). All of it is a pure function of the person and the
++// city clock: nothing is saved and the simulation is unchanged; the map shows the people who are outside near the
++// camera, walking or driving along the real streets, and a tap opens their card.
++import {citizen,CITIZEN_BASE,CITIZEN_COUNT} from './citizens.js';
++import {byId,ROAD_NODES,roadRoute,point} from './geography.js';
++import {DISTRICT_IDS} from './calls.js';
++import {MAP_METRES} from './world-scale.js';
++import {worldMinutes} from './transport.js';
++
++export const CITYDAY=Object.freeze({pool:4000,visible:36,radius:.35,walkKmh:4.8,carKmh:32,carFrom:1200});
++const mix=(a,b=0,c=0)=>{let h=Math.imul((a|0)+0x2545,2654435761)^Math.imul((b|0)+0x1f35,2246822519)^Math.imul((c|0)+0x0b3d,3266489917);h^=h>>>15;h=Math.imul(h,2246822519);h^=h>>>13;return (h>>>0)/4294967296;};
++export const cityClock=elapsed=>{const m=17*60+worldMinutes(elapsed);return {minute:m%1440,day:Math.floor(m/1440)};};
++export const weekend=day=>day%7>=5;
++
++// Road nodes of each district: the nearest district anchor decides.
++const anchors=DISTRICT_IDS.map(id=>({id,...point(byId(id))}));
++const byDistrict=new Map(DISTRICT_IDS.map(id=>[id,[]]));
++for(const n of ROAD_NODES){let best=anchors[0],d=Infinity;for(const a of anchors){const k=Math.hypot(a.x-n.x,a.y-n.y);if(k<d){d=k;best=a;}}byDistrict.get(best.id).push(n);}
++const nodeIn=(district,h)=>{const list=byDistrict.get(district)??byDistrict.get('centre');return list[Math.floor(h*list.length)%list.length];};
++const NIGHT_JOBS=/медбрат|медсестра|охранник|водитель|врач|пожарный|диспетчер|полицейск|оператор|сварщик/;
++const kindOf=c=>c.age<=6?'child':c.age<=18?'pupil':/студент/.test(c.job)?'student':/пенсион/.test(c.job)?'pensioner':/без работы/.test(c.job)?'jobless':'worker';
++// The places of a person: home, work (by the place of work: the centre most often), a shop and a park nearby,
++// the friend they visit, the bar.
++const placeCache=new Map();
++function places(c){const hit=placeCache.get(c.id);if(hit)return hit;const v=placesOf(c);placeCache.set(c.id,v);if(placeCache.size>CITYDAY.pool+500)placeCache.delete(placeCache.keys().next().value);return v;}
++function placesOf(c){const h=k=>mix(c.id,k);const home=nodeIn(c.district,h(1));const workDistrict=!c.place?c.district:h(2)<.45?'centre':DISTRICT_IDS[Math.floor(h(3)*DISTRICT_IDS.length)];
++ return {home,work:nodeIn(workDistrict,h(4)),school:nodeIn(c.district,h(5)),shop:nodeIn(c.district,h(6)),park:nodeIn(h(7)<.5?'beach':c.district,h(8)),friend:nodeIn(DISTRICT_IDS[Math.floor(h(9)*DISTRICT_IDS.length)],h(10)),bar:nodeIn(h(11)<.6?'centre':'beach',h(12))};}
++const ACT=Object.freeze({sleep:'спит',home:'дома',work:'на работе',school:'в школе',study:'на занятиях',shop:'в магазине',walk:'гуляет',visit:'в гостях',bar:'в баре',gym:'в спортзале',kindergarten:'в садике'});
++const AT={work:'work',school:'school',study:'work',shop:'shop',walk:'park',visit:'friend',bar:'bar',gym:'shop',kindergarten:'school'};
++// The day: a list of [start minute, activity]; trips are the moves between places with a different location.
++const planCache=new Map();
++export function dayPlan(c,day,{rain=false}={}){const key=c.id+'|'+day+'|'+(rain?1:0),hit=planCache.get(key);if(hit)return hit;const v=makePlan(c,day,rain);planCache.set(key,v);if(planCache.size>CITYDAY.pool*2+500)planCache.delete(planCache.keys().next().value);return v;}
++function makePlan(c,day,rain){const k=kindOf(c),h=n=>mix(c.id,day,n),off=weekend(day),plan=[];const at=(m,a)=>plan.push([Math.round(m),a]);
++ const social=c.traits?.includes('social'),lonely=c.traits?.includes('lonely'),drinks=c.traits?.includes('drinker')||c.traits?.includes('temper');
++ const night=k==='worker'&&NIGHT_JOBS.test(c.job)&&mix(c.id,77)<.4&&(Math.floor(day/2)+c.id)%2===0;
++ if(k==='child'){at(0,'sleep');at(7*60,'home');if(!off){at(7*60+45,'kindergarten');at(16*60+30,'home');}else{at(11*60,'walk');at(13*60,'home');}at(20*60,'sleep');return plan;}
++ if(night){at(0,'work');at(7*60+30,'home');at(8*60+30,'sleep');at(15*60,'home');if(h(1)<.5)at(16*60,'shop');at(17*60,'home');at(18*60+20,'work');return plan;}
++ const wake=k==='jobless'?9*60+h(2)*120:k==='pensioner'?6*60+30+h(2)*60:off?8*60+h(2)*120:6*60+h(2)*80;
++ at(0,'sleep');at(wake,'home');
++ if(!off&&['worker','pupil','student'].includes(k)){const start=k==='pupil'?8*60:k==='student'?9*60+h(3)*60:7*60+h(3)*120,end=k==='pupil'?14*60+h(4)*90:k==='student'?14*60+h(4)*120:start+8*60+30+h(4)*60;
++  at(Math.max(wake+20,start-30),k==='pupil'?'school':k==='student'?'study':'work');at(end,'home');let t=end+30;
++  if(h(5)<.45){at(t,'shop');t+=40+h(6)*30;at(t,'home');t+=30;}
++  if(h(7)<(social?.4:.15)){at(t+40,h(8)<.5||k==='pupil'?'visit':'gym');at(t+40+90+h(9)*60,'home');}
++  else if(!rain&&h(7)<.55&&k!=='worker'){at(t+30,'walk');at(t+30+50,'home');}}
++ else{let t=wake+90+h(3)*60;if(h(4)<.75){at(t,'shop');t+=45;at(t,'home');}
++  t=Math.max(t+60,13*60+h(5)*120);if(!rain&&h(6)<(k==='pensioner'?.7:.5)){at(t,'walk');at(t+60+h(7)*60,'home');}
++  if(h(8)<(social||lonely?.45:.2)){at(17*60+h(9)*90,'visit');at(20*60+h(10)*60,'home');}}
++ if(k!=='pupil'&&k!=='pensioner'&&c.age>=18&&h(11)<(off?.35:.1)+(drinks?.2:0)){at(20*60+30+h(12)*60,'bar');at(23*60+30,'home');}
++ const bed=k==='pupil'?22*60+h(13)*40:k==='pensioner'?22*60:off?23*60+30+h(13)*50:22*60+30+h(13)*70;at(Math.min(bed,1439),'sleep');
++ plan.sort((a,b)=>a[0]-b[0]);return plan;}
++
++const routeCache=new Map();
++let budget=Infinity;
++function route(a,b){const key=a.id+'>'+b.id;let r=routeCache.get(key);if(!r){if(budget<=0)return null;budget--;const pts=[point(a),...roadRoute(a,b).map(p=>({x:p.x,y:p.y}))];let len=0;const acc=[0];for(let i=1;i<pts.length;i++){len+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);acc.push(len);}r={pts,acc,len};routeCache.set(key,r);if(routeCache.size>600)routeCache.delete(routeCache.keys().next().value);}return r;}
++const along=(r,f)=>{const d=f*r.len;let i=1;while(i<r.acc.length-1&&r.acc[i]<d)i++;const a=r.pts[i-1],b=r.pts[i]??a,seg=(r.acc[i]-r.acc[i-1])||1,t=Math.max(0,Math.min(1,(d-r.acc[i-1])/seg));return {x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,heading:Math.atan2(b.y-a.y,b.x-a.x)};};
++
++// What a person does at a minute: the activity, or a trip (on foot or by car) between two places.
++export function activityAt(c,minute,day,opts={}){const plan=dayPlan(c,day,opts),p=places(c);let cur=plan[0],prev=null;for(const e of plan){if(e[0]<=minute){prev=cur;cur=e;}else break;}
++ const loc=a=>p[AT[a]]??p.home,from=prev&&prev!==cur?loc(prev[1]):loc(cur[1]),to=loc(cur[1]);
++ if(from.id!==to.id&&minute>=cur[0]){const straight=Math.hypot(from.x-to.x,from.y-to.y)*MAP_METRES,car=straight>CITYDAY.carFrom&&c.age>=18&&c.age<=78&&mix(c.id,31)<.65,kmh=car?CITYDAY.carKmh:CITYDAY.walkKmh,minutes=Math.max(3,straight*1.3/1000/kmh*60);
++  if(minute<cur[0]+minutes)return {activity:cur[1],trip:true,car,from,to,start:cur[0],minutes,until:cur[0]+minutes,progress:(minute-cur[0])/minutes,text:`${car?'едет':'идёт'} ${tripText(cur[1])}`};}
++ const next=plan.find(e=>e[0]>minute);return {activity:cur[1],trip:false,at:to,until:next?next[0]:1440,text:ACT[cur[1]]??cur[1]};}
++const tripText=a=>({home:'домой',work:'на работу',school:'в школу',study:'на занятия',shop:'в магазин',walk:'на прогулку',visit:'в гости',bar:'в бар',gym:'в спортзал',kindergarten:'в садик'})[a]??'';
++
++// Needs, 0–100 (100 = all is well), from the day so far.
++export function needsAt(c,minute,day,opts={}){const plan=dayPlan(c,day,opts),k=kindOf(c);let slept=90,lastMeal=-300,company=50,fun=50,wake=plan.find(e=>e[1]!=='sleep')?.[0]??420;
++ for(let i=0;i<plan.length;i++){const [t,a]=plan[i],end=Math.min(minute,plan[i+1]?.[0]??1440);if(t>minute)break;const span=Math.max(0,end-t);
++  if(a==='sleep'&&t===0)slept=span;if(a!=='sleep'){for(const m of [Math.max(wake+30,7*60),12*60+30,19*60])if(m>=t&&m<end)lastMeal=Math.max(lastMeal,m);}
++  if(['visit','bar'].includes(a))company=Math.min(100,company+span/2);if(['work','school','study'].includes(a))company=Math.min(100,company+span/12);if(['walk','visit','bar','gym'].includes(a))fun=Math.min(100,fun+span/2);if(['work','study'].includes(a))fun=Math.max(0,fun-span/20);}
++ if(c.traits?.includes('lonely'))company=Math.max(0,company-25);
++ const awake=Math.max(0,minute-wake),energy=Math.max(0,Math.min(100,Math.min(100,slept/4.8)-awake/18)),hunger=Math.max(0,Math.min(100,100-Math.max(0,minute-Math.max(lastMeal,minute<wake?minute:lastMeal))/5)),money=k==='jobless'?25:k==='pensioner'?45:k==='pupil'||k==='child'?70:/директор|врач|программист|юрист/.test(c.job)?85:60;
++ return {energy:Math.round(energy),hunger:Math.round(hunger),company:Math.round(company),fun:Math.round(fun),money};}
++export const NEED_TEXT=Object.freeze({energy:'Бодрость',hunger:'Сытость',company:'Общение',fun:'Отдых',money:'Деньги'});
++// Why a person does what they do: the lowest need, in words.
++export function motiveText(c,act,needs){const why={shop:needs.hunger<50?'закончились продукты':'нужно в магазин',walk:needs.fun<50?'хочет развеяться':'дышит воздухом',visit:needs.company<50?'соскучился по друзьям':'зовут в гости',bar:needs.money<40?'тратит последние деньги':'хочет отдохнуть',sleep:'устал за день',work:needs.money<50?'нужны деньги':'по графику',home:needs.energy<30?'еле держится на ногах':'отдыхает дома'}[act.activity];return why??'';}
++
++const people=[],memo=[],boxes=[];
++const bounds=c=>boxes[c.id-CITIZEN_BASE]??(boxes[c.id-CITIZEN_BASE]=(v=>[Math.min(...v.map(n=>n.x)),Math.min(...v.map(n=>n.y)),Math.max(...v.map(n=>n.x)),Math.max(...v.map(n=>n.y))])(Object.values(places(c))));
++const segment=(p,a,b)=>{const dx=b.x-a.x,dy=b.y-a.y,l=dx*dx+dy*dy||1,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l));return Math.hypot(a.x+dx*t-p.x,a.y+dy*t-p.y);};const person=k=>people[k]??(people[k]=citizen(CITIZEN_BASE+k));
++// People outside near the camera: walkers and drivers on the streets, for the map.
++export function streetLife(elapsed,focus,{rain=false,limit=CITYDAY.visible,radius=CITYDAY.radius,routes=2}={}){budget=routes;if(!focus||!Number.isFinite(focus.x))return [];const {minute,day}=cityClock(elapsed),out=[];
++ for(let k=0;k<CITYDAY.pool;k++){const c=person(k);if(!c)continue;const box=bounds(c);if(focus.x<box[0]-radius||focus.x>box[2]+radius||focus.y<box[1]-radius||focus.y>box[3]+radius)continue;let a=memo[k];if(!a||a.day!==day||a.rain!==rain||minute>=a.until||minute<a.since){a=activityAt(c,minute,day,{rain});a.day=day;a.rain=rain;a.since=minute;memo[k]=a;}if(a.trip)a.progress=(minute-a.start)/a.minutes;let pos=null;
++  if(a.trip){if(segment(focus,a.from,a.to)>radius*1.3)continue;const r=route(a.from,a.to);if(!r)continue;pos=along(r,a.progress);}
++  else if(a.activity==='walk'){if(Math.hypot(a.at.x-focus.x,a.at.y-focus.y)>radius)continue;const r=route(a.at,places(c).shop);if(!r)continue;const f=Math.min(1,.0035/(r.len||1))*(.5-.5*Math.cos(2*Math.PI*(minute+c.id%40)/40));pos=along(r,f);}
++  else continue;
++  const d=Math.hypot(pos.x-focus.x,pos.y-focus.y);if(d>radius)continue;out.push({id:c.id,name:c.name,x:pos.x,y:pos.y,heading:pos.heading,car:!!a.car&&a.trip,status:a.text,d});}
++ return out.sort((a,b)=>a.d-b.d).slice(0,limit);}
++/* true when the last streetLife ran out of its route budget: call again to fill the street */
++export const streetPending=()=>budget<=0;
++export const validCityday=()=>true;
+Binary files a/dist/deploy/__pycache__/update.cpython-313.pyc and b/dist/deploy/__pycache__/update.cpython-313.pyc differ
+Binary files a/dist/downloads/android/Mercury_Response_0.2.8.apk and b/dist/downloads/android/Mercury_Response_0.2.8.apk differ
+Binary files a/dist/downloads/android/Mercury_Response_0.2.9.apk and b/dist/downloads/android/Mercury_Response_0.2.9.apk differ
+diff -ruN a/tests/cityday.test.mjs b/tests/cityday.test.mjs
+--- a/tests/cityday.test.mjs	1970-01-01 03:00:00.000000000 +0300
++++ b/tests/cityday.test.mjs	2026-10-17 03:31:29.174612872 +0300
+@@ -0,0 +1,27 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import {citizen,CITIZEN_BASE} from '../dist/citizens.js';
++import {dayPlan,activityAt,needsAt,motiveText,streetLife,cityClock,weekend,CITYDAY} from '../dist/cityday.js';
++import {byId,point} from '../dist/geography.js';
++// Release O3 «Живой город» (Claude, 17.10.2026): a day of every citizen, needs, the people on the streets.
++const people=k=>Array.from({length:k},(_,i)=>citizen(CITIZEN_BASE+i));
++test('a working day: sleep, the way to work, work, home, sleep; children go to the kindergarten, pupils to school',()=>{
++ let workers=0,pupils=0;for(const c of people(400)){const plan=dayPlan(c,2);assert.ok(['sleep','work'].includes(plan[0][1]),'night shift starts at work');assert.ok(plan.every((e,i)=>i===0||e[0]>=plan[i-1][0]),'ordered');assert.ok(plan.every(e=>e[0]>=0&&e[0]<1440));
++  if(c.job&&!/пенсион|без работы|студент/.test(c.job)&&c.age>18&&plan.some(e=>e[1]==='work'))workers++;if(c.age>6&&c.age<=18&&plan.some(e=>e[1]==='school'))pupils++;if(c.age<=6)assert.ok(plan.some(e=>e[1]==='kindergarten'));}
++ assert.ok(workers>100,'workers '+workers);assert.ok(pupils>10,'pupils '+pupils);
++ assert.deepEqual(dayPlan(citizen(CITIZEN_BASE+3),2),dayPlan(citizen(CITIZEN_BASE+3),2),'deterministic');
++ const w=people(300).filter(c=>c.age>25&&c.age<60&&!/пенсион|без работы|студент/.test(c.job));assert.ok(w.filter(c=>dayPlan(c,5).some(e=>e[1]==='work')).length<w.filter(c=>dayPlan(c,2).some(e=>e[1]==='work')).length,'fewer at work on Saturday');assert.ok(weekend(5)&&!weekend(2));
++});
++test('needs follow the day and explain what people do',()=>{
++ for(const c of people(200)){for(const m of [3*60,9*60,13*60,19*60,23*60]){const n=needsAt(c,m,2);for(const v of Object.values(n))assert.ok(v>=0&&v<=100);const a=activityAt(c,m,2);assert.ok(typeof a.text==='string'&&a.text.length>2);motiveText(c,a,n);}
++  const tired=needsAt(c,22*60,2).energy,fresh=needsAt(c,10*60,2).energy;const pl=dayPlan(c,2);if(pl[0][1]==='sleep'&&pl[1][0]<9*60&&!pl.slice(1).some(e=>e[1]==='sleep'&&e[0]<20*60))assert.ok(tired<fresh,c.name);}
++ assert.ok(people(400).some(c=>{const a=activityAt(c,7*60+50,2);return a.trip&&/на работу|в школу|в садик/.test(a.text);}),'morning commute');
++ assert.ok(people(400).filter(c=>activityAt(c,3*60,2).activity==='sleep').length>300,'the city sleeps at night');
++});
++test('the streets: people near the camera walk or drive on the roads; a tap opens their card',()=>{
++ const f=point(byId('centre'));let list=[];for(let k=0;k<200;k++)list=streetLife(cityClock(0)?0:0,f);
++ const morning=(8*60-17*60+1440)%1440;// minutes after the 17:00 start
++ assert.ok(list.length<=CITYDAY.visible);for(const p of list){assert.ok(Number.isFinite(p.x)&&Number.isFinite(p.y));assert.ok(Math.hypot(p.x-f.x,p.y-f.y)<=CITYDAY.radius);assert.ok(citizen(p.id).name===p.name);}
++ assert.ok(list.length>5,'people in the centre at 17:00: '+list.length);
++ const app=fs.readFileSync(new URL('../dist/app.js',import.meta.url),'utf8');assert.match(app,/hit\.kind==='citizen'\)\{personPanel\(hit\.id\)/);assert.match(app,/function dayLine\(/);
++});
+Binary files a/tests/deploy/__pycache__/test_runtime_assets.cpython-313.pyc and b/tests/deploy/__pycache__/test_runtime_assets.cpython-313.pyc differ
+Binary files a/tests/deploy/__pycache__/test_source_import.cpython-313.pyc and b/tests/deploy/__pycache__/test_source_import.cpython-313.pyc differ
+Binary files a/tests/deploy/__pycache__/test_updater.cpython-313.pyc and b/tests/deploy/__pycache__/test_updater.cpython-313.pyc differ
