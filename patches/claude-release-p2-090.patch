@@ -1,0 +1,170 @@
+diff -ruN a/dist/app.js b/dist/app.js
+--- a/dist/app.js	2026-10-17 07:52:38.316048559 +0300
++++ b/dist/app.js	2026-10-17 07:52:39.259986330 +0300
+@@ -1,3 +1,4 @@
++import {HOMES,HOME_IDS,HOME,homeOf,commute,monthlyCost,heroNeeds,HERO_NEED_TEXT} from './home.js';
+ import {promotionCheck,SKILLS,SKILL_IDS,skillLevel,LEVEL_WORDS} from './promotion.js';
+ import {cityClock,activityAt,needsAt,motiveText,dayPlan,NEED_TEXT} from './cityday.js';
+ import {POLICIES,POLICY_IDS,PRIORITY_RULES,policyCost} from './policy.js';
+@@ -43,7 +44,7 @@
+ import {RESCUE_TASK_IDS,EMS_TASK_IDS} from './patrolwork.js';
+ import {isService,profileOf,isServiceType,serviceText,CREW_FORMS} from './agency.js';
+ import {takeCall,askCaller,instructCaller,pickRoute,sendCall,notifyService,hireOperator,dismissOperator,trainOperator,centreSeats} from './sim.js';
+-import {prefectureOn,isGbrUnit,unitMayTake} from './sim.js';import {takeSideJob,leaveSideJob} from './sim.js';import {SIDE_JOBS,SIDE_JOB_IDS,sideJobActive} from './sidejob.js';import {HERO,suggestHero,makeHero,heroName,heroSummary,chiefUnlocked} from './hero.js';import {citizen,citizenLine,traitLine,motiveFor,personOf,arrests,OUTCOME,STATUS_TEXT as PERSON_STATUS} from './citizens.js';import {gbrNeeded,PREFECTURE} from './prefecture.js';import {serviceCallsign} from './radio.js';
++import {prefectureOn,isGbrUnit,unitMayTake,moveTo} from './sim.js';import {takeSideJob,leaveSideJob} from './sim.js';import {SIDE_JOBS,SIDE_JOB_IDS,sideJobActive} from './sidejob.js';import {HERO,suggestHero,makeHero,heroName,heroSummary,chiefUnlocked} from './hero.js';import {citizen,citizenLine,traitLine,motiveFor,personOf,arrests,OUTCOME,STATUS_TEXT as PERSON_STATUS} from './citizens.js';import {gbrNeeded,PREFECTURE} from './prefecture.js';import {serviceCallsign} from './radio.js';
+ import {isEms,emsFacts,needsHospital,PATIENT} from './ems.js';
+ import {courseFor} from './life.js';
+ import {upgradeFor,upgradeText} from './upgrades.js';
+@@ -455,7 +456,12 @@
+  const service=serviceSummary(state);if(!service)return '<p>Личное дело доступно в режиме карьеры.</p>';
+  return `<section class="training-card service-card"><span class="eyebrow">КАРЬЕРА / ЛИЧНОЕ ДЕЛО</span><div class="service-heading"><span class="service-insignia" aria-label="Карьерная ступень ${state.rank+1} из 5">${state.rank===0?'M':'›'.repeat(state.rank)}</span><div><small>${escapeHtml((state.agency?crewName():'Патруль 01').toUpperCase())} / ЛИЧНОЕ ДЕЛО</small><h3>${escapeHtml(service.current.title)} · ${state.xp} опыта</h3></div></div><p><b>Текущее полномочие:</b> ${escapeHtml(service.current.duty)}.</p>${partnerCard()}${isScheduled(state)?attestMarkup()+career2Markup():''}${service.next?`<p>Следующее звание: <b>${escapeHtml(service.next.title)}</b> — ${escapeHtml(service.next.duty)}. ${isScheduled(state)&&state.mode==='career'?'':`Осталось опыта: ${xpProgress().left}.`}</p>${isScheduled(state)&&state.mode==='career'?promotionMarkup():''}`:'<p>Достигнута высшая ступень текущей карьерной системы.</p>'}<div class="permission-grid">${(profileOf(state)?.permissions??CAREER_PERMISSIONS).map(p=>`<div class="training-step ${p.rank<=state.rank?'done':''}"><b>${p.rank<=state.rank?'✓':'○'} ${escapeHtml(p.title)}</b><small>${escapeHtml(p.duty)}</small></div>`).join('')}</div><details open><summary>История службы · ${service.events.length}</summary>${service.events.length?service.events.map(e=>`<div class="logrow">${e.success?'✓':'—'} ${escapeHtml(e.name)} <small>№${e.incident} · смена ${e.shift}</small><p>${e.success?'Успешно завершено':'Помощь не завершена'} · ${e.xp} опыта · ${escapeHtml(rankTitle(state,e.rank))}</p></div>`).join(''):'<p>Записи появятся после вызовов, в которых участвовал '+escapeHtml(crewRef('Патруль 01','экипаж «$»'))+'.</p>'}</details><details><summary>Повышения</summary>${service.promotions.map(p=>`<p>Смена ${p.shift}: ${escapeHtml(rankTitle(state,p.rank))}</p>`).join('')}</details><p class="fine-print">Успешные вызовы дают опыт. Полномочия проверяются самой симуляцией, поэтому заблокированную команду нельзя выполнить обходом интерфейса.${service.legacy?' История начата после обновления; прежние вызовы не выдумываются.':''}</p></section>`;
+ }
+-function servicePanel(){modal('<h2>Личное дело сотрудника</h2>'+(state.hero?`<p class="tip"><b>${escapeHtml(heroName(state.hero))}</b> · ${escapeHtml(heroSummary(state.hero))}</p>`:'')+(state.mode==='career'?`<p class="fine-print">Путь: ${[0,1,2,3,4].map(k=>`${k===state.rank?'<b>':''}${escapeHtml(rankTitle(state,k))}${k===state.rank?'</b>':''}`).join(' → ')} → ${chiefUnlocked(state)?'<b>начальник — открыто</b>':'начальник (после высшего звания)'}</p>`:'')+(chiefUnlocked(state)?'<p class="notice">Вы дослужились до высшего звания: можно возглавить подразделение — это новая кампания начальника с вашим персонажем.</p><button id="becomeChief" class="primary" style="width:100%">Возглавить подразделение</button>':'')+(state.life?sideJobMarkup():'')+serviceMarkup()+personalGoalsMarkup()+developmentMarkup());bindCareer2(servicePanel);for(const b of document.querySelectorAll('[data-sidejob]'))b.onclick=()=>{const r=takeSideJob(state,b.dataset.sidejob,b.dataset.report!=='no');toast(r.message);if(r.ok){save();servicePanel();}};if($('quitSideJob'))$('quitSideJob').onclick=()=>{const r=leaveSideJob(state);toast(r.message);save();servicePanel();};if($('becomeChief'))$('becomeChief').onclick=()=>{rememberChief(state);agencyChoice=state.agency??'police';switchMode('chief',true);};for(const b of document.querySelectorAll('[data-buy]'))b.onclick=()=>{const r=buyPersonal(state,b.dataset.buy);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};}
++function servicePanel(){modal('<h2>Личное дело сотрудника</h2>'+(state.hero?`<p class="tip"><b>${escapeHtml(heroName(state.hero))}</b> · ${escapeHtml(heroSummary(state.hero))}</p>`:'')+(state.mode==='career'?`<p class="fine-print">Путь: ${[0,1,2,3,4].map(k=>`${k===state.rank?'<b>':''}${escapeHtml(rankTitle(state,k))}${k===state.rank?'</b>':''}`).join(' → ')} → ${chiefUnlocked(state)?'<b>начальник — открыто</b>':'начальник (после высшего звания)'}</p>`:'')+(chiefUnlocked(state)?'<p class="notice">Вы дослужились до высшего звания: можно возглавить подразделение — это новая кампания начальника с вашим персонажем.</p><button id="becomeChief" class="primary" style="width:100%">Возглавить подразделение</button>':'')+(state.life?sideJobMarkup():'')+serviceMarkup()+homeMarkup()+personalGoalsMarkup()+developmentMarkup());bindCareer2(servicePanel);for(const b of document.querySelectorAll('[data-move]'))b.onclick=()=>{const r=moveTo(state,b.dataset.move);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};for(const b of document.querySelectorAll('[data-sidejob]'))b.onclick=()=>{const r=takeSideJob(state,b.dataset.sidejob,b.dataset.report!=='no');toast(r.message);if(r.ok){save();servicePanel();}};if($('quitSideJob'))$('quitSideJob').onclick=()=>{const r=leaveSideJob(state);toast(r.message);save();servicePanel();};if($('becomeChief'))$('becomeChief').onclick=()=>{rememberChief(state);agencyChoice=state.agency??'police';switchMode('chief',true);};for(const b of document.querySelectorAll('[data-buy]'))b.onclick=()=>{const r=buyPersonal(state,b.dataset.buy);toast(r.message);if(r.ok){save();refresh(true);servicePanel();}};}
++/* Release P1: home, the way to the station, the hero's needs */
++function homeMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';const h=homeOf(l),way=commute(l,{car:owns(l,'car')}),n=heroNeeds(l,{bond:l.partner?.bond??50}),own=owns(l,'apartment');
++ return `<section class="training-card"><h3>Дом и дорога</h3><p><b>${escapeHtml(own?'Своя квартира':h.label)}</b></p><p>До участка ${way.km} км · ${escapeHtml(way.label)} · ${way.minutes} мин. В месяц: ${monthlyCost(l,{own})}${owns(l,'car')?' + машина':''} € (${own?'ипотека':'аренда'}, счета, продукты).${(l.late??0)?` Опозданий в этом месяце: ${l.late} из ${HOME.lateLimit} до выговора.`:''}</p>
++ <div class="needs">${Object.entries(HERO_NEED_TEXT).map(([k,label])=>`<div class="need"><small>${label} ${n[k]}%</small><div class="meter${n[k]<30?' warn':''}"><i style="width:${n[k]}%"></i></div></div>`).join('')}</div>
++ ${own?'':`<details><summary>Переехать</summary>${HOME_IDS.filter(id=>id!==(l.home??HOME.start)).map(id=>{const x=HOMES[id],w=commute({home:id},{car:owns(l,'car')});return `<div class="goal-row"><b>${escapeHtml(x.label)}</b><small>${x.rent} € в месяц · до участка ${w.minutes} мин ${escapeHtml(w.label)}</small><button data-move="${id}" ${l.money<x.rent?'disabled':''}>Переехать · залог ${x.rent} €</button></div>`;}).join('')}</details>`}</section>`;}
+ /* Release C2: what the savings are for */
+ function personalGoalsMarkup(){const l=state.life;if(state.mode!=='career'||!isScheduled(state)||!l)return '';
+  return `<section class="training-card"><h3>Личные цели · на счёте ${Math.round(l.money)} €</h3>${PURCHASE_IDS.map(id=>{const p=PURCHASES[id],why=purchaseBlocker(l,id),have=id==='gym'?(l.owned?.gym??0)>0:owns(l,id),share=Math.max(0,Math.min(1,(l.money??0)/p.price));return `<div class="goal-row"><b>${escapeHtml(p.label)} · ${p.price} €</b><small>${escapeHtml(p.about)}</small>${have?`<small>✓ ${id==='gym'?`действует ещё ${l.owned.gym} смен`:'есть'}</small>`:`<div class="meter"><i style="width:${Math.round(share*100)}%"></i></div><button data-buy="${id}" ${why?'disabled':''} title="${escapeHtml(why??'')}">Купить</button>`}</div>`;}).join('')}</section>`;}
+Binary files a/dist/deploy/__pycache__/update.cpython-313.pyc and b/dist/deploy/__pycache__/update.cpython-313.pyc differ
+diff -ruN a/dist/home.js b/dist/home.js
+--- a/dist/home.js	1970-01-01 03:00:00.000000000 +0300
++++ b/dist/home.js	2026-10-17 07:52:39.258346338 +0300
+@@ -0,0 +1,45 @@
++// Release P1 «Дом и дорога» (Claude, 17.10.2026). Owner 16.10: «жизнь вне службы как в Sims: ездить на работу, дома
++// самому решать, что делать; потребности». The officer lives somewhere: a rented flat or room in one of the districts
++// (prices of a small Estonian town, 2026), pays rent, bills and food every month, and goes to the station before every
++// shift — on foot, by bus or by own car. The way takes time (less rest), the bus may be late in snow, a tired officer
++// oversleeps; being late to the briefing is noted by the shift supervisor, three times in a month is a reprimand that
++// blocks the next rank for a while. The needs of the hero (rest, calm, fitness, company, money) are shown together.
++import {byId,point} from './geography.js';
++import {MAP_METRES} from './world-scale.js';
++export const HOMES=Object.freeze({
++ 'mai-room':{district:'mai',label:'Однушка в Майском, панельный дом',rent:360},
++ 'ulejoe-studio':{district:'ulejoe',label:'Студия в Заречье, через мост от участка',rent:430},
++ 'raama-flat':{district:'raama',label:'Двушка в Северной слободе',rent:470},
++ 'vana-flat':{district:'vana',label:'Квартира в деревянном доме, Старый посад',rent:400},
++ 'centre-flat':{district:'centre',label:'Квартира в центре, пять минут до участка',rent:620},
++ 'beach-flat':{district:'beach',label:'Квартира у моря, Курортный',rent:680},
++ 'raekula-house':{district:'raekula',label:'Половина дома в Сосновом бору',rent:520}
++});
++export const HOME_IDS=Object.freeze(Object.keys(HOMES));
++export const HOME=Object.freeze({start:'mai-room',bills:130,food:300,mortgage:420,walkKmh:5,busWait:9,busKmh:22,carKmh:30,park:3,lateBus:.05,lateSnow:.08,lateTired:.12,lateLimit:3});
++const HQ=()=>point(byId('centre'));
++export function homeOf(life){return HOMES[life?.home]??HOMES[HOME.start];}
++export const homeKm=id=>{const h=HOMES[id]??HOMES[HOME.start],p=point(byId(h.district)),c=HQ();return Math.round(Math.hypot(p.x-c.x,p.y-c.y)*MAP_METRES*1.25/100)/10;};
++// The way to the station: on foot under 1.2 km, otherwise the own car if there is one, else the bus.
++export function commute(life,{car=false}={}){const km=homeKm(life?.home??HOME.start);
++ if(km<1.2)return {mode:'foot',km,minutes:Math.round(km/HOME.walkKmh*60)+2,label:'пешком'};
++ if(car)return {mode:'car',km,minutes:Math.round(km/HOME.carKmh*60)+HOME.park,label:'на своей машине'};
++ return {mode:'bus',km,minutes:Math.round(km/HOME.busKmh*60)+HOME.busWait+4,label:'на автобусе'};}
++// Monthly costs: rent (or the mortgage after the first payment for an own flat), bills and food.
++export function monthlyCost(life,{own=false}={}){return (own?HOME.mortgage:homeOf(life).rent)+HOME.bills+HOME.food;}
++const mix=(a,b)=>{let h=Math.imul((a|0)+0x3c6e,2654435761)^Math.imul((b|0)+0x1b87,2246822519);h^=h>>>15;return (h>>>0)/4294967296;};
++// Before a shift: the way costs rest; sometimes the officer is late (deterministic by seed and shift).
++export function beforeShift(life,seed,shift,{car=false,weather='clear'}={}){const c=commute(life,{car});const lines=[];
++ life.sleepDebt=Math.min(100,(life.sleepDebt??0)+Math.round(c.minutes/12));
++ let p=c.mode==='bus'?HOME.lateBus:0;if(['snow','ice'].includes(weather)&&c.mode!=='foot')p+=HOME.lateSnow;if((life.sleepDebt??0)>70)p+=HOME.lateTired;
++ const late=mix(seed,shift)<p;lines.push(`Дорога на смену ${c.label}: ${c.minutes} мин.`);
++ if(late){const minutes=5+Math.floor(mix(shift,seed)*20);life.late=(life.late??0)+1;life.stress=Math.min(100,(life.stress??0)+5);lines.push(`Опоздание на инструктаж на ${minutes} мин${c.mode==='bus'&&['snow','ice'].includes(weather)?' — автобус встал в снегу':(life.sleepDebt??0)>70?' — проспали':''}. Руководитель смены сделал замечание.`);}
++ return {lines,late,commute:c};}
++// At the end of a month: three late arrivals are a reprimand.
++export function monthLate(life){const n=life.late??0;life.late=0;return n>=HOME.lateLimit;}
++export function moveHome(life,id){const h=HOMES[id];if(!life)return {ok:false,message:'Только в карьере.'};if(!h)return {ok:false,message:'Нет такого жилья.'};if((life.home??HOME.start)===id)return {ok:false,message:'Вы уже здесь живёте.'};
++ if(life.money<h.rent)return {ok:false,message:`Нужен залог — аренда за месяц, ${h.rent} €.`};life.money-=h.rent;life.home=id;return {ok:true,message:`Переезд: ${h.label}. Залог ${h.rent} € оплачен.`};}
++// The needs of the hero, 0–100 (100 = all is well).
++export function heroNeeds(life,{bond=50}={}){const c=v=>Math.max(0,Math.min(100,Math.round(v)));return {rest:c(100-(life?.sleepDebt??0)),calm:c(100-(life?.stress??0)),fitness:c(life?.fitness??50),company:c(bond),money:c(50+(life?.money??0)/40)};}
++export const HERO_NEED_TEXT=Object.freeze({rest:'Отдых',calm:'Спокойствие',fitness:'Форма',company:'Близкие',money:'Деньги'});
++export function validHome(l){return (l?.home===undefined||HOME_IDS.includes(l.home))&&(l?.late===undefined||Number.isInteger(l.late)&&l.late>=0&&l.late<100);}
+diff -ruN a/dist/life.js b/dist/life.js
+--- a/dist/life.js	2026-10-17 07:52:38.315489130 +0300
++++ b/dist/life.js	2026-10-17 07:52:39.259011743 +0300
+@@ -1,4 +1,5 @@
+ import {validSkills} from './promotion.js';
++import {validHome} from './home.js';
+ // R3 «Между сменами» (Claude, 11.10.2026): the career officer's life off duty on the realistic
+ // PPA roster (schedule.js). After every shift the player plans the free time until the next one:
+ // rest, an extra (overtime) shift, training courses, sport, family or a hobby. Choices change
+@@ -98,7 +99,7 @@
+ export const startFatigue=life=>life?Math.round(Math.min(60,life.sleepDebt*.5+Math.max(0,life.stress-60)*.3)):0;
+ // Course bonus for the player's own crew on a call variant.
+ export function courseBonus(life,variant){let b=1;for(const id of ['firstaid','negotiation']){const c=COURSES[id];if(Number.isInteger(life?.courses?.[id])&&c.variants.includes(variant))b=Math.max(b,c.bonus);}return b;}
+-export function validLife(s){const l=s.life;if(l===undefined)return true;if(s.mode!=='career'||s.schedule!=='ppa')return false;if(!validPartner(l?.partner)||!validCases(l)||!validSideJob(l)||!validSkills(l))return false;const num=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
++export function validLife(s){const l=s.life;if(l===undefined)return true;if(s.mode!=='career'||s.schedule!=='ppa')return false;if(!validPartner(l?.partner)||!validCases(l)||!validSideJob(l)||!validSkills(l)||!validHome(l))return false;const num=(x,a,b)=>Number.isFinite(x)&&x>=a&&x<=b;
+  return !!l&&typeof l==='object'&&['sleepDebt','stress','fitness'].every(k=>num(l[k],0,100))&&num(l.money,-1e7,1e7)&&num(l.earned,0,1e8)&&Number.isInteger(l.overtime)&&l.overtime>=0
+   &&(l.agency===undefined||['rescue','ems','dispatch'].includes(l.agency)&&s.agency===l.agency)&&l.courses&&typeof l.courses==='object'&&Object.entries(l.courses).every(([k,v])=>Object.hasOwn(COURSES,k)&&Number.isInteger(v)&&v>=0&&v<=s.shift)
+   &&l.progress&&typeof l.progress==='object'&&Object.entries(l.progress).every(([k,v])=>Object.hasOwn(COURSES,k)&&Number.isInteger(v)&&v>=0&&v<COURSES[k].days)
+diff -ruN a/dist/service2.js b/dist/service2.js
+--- a/dist/service2.js	2026-10-17 07:52:38.305590492 +0300
++++ b/dist/service2.js	2026-10-17 07:52:39.259917196 +0300
+@@ -52,7 +52,7 @@
+  gym:{label:'Абонемент в спортзал на год',price:240,about:'Спорт даёт вдвое больше формы следующие 24 смены.',shifts:24},
+  trip:{label:'Путёвка к морю',price:1200,about:'Следующий отпуск снимает весь стресс и недосып; семья довольна.'},
+  car:{label:'Своя машина',price:6500,about:'Дорога на смену короче: недосып −4 перед каждой сменой. Содержание 40 € в месяц.',monthly:40,sleep:-4},
+- apartment:{label:'Первый взнос за квартиру',price:15000,about:'Ипотека дешевле аренды: расходы на жизнь 950 → 720 € в месяц.',living:720}
++ apartment:{label:'Первый взнос за квартиру',price:15000,about:'Ипотека дешевле аренды: вместо аренды — платёж 420 € в месяц.',living:720}
+ });
+ export const PURCHASE_IDS=Object.freeze(Object.keys(PURCHASES));
+ export const owns=(life,id)=>!!life?.owned?.[id];
+diff -ruN a/dist/sim.js b/dist/sim.js
+--- a/dist/sim.js	2026-10-17 07:52:38.318211238 +0300
++++ b/dist/sim.js	2026-10-17 07:52:39.259202519 +0300
+@@ -40,6 +40,7 @@
+ import {makeHero,validHero,heroFitness} from './hero.js';
+ import {requestSideJob,quitSideJob,sideJobVerdict,SIDE_JOBS} from './sidejob.js';
+ import {citizen,citizenFor,recordMet,personOf,arrests,peopleAfterShift,validPeople} from './citizens.js';
++import {HOME,beforeShift,monthLate,monthlyCost,moveHome,validHome,homeOf} from './home.js';
+ import {promotionCheck,addSkill,skillPace,validSkills} from './promotion.js';
+ import {SUPERVISOR,leadNeeded,validLead,supervisorName} from './supervisor.js';
+ import {PREFECTURE,ARMED,GBR_VARIANTS,GBR_SUPPORT,makeArmed,gbrNeeded,gbrOnScene,kkOnScene,gbrStorms,prefectureCap,prefectureWait,validArmed} from './prefecture.js';
+@@ -639,7 +640,7 @@
+  const st={...emptyStats(),...(s.stats??{})},founded=(n.complaints??[]).filter(c=>c.status==='обоснована').length;st.calls+=s.resolved;st.drunk+=drunk;st.founded+=founded;st.monthFounded+=founded;
+  n.awards=(s.awards??[]).map(a=>({...a}));const was=monthOf(s.shift-1),now=monthOf(n.shift-1);let summary=null;
+  if(s.goals)n.goals=JSON.parse(JSON.stringify(s.goals));let goals=null,yearCtx=null;st.yearResolved=(st.yearResolved??0)+s.resolved;st.yearMissed=(st.yearMissed??0)+s.missed;const ownFounded=n.mode==='career'?(n.complaints??[]).filter(c=>c.unit===1&&c.status==='обоснована').length:founded;st.ownFounded=(st.ownFounded??0)+ownFounded;st.yearFounded=(st.yearFounded??0)+ownFounded;/* a career officer answers for the own crew */
+- if(now.key!==was.key){summary=monthSummary(n.shiftLog,was.key,was.label);if(n.mode==='career'&&n.life){const living=livingCost(n.life,LIVING.monthly)+(owns(n.life,'car')?PURCHASES.car.monthly:0);n.life.money-=living;log(n,`${owns(n.life,'apartment')?'Ипотека':'Квартира'}, счета и продукты${owns(n.life,'car')?', машина':''} за ${was.label}: −${living} €. На счёте ${Math.round(n.life.money)} €.`);if(n.life.money<0){n.life.stress=Math.min(100,n.life.stress+LIVING.debtStress);log(n,'Денег не хватает: долги добавляют стресса.');}}if(n.goals?.month===was.key)goals=closeGoals(n,st);delete n.goals;yearCtx=career2Month(s,n,st,was,now,goals);st.cleanMonths=st.monthFounded===0?st.cleanMonths+1:0;st.monthFounded=0;}
++ if(now.key!==was.key){summary=monthSummary(n.shiftLog,was.key,was.label);if(n.mode==='career'&&n.life){const living=(isScheduled(n)?monthlyCost(n.life,{own:owns(n.life,'apartment')}):livingCost(n.life,LIVING.monthly))+(owns(n.life,'car')?PURCHASES.car.monthly:0);n.life.money-=living;log(n,`${owns(n.life,'apartment')?'Ипотека':'Аренда ('+homeOf(n.life).label.toLowerCase()+')'}, счета и продукты${owns(n.life,'car')?', машина':''} за ${was.label}: −${living} €. На счёте ${Math.round(n.life.money)} €.`);if(monthLate(n.life)){n.life.breachMonth=n.life.months??0;log(n,'Три опоздания за месяц — выговор от руководства. Повышение отложено.');}if(n.life.money<0){n.life.stress=Math.min(100,n.life.stress+LIVING.debtStress);log(n,'Денег не хватает: долги добавляют стресса.');}}if(n.goals?.month===was.key)goals=closeGoals(n,st);delete n.goals;yearCtx=career2Month(s,n,st,was,now,goals);st.cleanMonths=st.monthFounded===0?st.cleanMonths+1:0;st.monthFounded=0;}
+  n.stats=st;const fresh=newAwards({s:n,stats:st,summary,year:yearCtx},n.awards);
+  for(const a of fresh){n.awards.push({id:a.id,shift:s.shift,...(summary?{month:summary.label}:{})});if(n.mode==='career')n.xp+=AWARD_REWARD.xp;else n.budget+=AWARD_REWARD.budget;log(n,`Награда: ${a.label}. ${a.about}`);pushNews(n,awardNews(a.label,n.shift));}
+  if(n.awards.length>AWARD_LIMIT)n.awards.splice(0,n.awards.length-AWARD_LIMIT);n.rank=rankOf(n);
+@@ -749,6 +750,11 @@
+  if(n.mode==='career'&&n.life){const l=n.life;if(l.event){const ev=LIFE_EVENTS[l.event.id];if(ev)applyLifeFx(n,l,ev.options[ev.options.length>2?2:0].fx,ev.title);l.event=null;}/* unanswered: the safe default */
+   if(l.integrity){if(lifeEventFor(n.seed+77,n.shift)!==null||n.shift%3===0){n.xp=Math.max(0,n.xp+INTEGRITY.xp);l.stress=Math.min(100,l.stress+INTEGRITY.stress);addTrust(n,INTEGRITY.trust);log(n,'Внутренний контроль: выявлено нарушение служебной дисциплины — выговор, опыт −150.');l.breachMonth=l.months??0;pushNews(n,{title:'Проверка выявила нарушение дисциплины полицейским',tone:'bad',media:'Меридиан Online'});l.integrity=0;}}
+   const id0=lifeEventFor(n.seed,n.shift),id=id0==='car-broke'&&!owns(l,'car')?null:id0;/* Release C2: no car, no broken car */const talk=!id&&(n.rank??0)<3&&n.shift>0&&n.shift%SUPERVISOR.talkEvery===0;if(talk){l.event={id:'supervisor',shift:n.shift};log(n,`Руководитель смены ${supervisorName(n.seed)} зовёт на разговор (личное дело).`);}
+-  if(id){l.event={id,shift:n.shift};log(n,`Жизнь: ${LIFE_EVENTS[id].title}. Решите до конца смены (инструктаж или личное дело).`);}}
++  if(id){l.event={id,shift:n.shift};log(n,`Жизнь: ${LIFE_EVENTS[id].title}. Решите до конца смены (инструктаж или личное дело).`);}
++  /* Release P1: home and the way to the station */
++  if(isScheduled(n)){if(l.home===undefined)l.home=HOME.start;const way=beforeShift(l,n.seed,n.shift,{car:owns(l,'car'),weather:shiftWeather(n)?.kind??'clear'});for(const line of way.lines)log(n,line);if(way.late)pushRadio(n,'Руководитель смены','Опоздание на инструктаж — записал. Не повторяйте.');}}
+  if(n.mode==='chief'){n.morale=morale(n);if(n.morale<MORALE.quit){const solo=new Set(n.units.filter(u=>u.officerIds.length===1).flatMap(u=>u.officerIds));const o=n.officers.filter(x=>(x.stress??0)>MORALE.quitStress&&!solo.has(x.id)).sort((a,b)=>(b.stress??0)-(a.stress??0))[0];
+   if(o&&n.shift-(n.lastQuit??-99)>=MORALE.quitGap){n.lastQuit=n.shift;n.officers=n.officers.filter(x=>x!==o);for(const u of n.units){const k=u.officerIds.indexOf(o.id);if(k>=0){u.officerIds.splice(k,1);u.people.splice(k,1);syncCrew(n,u);}}log(n,`Кадры: ${o.name} уволился — выгорание, моральный дух отделения ${n.morale}%.`);pushNews(n,{title:'Из полиции Меридиана уходят люди: «устали работать за двоих»',tone:'bad',media:'Портал «Наш район»'});n.morale=morale(n);}}}}
++
++/* Release P1: move to another home (a month's rent as a deposit) */
++export function moveTo(s,id){if(s.mode!=='career'||!s.life)return {ok:false,message:'Только в карьере.'};return moveHome(s.life,id);}
+Binary files a/tests/deploy/__pycache__/test_runtime_assets.cpython-313.pyc and b/tests/deploy/__pycache__/test_runtime_assets.cpython-313.pyc differ
+Binary files a/tests/deploy/__pycache__/test_source_import.cpython-313.pyc and b/tests/deploy/__pycache__/test_source_import.cpython-313.pyc differ
+Binary files a/tests/deploy/__pycache__/test_updater.cpython-313.pyc and b/tests/deploy/__pycache__/test_updater.cpython-313.pyc differ
+diff -ruN a/tests/home.test.mjs b/tests/home.test.mjs
+--- a/tests/home.test.mjs	1970-01-01 03:00:00.000000000 +0300
++++ b/tests/home.test.mjs	2026-10-17 07:52:39.270127321 +0300
+@@ -0,0 +1,19 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import {createGame,nextShift,serialize,deserialize,moveTo} from '../dist/sim.js';
++import {HOMES,HOME,commute,beforeShift,monthLate,monthlyCost,homeKm,heroNeeds} from '../dist/home.js';
++// Release P1 «Дом и дорога» (Claude, 17.10.2026).
++test('the way to the station depends on the home and the car; it costs rest; the bus is late in snow',()=>{
++ assert.equal(commute({home:'centre-flat'}).mode,'foot');assert.equal(commute({home:'raekula-house'}).mode,'bus');assert.equal(commute({home:'raekula-house'},{car:true}).mode,'car');
++ assert.ok(commute({home:'raekula-house'}).minutes>commute({home:'raekula-house'},{car:true}).minutes);assert.ok(homeKm('raekula-house')>homeKm('ulejoe-studio'));
++ let lateSnow=0,lateClear=0;for(let k=0;k<400;k++){const a={home:'raekula-house',sleepDebt:10,stress:0};if(beforeShift(a,7,k,{weather:'snow'}).late)lateSnow++;const b={home:'raekula-house',sleepDebt:10,stress:0};if(beforeShift(b,7,k,{weather:'clear'}).late)lateClear++;}
++ assert.ok(lateSnow>lateClear&&lateClear>0,`${lateSnow} ${lateClear}`);const w={home:'centre-flat',sleepDebt:0};assert.equal(beforeShift(w,1,1).late,false);
++ const l={late:3};assert.equal(monthLate(l),true);assert.equal(l.late,0);assert.ok(monthlyCost({home:'centre-flat'})>monthlyCost({home:'mai-room'}));
++ const n=heroNeeds({sleepDebt:80,stress:10,fitness:60,money:-500});assert.equal(n.rest,20);assert.ok(n.money<50);
++});
++test('a career lives in a home: rent each month, the way before each shift, moving with a deposit',()=>{
++ let s=createGame('career',7182,{schedule:'ppa'});s.ended=true;s=nextShift(s);assert.equal(s.life.home,HOME.start);assert.ok(s.logs.some(l=>/Дорога на смену/.test(l.text)));
++ s.life.money=1000;const r=moveTo(s,'centre-flat');assert.ok(r.ok);assert.equal(s.life.home,'centre-flat');assert.equal(s.life.money,1000-HOMES['centre-flat'].rent);assert.ok(!moveTo(s,'centre-flat').ok);
++ deserialize(serialize(s));const bad=JSON.parse(serialize(s));bad.life.home='castle';assert.throws(()=>deserialize(JSON.stringify(bad)));
++ const app=fs.readFileSync(new URL('../dist/app.js',import.meta.url),'utf8');assert.match(app,/function homeMarkup\(\)/);assert.match(app,/data-move=/);
++});
