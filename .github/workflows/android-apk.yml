@@ -6,13 +6,13 @@
 name: Android APK
 on:
   push:
-    branches: [claude/native-fixes]
+    branches: [claude/native-fixes, codex/w1-traffic-buses]
     paths: ['Mercury_Native_Map_Checkpoint.zip','.github/workflows/android-apk.yml','ci/**']
   workflow_dispatch:
 permissions:
   contents: write
 concurrency:
-  group: android-apk
+  group: android-apk-${{ github.ref }}
   cancel-in-progress: true
 env:
   GODOT: 4.7.2
@@ -40,6 +40,29 @@ jobs:
           mv ~/.local/share/godot/export_templates/templates ~/.local/share/godot/export_templates/${GODOT}.stable
       - name: Unpack the native project
         run: unzip -q Mercury_Native_Map_Checkpoint.zip -d build && ls build/native-map | head
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Apply and verify W1 native sources
+        run: |
+          python3 ci/apply_native_w1.py build/native-map
+          cd build/native-map/ui
+          npm ci
+          npm run build
+          cd ..
+          ~/godot/godot --headless --path . --import > /tmp/w1-import.log 2>&1
+          if grep -q 'ERROR:' /tmp/w1-import.log; then cat /tmp/w1-import.log; exit 1; fi
+          python3 tools/audit_migration.py --godot ~/godot/godot --jobs 2
+          ~/godot/godot --headless --path . --script tools/audit_service_long_shift.gd -- --native-ui > /tmp/w1-shifts.log 2>&1
+          cat /tmp/w1-shifts.log
+          if grep -Eq 'ERROR:|FAILED' /tmp/w1-shifts.log; then exit 1; fi
+      - name: Render CITY-01 architecture study
+        run: |
+          command -v xvfb-run >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y xvfb)
+          mkdir -p out
+          xvfb-run -a ~/godot/godot --path build/native-map --rendering-driver opengl3 --resolution 1280x900 --script scripts/design/render_quarter.gd -- --out "$GITHUB_WORKSPACE/out/city-01-quarter.png" > /tmp/city-render.log 2>&1
+          cat /tmp/city-render.log
+          if grep -q 'ERROR:' /tmp/city-render.log; then exit 1; fi
+          test -s out/city-01-quarter.png
       - name: Build the MercuryAndroid bridge from source (updater, migration, device metrics)
         shell: bash
         run: |
@@ -120,7 +143,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create apk-${{ steps.v.outputs.code }} out/${{ steps.check.outputs.file }} out/${{ steps.check.outputs.file }}.sha256 \
+          gh release create apk-${{ steps.v.outputs.code }} out/${{ steps.check.outputs.file }} out/${{ steps.check.outputs.file }}.sha256 out/city-01-quarter.png \
             --prerelease --target ${{ github.sha }} --title "APK ${{ steps.v.outputs.code }} (${{ steps.v.outputs.name }})${{ steps.key.outputs.official != 'yes' && ' — TEST, другой ключ' || '' }}" \
             --notes "Собрано автоматически из ${{ github.sha }} (claude/native-fixes). Ключ: ${{ steps.key.outputs.official == 'yes' && 'основной' || 'ТЕСТОВЫЙ — не ставить поверх установленной игры' }}. Сертификат: $(head -2 out/certificate.txt | tr '\n' ' ')"
       - name: Update channel (public repository osminoog09-star/meridian-watch-apk)

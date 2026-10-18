@@ -1,0 +1,10 @@
+{
+  "ui/street-traffic.js": null,
+  "ui/map-view.js": "fc70cb92128d21eefe0055a76edc5c53389c153c8c8d56d3f0d4d790aa1a601b",
+  "ui/test-street-traffic.mjs": null,
+  "scripts/verify_bus.gd": null,
+  "scripts/live_actors.gd": "554619df14441d153b3b6315f11811d62b8853d754629e01a64fecf4130e5456",
+  "scripts/bus_model.gd": null,
+  "scripts/design/architecture.gd": null,
+  "scripts/design/render_quarter.gd": null
+}
