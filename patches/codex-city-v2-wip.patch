@@ -1,0 +1,104 @@
+--- a/dist/fiction.js
++++ b/dist/fiction.js
+@@ -17,10 +17,10 @@
+ const allNames=(()=>{const out=[];for(let round=0;round<50;round++)for(const kind of KINDS)for(const root of ROOTS)out.push(`${root} ${kind}${round?' '+(round+1):''}`);return out;})();
+ const used=new Set(Object.values(FROZEN)),streetMap=new Map(Object.entries(FROZEN));
+ {let next=0;for(const name of [...new Set(data.roads.map(r=>r.name).filter(Boolean))].sort()){if(streetMap.has(name))continue;while(used.has(allNames[next]))next++;streetMap.set(name,allNames[next]);used.add(allNames[next]);}}
+-export function streetName(real){if(!real||real===LOCAL_STREET)return LOCAL_STREET;return streetMap.get(real)??LOCAL_STREET;}
++export function streetName(real){if(data.id==='meridian-city-v2'&&real)return real;if(!real||real===LOCAL_STREET)return LOCAL_STREET;return streetMap.get(real)??LOCAL_STREET;}
+ 
+ // District anchors keep their internal ids; only the shown names are fictional.
+-export const DISTRICTS=Object.freeze({centre:'Центр',ulejoe:'Заречье',raama:'Северная слобода',beach:'Курортный',mai:'Майский',papiniidu:'Луговой',vana:'Старый посад',raekula:'Сосновый бор'});
++export const DISTRICTS=Object.freeze({centre:'Центр',ulejoe:'Заречье',raama:'Северная слобода',beach:'Речной парк',mai:'Майский',papiniidu:'Промышленный',vana:'Старый посад',raekula:'Сосновый бор'});
+ export const districtName=(id,fallback='Район')=>DISTRICTS[id]??fallback;
+ 
+ // Zones are described without a city name.
+--- a/dist/visits.js
++++ b/dist/visits.js
+@@ -7,11 +7,7 @@
+ export const VISIT=network.entrances[0];
+ export const VISIT_ACCESS=ROAD_NODES.find(n=>n.id===VISIT.carAccess);
+ const point=id=>{const p=walkingNodes.get(id);return [p.x,p.y];};
+-export const VISITS=Object.freeze([
+- Object.freeze({key:'museum',id:VISIT.id,building:VISIT.building,p:VISIT.p,name:PLACE_NAMES.museum.name,address:PLACE_NAMES.museum.address,carAccess:VISIT.carAccess,duration:12,kind:'entrance',source:'museum · public entrance'}),
+- Object.freeze({key:'ruutli',id:'850616360',p:point('850616360'),name:PLACE_NAMES.ruutli.name,address:PLACE_NAMES.ruutli.address,carAccess:'5025603521',duration:10,kind:'public_space',source:'OSM pedestrian way 514390581'}),
+- Object.freeze({key:'malmo',id:'850616350',p:point('850616350'),name:PLACE_NAMES.malmo.name,address:PLACE_NAMES.malmo.address,carAccess:'6244998938',duration:8,kind:'public_space',source:'OSM footway 666980705'})
+-]);
++export const VISITS=Object.freeze(network.destinations.map(Object.freeze));
+ const destinations=new Map(VISITS.map(v=>[v.key,v])),visitorDestination=new Map([[6,'malmo'],[11,'ruutli'],[16,'museum']]);
+ const accessFor=destination=>ROAD_NODES.find(n=>n.id===destination.carAccess);
+ export const visitDestination=r=>destinations.get(r?.visit?.destination??(r?.id===16&&r?.visit?'museum':''))??null;
+--- a/dist/sim.js
++++ b/dist/sim.js
+@@ -1,3 +1,4 @@
++import {migrateCityV2Population} from './city-v2-migration.js';
+ import {urgentMovement} from './response-priority.js';import {setSirens} from './visits.js';
+ import {recordAssessment,completeAssessment,developmentBonus,validAssessment} from './professional.js';
+ import {ensureTraining,trainingEvent,validTraining} from './training.js';
+@@ -206,16 +207,16 @@
+ }
+ export function serialize(s){return JSON.stringify(s);}
+ export function deserialize(raw){
+- const s=JSON.parse(raw),num=(x,min=0,max=1e9)=>Number.isFinite(x)&&x>=min&&x<=max,str=x=>typeof x==='string'&&x.length<500,pointInMap=p=>s.mapId===MAP_ID?containsWorldPoint(p):p&&num(p.x,0,5)&&num(p.y,0,5);
+- const valid=s&&[1,2].includes(s.version)&&['career','chief'].includes(s.mode)&&num(s.seed,0,4294967295)&&validSchedule(s)&&num(s.time,0,s.shiftLength)&&Number.isInteger(s.shift)&&s.shift>0&&Number.isInteger(s.rank)&&s.rank>=0&&s.rank<RANKS.length&&num(s.xp)&&num(s.budget)&&num(s.trust,0,100)&&num(s.resolved)&&num(s.missed)&&num(s.nextIncident,-1000,10000)&&Number.isInteger(s.nextId)&&typeof s.ended==='boolean'&&Array.isArray(s.units)&&s.units.length<=(s.agency==='dispatch'?9:6)&&new Set(s.units.map(u=>u.id)).size===s.units.length&&s.units.every((u,k)=>Number.isInteger(u.id)&&u.id>0&&str(u.name)&&Array.isArray(u.people)&&u.people.length>=1&&u.people.length<=crewLimitOf(s)&&u.people.every(str)&&pointInMap(u)&&num(u.fatigue,0,100)&&(u.pursuing===undefined||typeof u.pursuing==='boolean')&&typeof u.auto==='boolean'&&typeof u.cross==='boolean'&&['all','west','east'].includes(u.zone)&&['patrol','idle','responding','decision','working','returning','resting','transporting','handover','servicing','briefing','break','reports','proactive'].includes(u.status)&&validTask(u.task)&&(u.task===undefined)===(u.status!=='proactive')&&(u.transport===undefined||u.transport===null||Number.isInteger(u.transport.from)&&typeof u.transport.label==='string'&&u.transport.label.length<120&&typeof u.transport.district==='string')&&(u.handover===undefined||num(u.handover,0,100))&&(u.incident===null||Number.isInteger(u.incident))&&Array.isArray(u.route)&&u.route.length<3000&&u.route.every(pointInMap))&&Array.isArray(s.incidents)&&s.incidents.length<30&&s.incidents.every(i=>Number.isInteger(i.id)&&Number.isInteger(i.type)&&TYPES[i.type]&&validVariant(i)&&(s.mapId===MAP_ID?atNode(i):s.mapId==='parnumaa-1'?Number.isFinite(i.x)&&Number.isFinite(i.y):Number.isInteger(i.x)&&Number.isInteger(i.y))&&pointInMap(i)&&num(i.age)&&num(i.progress)&&['waiting','assigned','onscene','resolved','missed'].includes(i.state)&&Array.isArray(i.units)&&i.units.every(id=>Number.isInteger(id)&&id>0))&&Array.isArray(s.logs)&&s.logs.length<=45&&s.logs.every(l=>num(l.time)&&str(l.text))&&Array.isArray(s.history)&&s.history.length<=50&&s.history.every(h=>num(h.id)&&str(h.name)&&num(h.time)&&typeof h.success==='boolean');
+- if(!valid||!validHero(s.hero)||!validPeople(s.people)||!s.incidents.every(i=>validJoint(i.joint)&&validArmed(i)&&validLead(i))||s.mapId&&!['parnumaa-1',MAP_ID].includes(s.mapId))throw Error('Несовместимое сохранение');ensureDepartment(s);for(const u of s.units)if(u.currentSpeedKmh!==undefined&&(!Number.isFinite(u.currentSpeedKmh)||u.currentSpeedKmh<0||u.currentSpeedKmh>200))u.currentSpeedKmh=0;
++ const s=JSON.parse(raw),num=(x,min=0,max=1e9)=>Number.isFinite(x)&&x>=min&&x<=max,str=x=>typeof x==='string'&&x.length<500,pointInMap=p=>['parnu-city-osm-1',MAP_ID].includes(s.mapId)?containsWorldPoint(p):p&&num(p.x,0,5)&&num(p.y,0,5);
++ const valid=s&&[1,2].includes(s.version)&&['career','chief'].includes(s.mode)&&num(s.seed,0,4294967295)&&validSchedule(s)&&num(s.time,0,s.shiftLength)&&Number.isInteger(s.shift)&&s.shift>0&&Number.isInteger(s.rank)&&s.rank>=0&&s.rank<RANKS.length&&num(s.xp)&&num(s.budget)&&num(s.trust,0,100)&&num(s.resolved)&&num(s.missed)&&num(s.nextIncident,-1000,10000)&&Number.isInteger(s.nextId)&&typeof s.ended==='boolean'&&Array.isArray(s.units)&&s.units.length<=(s.agency==='dispatch'?9:6)&&new Set(s.units.map(u=>u.id)).size===s.units.length&&s.units.every((u,k)=>Number.isInteger(u.id)&&u.id>0&&str(u.name)&&Array.isArray(u.people)&&u.people.length>=1&&u.people.length<=crewLimitOf(s)&&u.people.every(str)&&pointInMap(u)&&num(u.fatigue,0,100)&&(u.pursuing===undefined||typeof u.pursuing==='boolean')&&typeof u.auto==='boolean'&&typeof u.cross==='boolean'&&['all','west','east'].includes(u.zone)&&['patrol','idle','responding','decision','working','returning','resting','transporting','handover','servicing','briefing','break','reports','proactive'].includes(u.status)&&validTask(u.task)&&(u.task===undefined)===(u.status!=='proactive')&&(u.transport===undefined||u.transport===null||Number.isInteger(u.transport.from)&&typeof u.transport.label==='string'&&u.transport.label.length<120&&typeof u.transport.district==='string')&&(u.handover===undefined||num(u.handover,0,100))&&(u.incident===null||Number.isInteger(u.incident))&&Array.isArray(u.route)&&u.route.length<3000&&u.route.every(pointInMap))&&Array.isArray(s.incidents)&&s.incidents.length<30&&s.incidents.every(i=>Number.isInteger(i.id)&&Number.isInteger(i.type)&&TYPES[i.type]&&validVariant(i)&&(s.mapId===MAP_ID?atNode(i):['parnumaa-1','parnu-city-osm-1'].includes(s.mapId)?Number.isFinite(i.x)&&Number.isFinite(i.y):Number.isInteger(i.x)&&Number.isInteger(i.y))&&pointInMap(i)&&num(i.age)&&num(i.progress)&&['waiting','assigned','onscene','resolved','missed'].includes(i.state)&&Array.isArray(i.units)&&i.units.every(id=>Number.isInteger(id)&&id>0))&&Array.isArray(s.logs)&&s.logs.length<=45&&s.logs.every(l=>num(l.time)&&str(l.text))&&Array.isArray(s.history)&&s.history.length<=50&&s.history.every(h=>num(h.id)&&str(h.name)&&num(h.time)&&typeof h.success==='boolean');
++ if(!valid||!validHero(s.hero)||!validPeople(s.people)||!s.incidents.every(i=>validJoint(i.joint)&&validArmed(i)&&validLead(i))||s.mapId&&!['parnumaa-1','parnu-city-osm-1',MAP_ID].includes(s.mapId))throw Error('Несовместимое сохранение');ensureDepartment(s);for(const u of s.units)if(u.currentSpeedKmh!==undefined&&(!Number.isFinite(u.currentSpeedKmh)||u.currentSpeedKmh<0||u.currentSpeedKmh>200))u.currentSpeedKmh=0;
+  const usedOfficers=s.units.flatMap(u=>u.officerIds??[]),usedVehicles=s.units.map(u=>u.vehicleId);
+  if(!Array.isArray(s.officers)||!s.officers.every(o=>Number.isInteger(o.id)&&str(o.name)&&str(o.specialty)&&num(o.skill,0,1)&&num(o.salary)&&validOfficerRoster(o))||!Array.isArray(s.vehicles)||s.vehicles.length>(s.agency==='dispatch'?9:6)||!s.vehicles.every(v=>Number.isInteger(v.id)&&str(v.name)&&validVehicleState(v))||!Array.isArray(s.candidates)||!s.candidates.every(c=>Number.isInteger(c.id)&&str(c.name)&&str(c.specialty)&&num(c.skill,0,1)&&num(c.fee)&&num(c.salary))||!['nextOfficerId','nextVehicleId','nextUnitId'].every(k=>Number.isInteger(s[k])&&s[k]>0)||typeof s.setupPending!=='boolean'||new Set(usedOfficers).size!==usedOfficers.length||new Set(usedVehicles).size!==usedVehicles.length||!s.units.every(u=>Array.isArray(u.officerIds)&&u.officerIds.length>=1&&u.officerIds.length<=crewLimitOf(s)&&u.officerIds.length===u.people.length&&u.officerIds.every(id=>s.officers.some(o=>o.id===id))&&s.vehicles.some(v=>v.id===u.vehicleId)&&num(u.skill,0,1)))throw Error('Повреждены данные отделения');
+  const live=s.incidents.filter(i=>!['resolved','missed'].includes(i.state));
+  if(new Set(s.officers.map(o=>o.id)).size!==s.officers.length||new Set(s.vehicles.map(v=>v.id)).size!==s.vehicles.length||s.nextOfficerId<=Math.max(0,...s.officers.map(o=>o.id))||s.nextVehicleId<=Math.max(0,...s.vehicles.map(v=>v.id))||s.nextUnitId<=Math.max(0,...s.units.map(u=>u.id))||new Set(s.incidents.map(i=>i.id)).size!==s.incidents.length||s.nextId<=Math.max(0,...s.incidents.map(i=>i.id))||!s.units.every(u=>u.incident===null||live.some(i=>i.id===u.incident&&i.units.includes(u.id)))||!live.every(i=>i.units.every(id=>s.units.some(u=>u.id===id&&u.incident===i.id))))throw Error('Нарушены связи вызовов и экипажей');
+  ensureFinance(s);const f=s.finance;
+  if(!num(f.opening)||!Array.isArray(f.entries)||f.entries.length>10000||!f.entries.every(e=>num(e.time)&&num(e.amount,-1e9,1e9)&&str(e.category)&&str(e.label))||Math.abs(f.opening+f.entries.reduce((n,e)=>n+e.amount,0)-s.budget)>.001)throw Error('Некорректный финансовый журнал');
+- if(s.previousReport&&(!Number.isInteger(s.previousReport.shift)||!num(s.previousReport.resolved)||!num(s.previousReport.missed)||!num(s.previousReport.carried)||!s.previousReport.finance||!['opening','income','expenses','balance'].every(k=>num(s.previousReport.finance[k]))))throw Error('Повреждён отчёт смены');migrateMap(s);for(const i of s.incidents){if(!validAssessment(i.assessment,i.type))throw Error('Повреждён разбор решения');if(i.scene&&!validateScene(i.scene,i.type))throw Error('Повреждены участники происшествия');ensureScene(i);}if(s.population!==undefined&&!validatePopulation(s.population))throw Error('Повреждены данные жителей');ensurePopulation(s);if(!validateResidentLinks(s))throw Error('Нарушены связи жителей и происшествий');if(!validTraining(s))throw Error('Повреждён журнал обучения');ensureTraining(s);if(!validService(s))throw Error('Повреждена история службы');ensureService(s);if(!validStaff(s))throw Error('Повреждено состояние сотрудников');ensureStaff(s);if(!s.units.every(u=>validPoliceWalk(s,u)))throw Error('Повреждён пеший цикл полиции');if(!validConsequences(s))throw Error('Повреждены последствия вызовов');return s;
++ if(s.previousReport&&(!Number.isInteger(s.previousReport.shift)||!num(s.previousReport.resolved)||!num(s.previousReport.missed)||!num(s.previousReport.carried)||!s.previousReport.finance||!['opening','income','expenses','balance'].every(k=>num(s.previousReport.finance[k]))))throw Error('Повреждён отчёт смены');const oldCity=s.mapId!==MAP_ID;migrateMap(s);if(oldCity)migrateCityV2Population(s);for(const i of s.incidents){if(!validAssessment(i.assessment,i.type))throw Error('Повреждён разбор решения');if(i.scene&&!validateScene(i.scene,i.type))throw Error('Повреждены участники происшествия');ensureScene(i);}if(s.population!==undefined&&!validatePopulation(s.population))throw Error('Повреждены данные жителей');ensurePopulation(s);if(!validateResidentLinks(s))throw Error('Нарушены связи жителей и происшествий');if(!validTraining(s))throw Error('Повреждён журнал обучения');ensureTraining(s);if(!validService(s))throw Error('Повреждена история службы');ensureService(s);if(!validStaff(s))throw Error('Повреждено состояние сотрудников');ensureStaff(s);if(!s.units.every(u=>validPoliceWalk(s,u)))throw Error('Повреждён пеший цикл полиции');if(!validConsequences(s))throw Error('Повреждены последствия вызовов');return s;
+ }
+ import {departmentIndex,ensureStaff,syncCrew,tickStaff,crewNeedsRest,crewReady,prepareStaffShift,validStaff} from './staff.js';
+ import {walkAccess,beginPoliceWalk,crewAtScene,returnPoliceWalk,tickPoliceWalk,policeWalkReason,validPoliceWalk} from './police-walk.js';
+@@ -299,7 +300,7 @@
+ // 0.7.1 v1 ambulance service: hospital -> scene (treat) -> hospital (handover) -> done.
+ /* Claude 17.10 (owner: «ГБР и больница в странных местах»): the bases stand at real buildings of the map — the hospital
+    complex, a depot on Uus-Sauga, the prefecture team's base in the south-east quarter — at the driveway to each, not at district centres */
+-export const HOSPITAL=Object.freeze({x:3.243877,y:2.453984});
++export const HOSPITAL=Object.freeze({x:1.55+1200/1670,y:2.52-480/1670});
+ /* Release J: the 112 desk — who may take a call, a crew sent to the wrong kind of call, the operators */
+ function dispatchReady(s,u,i){if(!isDispatch(s))return true;const c=i.call;return !!c&&c.status==='routed'&&s.time>=(c.release??0)&&c.sent===unitAgency(s,u);}
+ function wrongCrew(s,u,i){if(!isDispatch(s)||unitAgency(s,u)===typeAgency(i.type))return false;const right=typeAgency(i.type);pushRadio(s,callsign(u),`На месте. Это не наш вызов — нужна ${SERVICES[right].toLowerCase()}. Передайте в 112.`);log(s,`${u.name}: вызов №${i.id} не по профилю, нужна ${SERVICES[right].toLowerCase()}. Вызов передан заново.`);
+@@ -355,9 +356,9 @@
+ export const serviceStatus=a=>SERVICE_TEXT[a.kind??'ambulance']?.[a.status]??'';
+ 
+ // 0.7.2 v1 rescue service: station -> scene (safe zone, work) -> station.
+-export const FIRE_STATION=Object.freeze({x:1.263073,y:2.12888});
++export const FIRE_STATION=Object.freeze({x:1.55+2400/1670,y:2.52-1440/1670});
+ /* Release K: the city partners of a joint call; retried while a service limit is full */
+-export const GBR_BASE=Object.freeze({x:3.339858,y:3.166839}),KK_BASE=point(byId('raekula'));
++export const GBR_BASE=Object.freeze({x:1.55+2880/1670,y:2.52-2160/1670}),KK_BASE=point(byId('raekula'));
+ /* Release M: the command centre sends the rapid response team (the player's car if the player serves in it) and, at a barricade, K-Komando */
+ function stormNote(s,i){if(i.stormed||!gbrStorms(i,i.age*WORLD_SECONDS_PER_TICK_SECOND/60)||kkOnScene(i))return;i.stormed=true;log(s,`ГБР: на вызове №${i.id} угроза жизни заложника — действуем сами, не дожидаясь K-Komando.`);pushRadio(s,'ГБР','Угроза жизни, заходим. Оцепление держать.');}
+ function prefectureCalls(s){for(const i of s.incidents){if(['resolved','missed'].includes(i.state))continue;
+--- a/dist/city-v2-migration.js
++++ b/dist/city-v2-migration.js
+@@ -0,0 +1,22 @@
++import {RESIDENTS,PLACES} from './population.js';
++import {nearestRoad,point,roadRoute,byId} from './geography.js';
++// Preserve people, career, finances and outcomes. Only map-dependent positions/routes change.
++export function migrateCityV2Population(s){
++ const snap=p=>Object.assign(p,point(nearestRoad(p)));
++ for(const i of s.incidents)for(const a of i.scene?.participants??[]){const goal=a.route?.at(-1);snap(a);a.route=goal?roadRoute(a,nearestRoad(goal)):[];}
++ for(const u of s.units){
++  delete u.foot;u.currentSpeedKmh=0;
++  if(u.ride){snap(u.ride.from);snap(u.ride.to);u.route=roadRoute(u,u.ride.phase==='ride'?u.ride.to:u.ride.from);}
++  if(u.status==='transporting')u.route=roadRoute(u,byId('centre'));
++ }
++ for(const o of s.taxi?.orders??[]){snap(o.from);snap(o.to);}
++ for(const a of s.services??[]){const end=a.route?.at(-1),incident=s.incidents.find(i=>i.id===a.incident);snap(a);a.route=[];if(['onscene','working','treating','securing','cordon'].includes(a.status)&&incident)Object.assign(a,point(incident));else if(end)a.route=roadRoute(a,nearestRoad(end));}
++ for(const r of s.population?.residents??[]){
++  const profile=RESIDENTS.find(p=>p.id===r.id);if(!profile)continue;
++  const busy=['incident','recovering'].includes(r.status),destination=busy?r.resumeStatus:['work','toWork'].includes(r.status)?'work':'home';
++  const at=PLACES.get(profile[destination]).access;Object.assign(r,point(at));r.route=[];r.visit=null;
++  if(!busy)r.status=destination;
++  // Linked resident and participant must still occupy the same location after relocation.
++  if(r.incidentId!==null){const i=s.incidents.find(i=>i.id===r.incidentId);if(i){Object.assign(i,point(at));for(const a of i.scene?.participants??[])if(a.residentId===r.id)Object.assign(a,point(at));for(const u of s.units)if(u.incident===i.id){u.route=[];if(['working','decision'].includes(u.status))Object.assign(u,point(i));else u.route=roadRoute(u,i);}}}
++ }
++}
