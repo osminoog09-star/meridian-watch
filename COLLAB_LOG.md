@@ -1,3 +1,7 @@
+## 2026-10-21 01:24 Tallinn · Codex · codex/city-v2-js
+
+- Опубликован draft PR #17; native #16 → claude/native-fixes, JS #17 → claude/release-m. Обычный git push не имел авторизации; использован подключённый GitHub API, без обхода ограничений. Черновики не слиты, выпуск заблокирован незавершёнными проверками. Новый APK и канал не публиковались.
+
 ## 2026-10-21 01:22 Tallinn · Codex · codex/city-v2 / codex/city-v2-js
 
 - Часть 1 WIP: tools/city-v2; 1024 дороги, 3343 узла, 1772 начальных контура, 8 районов, два моста, круг и дворовые проезды. Схема CITY_V2_PLAN.svg и статус CITY_V2_PROGRESS.md.
