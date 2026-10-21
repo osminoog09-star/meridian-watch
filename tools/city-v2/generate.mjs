@@ -1,3 +1,4 @@
+import {walkingNetwork} from './walking.mjs';
 /** Meridian 2: authored town plan, in metres. No OSM geometry or random state. */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -111,15 +112,7 @@ export function write(city,out){
   buildings:city.buildings.map(b=>({id:b.id,height:String(b.h*3),name:b.name})),waterEdges:[]};
  for(const a of data.areas.filter(a=>a.kind==='water'))for(let i=0;i<a.p.length;i++)quarter.waterEdges.push([a.p[i],a.p[(i+1)%a.p.length]]);
  fs.writeFileSync(path.join(out,'quarter-data.js'),js(quarter));
- const walking={source:city.source,candidates:0,rejectedGeometry:0,components:1,nodes:{},segments:[],entrances:[],destinations:[]};
- const addWalk=(a,b)=>walking.segments.push({way:'v2-foot-'+walking.segments.length,a,b,p:[walking.nodes[a],walking.nodes[b]],name:'Городской тротуар',kind:'footway',bridge:city.roads.some(r=>r.bridge&&r.nodes.includes(a)&&r.nodes.includes(b))});
- for(const r of data.roads)for(let i=0;i<r.nodes.length;i++){walking.nodes[r.nodes[i]]=r.p[i];if(i)addWalk(r.nodes[i-1],r.nodes[i]);}
- for(const [key,p,name] of [['museum',[-120,0],'Городской музей'],['ruutli',[0,-120],'Торговая улица'],['malmo',[480,960],'Береговая улица']]){
-  const [access,at]=Object.entries(walking.nodes).sort((a,b)=>Math.hypot(a[1][0]-world(p)[0],a[1][1]-world(p)[1])-Math.hypot(b[1][0]-world(p)[0],b[1][1]-world(p)[1]))[0];
-  const id='v2-walk-'+key;walking.nodes[id]=key==='museum'?world([-155,-62]):[at[0]+12/SCALE,at[1]+12/SCALE];addWalk(access,id);
-  const dest={key,id,p:walking.nodes[id],name,address:key==='museum'?'Музейная улица':name,carAccess:access,duration:10,kind:key==='museum'?'entrance':'public_space',...(key==='museum'?{building:city.buildings.find(b=>b.kind==='museum').id}:{} ),source:city.source};walking.destinations.push(dest);
-  if(key==='museum')walking.entrances.push({...dest,building:dest.building,entrance:'yes'});
- }
+ const walking=walkingNetwork(city,world);
  fs.writeFileSync(path.join(out,'walking-network.js'),js(walking));
  fs.writeFileSync(path.join(out,'city-v2-plan.json'),JSON.stringify(city,null,2)+'\n');
  fs.writeFileSync(path.join(out,'city-v2-validation.json'),JSON.stringify(validate(city),null,2)+'\n');

@@ -1,0 +1,75 @@
+--- a/scripts/countryside.gd
++++ b/scripts/countryside.gd
+@@ -5,17 +5,18 @@
+ # along the road and a side street, a church in the larger ones, a shop; farmsteads at the end of gravel driveways;
+ # woods that keep off the roads. Deterministic; roads are one mesh, buildings and trees one MultiMesh per kind and
+ # 1.5 km cell with a visibility range, cheap on the phone. Houses use the city shader: windows, lit at night.
+-const TOWN := Rect2(-2900,-4500,8500,8200)
++const TOWN := Rect2(-1800,-3000,5520,4560)
+ const LAND_Y := -2.0
+ const Geometry = preload("res://scripts/city_geometry.gd")
+-const SEA = preload("res://scripts/landuse.gd").SEA
++const SEA = [Vector2(496,-4100),Vector2(704,-4100),Vector2(704,3350),Vector2(496,3350)]
++const CITY_EXITS = [Vector2(0,-3960),Vector2(-2400,-1200),Vector2(4800,-1200),Vector2(2400,3000)]
+ # Roads in world metres: the first point is where the town street ends (city data edge).
+ const ROADS := [
+- {"width":10.0,"points":[Vector2(-190,-4340),Vector2(-260,-5600),Vector2(-420,-7600),Vector2(-250,-10000),Vector2(150,-12500)]},
+- {"width":7.0,"points":[Vector2(-1560,-4499),Vector2(-2300,-5500),Vector2(-3300,-6900),Vector2(-5000,-8200),Vector2(-7200,-9800),Vector2(-9800,-11500)]},
+- {"width":6.5,"points":[Vector2(-3016,-1086),Vector2(-3150,-1500),Vector2(-3900,-2050),Vector2(-5200,-2400),Vector2(-7200,-2700),Vector2(-10500,-3300)]},
+- {"width":7.0,"points":[Vector2(6005,950),Vector2(6900,850),Vector2(8200,800),Vector2(10000,1300),Vector2(12500,900)]},
+- {"width":10.0,"points":[Vector2(4875,4015),Vector2(5250,4800),Vector2(5800,6300),Vector2(6400,8200),Vector2(7300,10500),Vector2(8200,12500)]},
++ {"width":10.0,"points":[Vector2(0,-3960),Vector2(-260,-5600),Vector2(-420,-7600),Vector2(-250,-10000),Vector2(150,-12500)]},
++ {"width":7.0,"points":[Vector2(0,-3960),Vector2(-2300,-5500),Vector2(-3300,-6900),Vector2(-5000,-8200),Vector2(-7200,-9800),Vector2(-9800,-11500)]},
++ {"width":6.5,"points":[Vector2(-2400,-1200),Vector2(-3150,-1500),Vector2(-3900,-2050),Vector2(-5200,-2400),Vector2(-7200,-2700),Vector2(-10500,-3300)]},
++ {"width":7.0,"points":[Vector2(4800,-1200),Vector2(6900,850),Vector2(8200,800),Vector2(10000,1300),Vector2(12500,900)]},
++ {"width":10.0,"points":[Vector2(2400,3000),Vector2(5250,4800),Vector2(5800,6300),Vector2(6400,8200),Vector2(7300,10500),Vector2(8200,12500)]},
+  {"width":5.5,"points":[Vector2(-420,-7600),Vector2(1200,-7700),Vector2(2700,-7000),Vector2(4300,-6300),Vector2(5600,-5000),Vector2(6800,-3200),Vector2(7600,-1000),Vector2(8200,800)]},
+  {"width":4.5,"points":[Vector2(-3300,-6900),Vector2(-2400,-7700),Vector2(-1300,-7900),Vector2(-420,-7600)]},
+  {"width":4.5,"points":[Vector2(8200,800),Vector2(8000,2800),Vector2(7200,4800),Vector2(5800,6300)]},
+@@ -139,11 +140,19 @@
+     k += 12.0
+   run += seg
+  geo.surface = 0.0
++func city_ramp(p: Vector2) -> float:
++ # City roads sit at zero, G5 fields at -2 m; meet without a vertical crack.
++ var distance := INF
++ for exit in CITY_EXITS:
++  distance = minf(distance,p.distance_to(exit))
++ return 2.0*(1.0-clampf(distance/120.0,0.0,1.0))
+ func band(st: SurfaceTool,a: Vector2,b: Vector2,la: Vector2,lb: Vector2,from: float,to: float,y: float,color: Color) -> void:
+- var p1 := Vector3(a.x+la.x*from,y,a.y+la.y*from)
+- var p2 := Vector3(b.x+lb.x*from,y,b.y+lb.y*from)
+- var p3 := Vector3(b.x+lb.x*to,y,b.y+lb.y*to)
+- var p4 := Vector3(a.x+la.x*to,y,a.y+la.y*to)
++ var ay := y+city_ramp(a)
++ var by := y+city_ramp(b)
++ var p1 := Vector3(a.x+la.x*from,ay,a.y+la.y*from)
++ var p2 := Vector3(b.x+lb.x*from,by,b.y+lb.y*from)
++ var p3 := Vector3(b.x+lb.x*to,by,b.y+lb.y*to)
++ var p4 := Vector3(a.x+la.x*to,ay,a.y+la.y*to)
+  geo.quad(st,p1,p2,p3,p4,color,Vector3.UP)
+ func mark_road(p: Vector2,width: float) -> void:
+  var key := Vector2i(int(floor(p.x/50.0)),int(floor(p.y/50.0)))
+--- a/scripts/verify_actor_frame_sync.gd
++++ b/scripts/verify_actor_frame_sync.gd
+@@ -8,17 +8,14 @@
+  for i in range(6):
+   await process_frame
+  scene.set_process(false)
+- scene.campaign.initialize({})
++ scene.campaign.initialize(JSON.parse_string(FileAccess.get_file_as_string("res://assets/actor-frame-fixture.json")))
+  scene.campaign.store.path = "user://actor-frame-sync-test.json"
+- for id in ["startCareer","closeModal","followUnit"]:
++ for id in ["continueBtn","closeModal","followUnit"]:
+   scene.campaign.action({"op":"event","domId":id,"event":"click"})
+  scene.campaign.action({"op":"event","domId":"settingsBtn","event":"click"})
+  scene.campaign.action({"op":"event","domId":"settingsWorldRate","event":"change","value":"45"})
+  scene.campaign.action({"op":"event","domId":"applyAudio","event":"click"})
+- for warmup in range(1500):
+-  scene.campaign.advance(1.0/30.0)
+-  if scene.campaign.view().units[0].status == "patrol":
+-   break
++ # Fixed, long patrol route: exercise motion across the entire observation window.
+  scene._process(1.0/30.0)
+  var moved := 0
+  var between_snapshots := 0

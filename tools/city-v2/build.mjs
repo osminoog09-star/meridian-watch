@@ -8,3 +8,4 @@ run('npm',['ci','--prefix','ui']);
 run('ui/node_modules/.bin/esbuild',['simulation/core-entry.js','--bundle','--format=iife','--global-name=MercuryCore','--target=es2020','--metafile=simulation/modules.json','--outfile=simulation/game-core.js']);
 run('ui/node_modules/.bin/esbuild',['ui/ui-entry.js','--bundle','--format=iife','--global-name=MercuryUI','--target=es2020','--loader:.html=text','--outfile=ui/ui-bundle.js']);
 run('node',['simulation/make-parity-fixtures.mjs']);
+run('node',[new URL('./frame-fixture.mjs',import.meta.url).pathname,native]);

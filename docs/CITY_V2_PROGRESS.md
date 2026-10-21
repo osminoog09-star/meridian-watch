@@ -14,7 +14,7 @@ Base native commit: `bfdaae8`; JS instructions/specification: `c4f2d46`.
   consume the same points. T-junctions and driveway junctions explicitly split their parent road.
 - Checks: strong directed connectivity, districts and service bases on roads, building clearance
   from carriageways and sidewalks, buildings outside the river, deterministic outputs.
-- Five generator tests pass, including deliberately broken graph/placement negative controls.
+- Six generator tests pass, including deliberately broken graph/placement negative controls.
 - `CITY_V2_PLAN.svg` is a schematic for reviewing the town plan, NOT a Godot screenshot.
 - `prepare.mjs` and `runtime-wip.patch` reproduce experimental integration in isolated JS/native
   working directories. These are not in the released checkpoint or patch chain yet.
@@ -40,13 +40,12 @@ Latest local verification: **641/641 JS**, **51/51 native audit**, **7/7 two-shi
 
 1. Review/refine the large grid into distinct district street patterns; add station/railway,
    park furniture, crossing geometry and proper service driveways. Civic footprints are placeholders.
-2. Finish physically separated sidewalks and bridge walking links. Current experimental walking
-   graph follows road nodes; do not treat it as a completed pedestrian solution.
+2. Sidewalk graph now follows offset street edges, explicit junction crossings and parking access links. Verify its appearance and movement on the rendered native map.
 3. Complete and test all old-save migrations: walking officers, resident destinations, active
    services, custody transport, taxi and pursuit; preserve progression and case/person links.
 4. Replace old OSM test fixtures with authored city fixtures, preserving behavioral assertions.
    Do not just delete failing tests or loosen timing to hide regressions.
-5. Connect G5 countryside exits and remove outdated coastal assumptions in its placement logic.
+5. G5 exits now connect with height ramps; the countryside uses the new river and town bounds. Dedicated connection/mesh check passes; visual review remains.
 6. Rebuild source hash manifest and bundles, rerun 634+ JS tests, native audit 51/51 and long
    shifts 7/7. No release results are claimed for the experimental build.
 7. Run portrait/landscape day/night/snow render review. This execution environment has no Xvfb;
@@ -69,3 +68,5 @@ node tools/city-v2/prepare.mjs /path/to/clean-js-release-g1 /path/to/native-map
 ## Reproducible verification
 
 `reconstruct.py` restores pinned 0.9.2 sources by SHA-256 and release-g1 patches. `prepare.mjs` also exports walking.json and bridges.json (previously stale), and `build.mjs` rebuilds manifests and bundles. City V2 CI captures portrait/landscape day, night and snow using the existing render tools. Captures must be inspected before any release.
+
+Latest CI attempt 39549793236 passed JS and failed one native fixture (50/51): insufficient moving frames between snapshots. The fixture now uses a fixed long route; exact pose/follow assertions remain intact. The next run includes this correction, sidewalks and G5. Previous 51/51 and 7/7 results refer to the earlier local integration, not acceptance of these newest changes.
