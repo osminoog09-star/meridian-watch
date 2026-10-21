@@ -76,7 +76,7 @@ export function generate(){
   }
  }
  // First-stage footprints reserve every civic site; detailed buildings belong to stage two/three.
- for(const b of [[-190,-190,100,42,3,'civic','Ратуша'],[30,-190,72,36,2,'bus_station','Автовокзал'],[130,-190,55,32,2,'retail','Магазины'],[30,35,80,42,2,'police','Полиция'],[140,35,48,24,2,'commercial','Бар «Мост»'],[990,-680,140,64,3,'hospital','Больница'],[990,-920,72,38,1,'ambulance','Скорая помощь'],[2200,-1600,100,55,2,'fire_station','Пожарная часть'],[2680,-2320,100,55,2,'police','База ГБР'],[-200,780,80,36,2,'school','Школа'],[-85,790,35,58,3,'church','Церковь']]){
+ for(const b of [[-190,-190,100,42,3,'civic','Ратуша'],[-190,-110,70,48,2,'museum','Городской музей'],[30,-190,72,36,2,'bus_station','Автовокзал'],[130,-190,55,32,2,'retail','Магазины'],[30,35,80,42,2,'police','Полиция'],[140,35,48,24,2,'commercial','Бар «Мост»'],[990,-680,140,64,3,'hospital','Больница'],[990,-920,72,38,1,'ambulance','Скорая помощь'],[2200,-1600,100,55,2,'fire_station','Пожарная часть'],[2680,-2320,100,55,2,'police','База ГБР'],[-200,780,80,36,2,'school','Школа'],[-85,790,35,58,3,'church','Церковь']]){
   const [x,y,w,h,f,kind,name]=b;addBuilding(x,y,w,h,f,kind,district(x,y),name);
  }
  // A single river corridor; bridges are the only roads across the water.
@@ -106,19 +106,19 @@ export function write(city,out){
  const data={...city,roads:city.roads.map(r=>({...r,p:r.p.map(world)})),buildings:city.buildings.map(b=>({...b,p:b.p.map(world)})),areas:city.areas.map(a=>({...a,p:a.p.map(world)}))};
  fs.writeFileSync(path.join(out,'city-data.js'),js(data));
  fs.writeFileSync(path.join(out,'geography.js'),fs.readFileSync(new URL('./geography.template.js',import.meta.url)));
- const quarter={source:city.source,bounds:[-1680,-2880,3600,1440],objects:[],excluded:[],
-  streetInfo:city.roads.map(r=>({id:r.id,width:String(r.width),surface:'asphalt',lit:'yes',sidewalk:r.kind==='service'?'no':'both'})),
+ const quarter={source:city.source,bounds:[1.4,2.42,1.7,2.62],objects:[{id:'v2-fountain-01',kind:'fountain',p:world([-65,-90])},...[-60,-20,20].map((x,i)=>({id:'v2-lamp-0'+i,kind:'lamp',p:world([x,12])}))],excluded:[],
+  streetInfo:city.roads.map(r=>({id:r.id,width:String(r.width),surface:r.name==='Ратушная улица'?'paving_stones':'asphalt',lit:'yes',sidewalk:r.kind==='service'?'no':'both'})),
   buildings:city.buildings.map(b=>({id:b.id,height:String(b.h*3),name:b.name})),waterEdges:[]};
  for(const a of data.areas.filter(a=>a.kind==='water'))for(let i=0;i<a.p.length;i++)quarter.waterEdges.push([a.p[i],a.p[(i+1)%a.p.length]]);
  fs.writeFileSync(path.join(out,'quarter-data.js'),js(quarter));
  const walking={source:city.source,candidates:0,rejectedGeometry:0,components:1,nodes:{},segments:[],entrances:[],destinations:[]};
- const addWalk=(a,b)=>walking.segments.push({way:'v2-foot-'+walking.segments.length,a,b,p:[walking.nodes[a],walking.nodes[b]],name:'Городской тротуар',kind:'footway'});
+ const addWalk=(a,b)=>walking.segments.push({way:'v2-foot-'+walking.segments.length,a,b,p:[walking.nodes[a],walking.nodes[b]],name:'Городской тротуар',kind:'footway',bridge:city.roads.some(r=>r.bridge&&r.nodes.includes(a)&&r.nodes.includes(b))});
  for(const r of data.roads)for(let i=0;i<r.nodes.length;i++){walking.nodes[r.nodes[i]]=r.p[i];if(i)addWalk(r.nodes[i-1],r.nodes[i]);}
- for(const [key,p,name] of [['museum',[-120,0],'Городской музей'],['ruutli',[0,-120],'Торговая площадь'],['malmo',[480,960],'Речная набережная']]){
+ for(const [key,p,name] of [['museum',[-120,0],'Городской музей'],['ruutli',[0,-120],'Торговая улица'],['malmo',[480,960],'Береговая улица']]){
   const [access,at]=Object.entries(walking.nodes).sort((a,b)=>Math.hypot(a[1][0]-world(p)[0],a[1][1]-world(p)[1])-Math.hypot(b[1][0]-world(p)[0],b[1][1]-world(p)[1]))[0];
-  const id='v2-walk-'+key;walking.nodes[id]=[at[0]+12/SCALE,at[1]+12/SCALE];addWalk(access,id);
-  const dest={key,id,p:walking.nodes[id],name,address:name,carAccess:access,duration:10,kind:'public_space',source:city.source};walking.destinations.push(dest);
-  if(key==='museum')walking.entrances.push({...dest,building:city.buildings.find(b=>b.name==='Ратуша').id,entrance:'yes'});
+  const id='v2-walk-'+key;walking.nodes[id]=key==='museum'?world([-155,-62]):[at[0]+12/SCALE,at[1]+12/SCALE];addWalk(access,id);
+  const dest={key,id,p:walking.nodes[id],name,address:key==='museum'?'Музейная улица':name,carAccess:access,duration:10,kind:key==='museum'?'entrance':'public_space',...(key==='museum'?{building:city.buildings.find(b=>b.kind==='museum').id}:{} ),source:city.source};walking.destinations.push(dest);
+  if(key==='museum')walking.entrances.push({...dest,building:dest.building,entrance:'yes'});
  }
  fs.writeFileSync(path.join(out,'walking-network.js'),js(walking));
  fs.writeFileSync(path.join(out,'city-v2-plan.json'),JSON.stringify(city,null,2)+'\n');

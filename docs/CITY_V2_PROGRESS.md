@@ -8,7 +8,7 @@ Base native commit: `bfdaae8`; JS instructions/specification: `c4f2d46`.
 - Original deterministic town generator: `tools/city-v2/generate.mjs`.
 - All eight district IDs retained; two river crossings, a connected one-way roundabout,
   arterial/collector/local/service roads, four exits, civic reservations.
-- 1,024 road records, 3,343 routing nodes, 1,772 initial building footprints.
+- 1,024 road records, 3,343 routing nodes, 1,773 initial building footprints.
   The population of 15,000 is a design target, not a simulated resident count.
 - Generated data uses the established world origin/metre conversion. Geometry and routing
   consume the same points. T-junctions and driveway junctions explicitly split their parent road.
@@ -34,7 +34,7 @@ Initial integration tests exposed old OSM-specific assumptions (fixed street/nod
 coordinate and dataset-hash expectations) and real integration work (walking routes, migration,
 bridge profiles). Initial native audit caught missing `bridge:false` on roads and stale bridge
 profiles; the generator now includes explicit flags and preparation regenerates profiles.
-Full JS and native gates are NOT green; do not publish this draft.
+Latest local verification: **641/641 JS**, **51/51 native audit**, **7/7 two-shift parity**, **5/5 generator checks**. The seven new JS checks cover old-save migration and correct transport/service destinations. These gates do not replace visual review or complete the remaining design work; do not publish this draft.
 
 ## Remaining before the first APK
 
@@ -65,3 +65,7 @@ node tools/city-v2/generate.mjs /tmp/city-v2-output
 node tools/city-v2/preview.mjs docs/CITY_V2_PLAN.svg
 node tools/city-v2/prepare.mjs /path/to/clean-js-release-g1 /path/to/native-map
 ```
+
+## Reproducible verification
+
+`reconstruct.py` restores pinned 0.9.2 sources by SHA-256 and release-g1 patches. `prepare.mjs` also exports walking.json and bridges.json (previously stale), and `build.mjs` rebuilds manifests and bundles. City V2 CI captures portrait/landscape day, night and snow using the existing render tools. Captures must be inspected before any release.
