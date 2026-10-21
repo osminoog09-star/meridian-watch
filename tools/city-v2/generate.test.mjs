@@ -28,3 +28,12 @@ test('generation and exported JS/plan are byte deterministic and input independe
  try{write(a,path.join(root,'a'));write(b,path.join(root,'b'));for(const file of fs.readdirSync(path.join(root,'a')))assert.deepEqual(fs.readFileSync(path.join(root,'a',file)),fs.readFileSync(path.join(root,'b',file)));}
  finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('sidewalks are outside carriageways and cross the river only on designed bridges',async()=>{
+ const {walkingNetwork}=await import('./walking.mjs');const c=generate(),net=walkingNetwork(c,p=>p),roads=new Map(c.roads.map(r=>[r.id,r]));
+ assert.ok(net.segments.some(s=>s.crossing));assert.ok(net.segments.some(s=>s.shared));
+ for(const s of net.segments){
+  if(s.roadId&&!s.shared){const r=roads.get(s.roadId),a=r.p[0],b=r.p.at(-1),p=s.p[0];const distance=Math.abs((b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]))/Math.hypot(b[0]-a[0],b[1]-a[1]);assert.ok(distance>r.width/2+1,'sidewalk must clear carriageway');}
+  const mid=[(s.p[0][0]+s.p[1][0])/2,(s.p[0][1]+s.p[1][1])/2];if(mid[0]>496&&mid[0]<704)assert.ok(s.bridge,'walking over river requires a bridge');
+ }
+});

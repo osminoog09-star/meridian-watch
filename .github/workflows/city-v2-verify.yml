@@ -1,8 +1,5 @@
 name: City V2 verification
 on:
-  push:
-    branches: [codex/city-v2]
-    paths: ['tools/city-v2/**', '.github/workflows/city-v2-verify.yml']
   pull_request:
     branches: [claude/native-fixes]
     paths: ['tools/city-v2/**', '.github/workflows/city-v2-verify.yml']
@@ -46,6 +43,7 @@ jobs:
           "$GODOT_BIN" --headless --editor --path build/native-map --import
           python3 build/native-map/tools/audit_migration.py --godot "$GODOT_BIN" --jobs 2
           cd build/native-map
+          "$GODOT_BIN" --headless --path . --script tools/verify_city_v2_country.gd
           node tools/audit_service_long_shift.mjs
           "$GODOT_BIN" --headless --path . --script tools/audit_service_long_shift.gd
       - name: Portrait and landscape captures
