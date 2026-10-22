@@ -3,6 +3,8 @@ import {walkingNetwork} from './walking.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+export const LAYOUT_SCALE=0.6;
+const compact=p=>p.map(v=>Math.round(v*LAYOUT_SCALE*1e6)/1e6);
 export const ORIGIN=[1.55,2.52], SCALE=1670;
 export const world=([x,y])=>[ORIGIN[0]+x/SCALE,ORIGIN[1]+y/SCALE];
 const rect=(x,y,w,h)=>[[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
@@ -11,8 +13,9 @@ export const DISTRICTS=[
  ['raama','Северная слобода',-960,-1920,'west'],['beach','Речной парк',0,960,'west'],
  ['mai','Майский',2160,0,'east'],['papiniidu','Промышленный',2880,-2160,'east'],
  ['vana','Старый посад',-1200,-480,'west'],['raekula','Сосновый бор',3120,960,'east']
-];
+].map(([id,name,x,y,sector])=>[id,name,...compact([x,y]),sector]);
 export const BASES={HQ:[0,0],HOSPITAL:[1200,-480],FIRE_STATION:[2400,-1440],GBR_BASE:[2880,-2160],AMBULANCE:[1200,-720]};
+for(const key of Object.keys(BASES))BASES[key]=compact(BASES[key]);
 const district=(x,y)=>x<480?(y>720?'beach':y< -1200?'raama':x< -480?'vana':'centre'):
  x>2400&&y< -1200?'papiniidu':y>480&&x>2400?'raekula':x<1680?'ulejoe':'mai';
 const distance=(p,a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1],t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p[0]-a[0]-dx*t,p[1]-a[1]-dy*t);};
@@ -56,7 +59,7 @@ export function generate(){
  for(let ix=0;ix<xs.length-1;ix++)for(let iy=0;iy<ys.length-1;iy++){
   const x=xs[ix],y=ys[iy];if(x===480)continue;
   const d=district(x+120,y+120),key=x+','+y;
-  if(reserved.has(key)){areas.push({kind:'grass',p:rect(x+18,y+18,204,204)});continue;}
+  if(reserved.has(key)){areas.push({kind:['-240,-240','0,-240'].includes(key)?'square':['0,0','960,-720','960,-960','2160,-1680','2640,-2400'].includes(key)?'civic_yard':'grass',p:rect(x+18,y+18,204,204)});continue;}
   // A green break every few blocks creates landmarks and keeps the plan legible.
   if((ix*7+iy*11)%19===0||d==='beach'){
    areas.push({kind:d==='beach'?'park':'grass',p:rect(x+22,y+22,196,196)});continue;
@@ -82,12 +85,14 @@ export function generate(){
  }
  // A single river corridor; bridges are the only roads across the water.
  areas.push({kind:'water',p:rect(496,-4100,208,7450)});
+ // Compact 144 m blocks; retain full-size roads and sidewalks.
+ for(const shape of [...roads,...buildings,...areas])shape.p=shape.p.map(compact);
  // Snap/split T-junctions explicitly, including all yard entries. Rendering and routing share these vertices.
- for(const r of roads){const [a,b]=r.p,n=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/60);r.p=Array.from({length:n+1},(_,i)=>[a[0]+(b[0]-a[0])*i/n,a[1]+(b[1]-a[1])*i/n]);}
+ for(const r of roads){const [a,b]=r.p,n=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/(60*LAYOUT_SCALE));r.p=Array.from({length:n+1},(_,i)=>[a[0]+(b[0]-a[0])*i/n,a[1]+(b[1]-a[1])*i/n]).map(p=>p.map(v=>Math.round(v*1e6)/1e6));}
  const allPoints=new Map();for(const r of roads)for(const p of r.p)allPoints.set(p.join(','),p);
  for(const r of roads){const a=r.p[0],b=r.p.at(-1),points=[...allPoints.values()].filter(p=>distance(p,a,b)<1e-6).sort((p,q)=>Math.hypot(p[0]-a[0],p[1]-a[1])-Math.hypot(q[0]-a[0],q[1]-a[1]));r.p=points;r.nodes=points.map(node);}
  for(const y of [-240,0,240])for(const x of [-240,0,240,1200,2160])crossings.push({p:[x+24,y],axis:'x',width:6});
- return {schema:2,id:'meridian-city-v2',source:'Mercury Response — original authored town',date:'2026-10-21',bbox:[24.455,58.355,24.59,58.425],populationTarget:15000,roads,buildings,areas,coasts:[],districts:DISTRICTS,bases:BASES,crossings};
+ return {schema:2,id:'meridian-city-v2',source:'Mercury Response — original authored town',date:'2026-10-21',bbox:[24.455,58.355,24.59,58.425],populationTarget:15000,layoutScale:LAYOUT_SCALE,roads,buildings,areas,coasts:[],districts:DISTRICTS,bases:BASES,crossings};
 }
 export function validate(city){
  const errors=[],graph=new Map();for(const r of city.roads)for(let i=0;i<r.nodes.length;i++){const id=r.nodes[i];if(!graph.has(id))graph.set(id,new Set());if(i){graph.get(r.nodes[i-1]).add(id);if(r.oneway!=='yes')graph.get(id).add(r.nodes[i-1]);}}
@@ -95,7 +100,7 @@ export function validate(city){
  if(visit()!==graph.size||visit(true)!==graph.size)errors.push('Road graph is not strongly connected');
  for(const b of city.buildings){const xs=b.p.map(p=>p[0]),ys=b.p.map(p=>p[1]),box=[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];
   for(const r of city.roads){const gap=r.width/2+2.6,padded=[box[0]-gap,box[1]-gap,box[2]+gap,box[3]+gap];if(r.p.some((p,i)=>i&&segmentBox(r.p[i-1],p,padded))){errors.push(`${b.id} overlaps ${r.id}`);break;}}
-  if(box[0]<704&&box[2]>496)errors.push(`${b.id} overlaps river`);
+  if(box[0]<704*LAYOUT_SCALE&&box[2]>496*LAYOUT_SCALE)errors.push(`${b.id} overlaps river`);
  }
  for(const [id,p] of [...Object.entries(city.bases),...city.districts.map(d=>[d[0],d.slice(2,4)])])if(!city.roads.some(r=>r.p.some((q,i)=>i&&distance(p,r.p[i-1],q)<1e-6)))errors.push(`${id} is off road`);
  if(errors.length)throw Error(errors.join('\n'));
@@ -107,7 +112,7 @@ export function write(city,out){
  const data={...city,roads:city.roads.map(r=>({...r,p:r.p.map(world)})),buildings:city.buildings.map(b=>({...b,p:b.p.map(world)})),areas:city.areas.map(a=>({...a,p:a.p.map(world)}))};
  fs.writeFileSync(path.join(out,'city-data.js'),js(data));
  fs.writeFileSync(path.join(out,'geography.js'),fs.readFileSync(new URL('./geography.template.js',import.meta.url)));
- const quarter={source:city.source,bounds:[1.4,2.42,1.7,2.62],objects:[{id:'v2-fountain-01',kind:'fountain',p:world([-65,-90])},...[-60,-20,20].map((x,i)=>({id:'v2-lamp-0'+i,kind:'lamp',p:world([x,12])}))],excluded:[],
+ const quarter={source:city.source,bounds:[1.4,2.42,1.7,2.62],objects:[{id:'v2-fountain-01',kind:'fountain',p:world(compact([-65,-90]))},...[-60,-20,20].map((x,i)=>({id:'v2-lamp-0'+i,kind:'lamp',p:world(compact([x,12]))}))],excluded:[],
   streetInfo:city.roads.map(r=>({id:r.id,width:String(r.width),surface:r.name==='Ратушная улица'?'paving_stones':'asphalt',lit:'yes',sidewalk:r.kind==='service'?'no':'both'})),
   buildings:city.buildings.map(b=>({id:b.id,height:String(b.h*3),name:b.name})),waterEdges:[]};
  for(const a of data.areas.filter(a=>a.kind==='water'))for(let i=0;i<a.p.length;i++)quarter.waterEdges.push([a.p[i],a.p[(i+1)%a.p.length]]);

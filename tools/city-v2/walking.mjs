@@ -30,8 +30,9 @@ export function walkingNetwork(city,world){
  const parking=[...roadNodes].filter(([id])=>!bridgeNodes.has(id)).map(([id,p])=>({id,p,walk:nearest(p)[0]}));
  for(const {id,p,walk} of parking){node(p,id);edge(id,walk,{access:true,crossing:true,name:'Выход из машины к тротуару'});}
  for(const [key,wanted,name] of [['museum',[-120,0],'Городской музей'],['ruutli',[0,-120],'Торговая улица'],['malmo',[480,960],'Береговая улица']]){
-  const [carAccess,car]=[...roadNodes].sort((a,b)=>Math.hypot(a[1][0]-wanted[0],a[1][1]-wanted[1])-Math.hypot(b[1][0]-wanted[0],b[1][1]-wanted[1]))[0];
-  const entrance=key==='museum'?[-155,-62]:[car[0]+12,car[1]+12];
+  const desired=wanted.map(v=>v*(city.layoutScale??1));
+  const [carAccess,car]=[...roadNodes].sort((a,b)=>Math.hypot(a[1][0]-desired[0],a[1][1]-desired[1])-Math.hypot(b[1][0]-desired[0],b[1][1]-desired[1]))[0];
+  const entrance=key==='museum'?[-155,-62].map(v=>v*(city.layoutScale??1)):[car[0]+(key==='malmo'?-12:12),car[1]+12];
   const [walkAccess]=nearest(car),[approach]=nearest(entrance);
   node(car,carAccess);edge(carAccess,walkAccess,{crossing:true,name:'Выход из машины к тротуару'});
   const id=node(entrance,'v2-walk-'+key);edge(approach,id,{name:'Подход к месту'});

@@ -5,12 +5,12 @@
  # woods that keep off the roads. Deterministic; roads are one mesh, buildings and trees one MultiMesh per kind and
  # 1.5 km cell with a visibility range, cheap on the phone. Houses use the city shader: windows, lit at night.
 -const TOWN := Rect2(-2900,-4500,8500,8200)
-+const TOWN := Rect2(-1800,-3000,5520,4560)
++const TOWN := Rect2(-1080,-1800,3312,2736)
  const LAND_Y := -2.0
  const Geometry = preload("res://scripts/city_geometry.gd")
 -const SEA = preload("res://scripts/landuse.gd").SEA
-+const SEA = [Vector2(496,-4100),Vector2(704,-4100),Vector2(704,3350),Vector2(496,3350)]
-+const CITY_EXITS = [Vector2(0,-3960),Vector2(-2400,-1200),Vector2(4800,-1200),Vector2(2400,3000)]
++const SEA = [Vector2(297.6,-2460),Vector2(422.4,-2460),Vector2(422.4,2010),Vector2(297.6,2010)]
++const CITY_EXITS = [Vector2(0,-2376),Vector2(-1440,-720),Vector2(2880,-720),Vector2(1440,1800)]
  # Roads in world metres: the first point is where the town street ends (city data edge).
  const ROADS := [
 - {"width":10.0,"points":[Vector2(-190,-4340),Vector2(-260,-5600),Vector2(-420,-7600),Vector2(-250,-10000),Vector2(150,-12500)]},
@@ -18,11 +18,11 @@
 - {"width":6.5,"points":[Vector2(-3016,-1086),Vector2(-3150,-1500),Vector2(-3900,-2050),Vector2(-5200,-2400),Vector2(-7200,-2700),Vector2(-10500,-3300)]},
 - {"width":7.0,"points":[Vector2(6005,950),Vector2(6900,850),Vector2(8200,800),Vector2(10000,1300),Vector2(12500,900)]},
 - {"width":10.0,"points":[Vector2(4875,4015),Vector2(5250,4800),Vector2(5800,6300),Vector2(6400,8200),Vector2(7300,10500),Vector2(8200,12500)]},
-+ {"width":10.0,"points":[Vector2(0,-3960),Vector2(-260,-5600),Vector2(-420,-7600),Vector2(-250,-10000),Vector2(150,-12500)]},
-+ {"width":7.0,"points":[Vector2(0,-3960),Vector2(-2300,-5500),Vector2(-3300,-6900),Vector2(-5000,-8200),Vector2(-7200,-9800),Vector2(-9800,-11500)]},
-+ {"width":6.5,"points":[Vector2(-2400,-1200),Vector2(-3150,-1500),Vector2(-3900,-2050),Vector2(-5200,-2400),Vector2(-7200,-2700),Vector2(-10500,-3300)]},
-+ {"width":7.0,"points":[Vector2(4800,-1200),Vector2(6900,850),Vector2(8200,800),Vector2(10000,1300),Vector2(12500,900)]},
-+ {"width":10.0,"points":[Vector2(2400,3000),Vector2(5250,4800),Vector2(5800,6300),Vector2(6400,8200),Vector2(7300,10500),Vector2(8200,12500)]},
++ {"width":10.0,"points":[Vector2(0,-2376),Vector2(-260,-5600),Vector2(-420,-7600),Vector2(-250,-10000),Vector2(150,-12500)]},
++ {"width":7.0,"points":[Vector2(0,-2376),Vector2(-2300,-5500),Vector2(-3300,-6900),Vector2(-5000,-8200),Vector2(-7200,-9800),Vector2(-9800,-11500)]},
++ {"width":6.5,"points":[Vector2(-1440,-720),Vector2(-3150,-1500),Vector2(-3900,-2050),Vector2(-5200,-2400),Vector2(-7200,-2700),Vector2(-10500,-3300)]},
++ {"width":7.0,"points":[Vector2(2880,-720),Vector2(6900,850),Vector2(8200,800),Vector2(10000,1300),Vector2(12500,900)]},
++ {"width":10.0,"points":[Vector2(1440,1800),Vector2(5250,4800),Vector2(5800,6300),Vector2(6400,8200),Vector2(7300,10500),Vector2(8200,12500)]},
   {"width":5.5,"points":[Vector2(-420,-7600),Vector2(1200,-7700),Vector2(2700,-7000),Vector2(4300,-6300),Vector2(5600,-5000),Vector2(6800,-3200),Vector2(7600,-1000),Vector2(8200,800)]},
   {"width":4.5,"points":[Vector2(-3300,-6900),Vector2(-2400,-7700),Vector2(-1300,-7900),Vector2(-420,-7600)]},
   {"width":4.5,"points":[Vector2(8200,800),Vector2(8000,2800),Vector2(7200,4800),Vector2(5800,6300)]},
@@ -83,3 +83,99 @@
     push_error("Two-shift parity failed: "+f.mode+" / "+f.service)
     quit(2);return
    print("PASS two complete shifts: ",f.mode," / ",f.service)
+--- a/scripts/landuse.gd
++++ b/scripts/landuse.gd
+@@ -2,15 +2,16 @@
+ var failed_polygons := 0
+ var water_polygons: Array = []
+ var water_material: ShaderMaterial
++var city_material: ShaderMaterial
+ # The bay of Meridian: the coast south-west of the town (from where the buildings and the beach end).
+ const SEA := [Vector2(-12000,-1400),Vector2(-2900,-300),Vector2(-1400,450),Vector2(-750,1000),Vector2(1000,1850),Vector2(2750,2850),Vector2(3300,3650),Vector2(3700,12000),Vector2(-12000,12000)]
+ func _ready() -> void:
+  var areas = JSON.parse_string(FileAccess.get_file_as_string("res://assets/landuse.json"))
+  var tool := SurfaceTool.new()
+  tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+- var palette := {"water":"#497c99","beach":"#bfba8c","park":"#658957","grass":"#7d9461","forest":"#416a49","wood":"#416a49","scrub":"#6f8252","garden":"#768f62","pitch":"#6f995c","cemetery":"#658060","residential":"#929387","industrial":"#8a8b82"}
++ var palette := {"square":"#aaa494","civic_yard":"#8c8e87","water":"#497c99","beach":"#bfba8c","park":"#658957","grass":"#7d9461","forest":"#416a49","wood":"#416a49","scrub":"#6f8252","garden":"#768f62","pitch":"#6f995c","cemetery":"#658060","residential":"#929387","industrial":"#8a8b82"}
+  # Broad land below detail; water stays above overlapping land polygons.
+- var layers := {"residential":-1.5,"industrial":-1.4,"forest":-1.3,"wood":-1.3,"grass":-1.2,"scrub":-1.1,"park":-1.0,"garden":-0.9,"cemetery":-0.8,"pitch":-0.7,"beach":-0.6,"water":-0.4}
++ var layers := {"square":-0.5,"civic_yard":-0.5,"residential":-1.5,"industrial":-1.4,"forest":-1.3,"wood":-1.3,"grass":-1.2,"scrub":-1.1,"park":-1.0,"garden":-0.9,"cemetery":-0.8,"pitch":-0.7,"beach":-0.6,"water":-0.4}
+  for area in areas:
+   var polygon := PackedVector2Array()
+   for p in area.p:
+@@ -27,16 +28,14 @@
+   for index in range(0,triangles.size(),3):
+    tool.set_normal(Vector3.UP)
+    tool.set_color(color)
+-   for offset in [0,2,1]:
++   for offset in [0,1,2]:
+     var p := polygon[triangles[index+offset]]
+     tool.add_vertex(Vector3(p.x,float(layers.get(area.kind,-1.6)),p.y))
+  tool.index()
+  mesh = tool.commit()
+- var material := StandardMaterial3D.new()
+- material.vertex_color_use_as_albedo = true
+- material.roughness = 0.9
+- material.cull_mode = BaseMaterial3D.CULL_DISABLED
+- material_override = material
++ city_material = ShaderMaterial.new()
++ city_material.shader = preload("res://shaders/city.gdshader")
++ material_override = city_material
+  # Claude 17.10 (Release G1 «Графика»): trees in parks, forests, woods, gardens and on larger lawns — low-poly
+  # deciduous and spruce trees, one MultiMesh per 300 m cell so the camera only draws the cells it sees.
+  plant_trees(areas)
+@@ -138,7 +137,7 @@
+ func water_mesh() -> void:
+  var st := SurfaceTool.new()
+  st.begin(Mesh.PRIMITIVE_TRIANGLES)
+- water_polygons.append(PackedVector2Array(SEA))
++ # City V2 river is authored in landuse.json; no legacy sea overlay.
+  for polygon in water_polygons:
+   var triangles := Geometry2D.triangulate_polygon(polygon)
+   for index in range(0,triangles.size(),3):
+--- a/scripts/render_camera.gd
++++ b/scripts/render_camera.gd
+@@ -27,6 +27,8 @@
+   scene.campaign.action({"op":"event","domId":"closeModal","event":"click"})
+  await wait(30)
+  var args := OS.get_cmdline_user_args()
++ if args.has("--clean-world"):
++  scene.native_ui.hide()
+  if args.has("--world"):
+   # Claude 17.10: views at world points «x:z:zoomsteps;…» (zoom steps from the city view, + closer, − further)
+   var n := 0
+@@ -42,6 +44,8 @@
+    root.get_texture().get_image().save_png(out+"/world-"+str(n)+".png")
+    print("shot world ",n)
+    n += 1
++  scene.queue_free()
++  await wait(4)
+   quit(0)
+   return
+  if args.has("--places"):
+@@ -53,6 +57,8 @@
+    await RenderingServer.frame_post_draw
+    root.get_texture().get_image().save_png(out+"/place-"+str(place.kind)+".png")
+    print("shot ",place.kind)
++  scene.queue_free()
++  await wait(4)
+   quit(0)
+   return
+  for view in [["angled",[["follow",null]]],["turned",[["rotate",1],["rotate",1]]],["street",[["tilt",null]]],["top",[["tilt",null]]],["chase",[["chase",null]]],["close",[["follow",null],["zoom",1],["zoom",1],["zoom",1],["zoom",1]]]]:
+@@ -63,4 +69,6 @@
+   await RenderingServer.frame_post_draw
+   root.get_texture().get_image().save_png(out+"/"+view[0]+".png")
+   print("shot ",view[0])
++ scene.queue_free()
++ await wait(4)
+  quit(0)
+--- a/scripts/render_screens.gd
++++ b/scripts/render_screens.gd
+@@ -170,4 +170,6 @@
+    scene.campaign.action({"op":"event","id":on_scene.id,"event":"click"})
+   await wait(15)
+   await shot("16-call-on-scene")
++ scene.queue_free()
++ await wait(4)
+  quit(0)
