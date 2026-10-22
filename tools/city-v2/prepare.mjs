@@ -1,0 +1,28 @@
+/** Experimental integration, deliberately separate from the released checkpoint. */
+import fs from 'node:fs';
+import path from 'node:path';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import {generate,write} from './generate.mjs';
+const tools=path.dirname(fileURLToPath(import.meta.url));
+const [jsArg,nativeArg]=process.argv.slice(2);
+if(!jsArg||!nativeArg)throw Error('Usage: node tools/city-v2/prepare.mjs <clean JS 0.9.2 + through release-g1> <unpacked native-map>');
+const js=path.resolve(jsArg),native=path.resolve(nativeArg);
+const run=(command,args,cwd)=>{const r=spawnSync(command,args,{cwd,stdio:'inherit'});if(r.status!==0)throw Error(`${command} failed (${r.status})`);};
+run('patch',['-p1','--dry-run','-i',path.join(tools,'runtime-wip.patch')],js);
+run('patch',['-p1','-i',path.join(tools,'runtime-wip.patch')],js);
+run('patch',['-p1','--dry-run','-i',path.join(tools,'native-wip.patch')],native);
+run('patch',['-p1','-i',path.join(tools,'native-wip.patch')],native);
+fs.copyFileSync(path.join(tools,'verify-country.gd'),path.join(native,'tools/verify_city_v2_country.gd'));
+const city=generate();write(city,path.join(js,'dist'));
+for(const directory of ['simulation/source','ui/source'])for(const name of ['city-data.js','geography.js','quarter-data.js','walking-network.js','fiction.js','visits.js','sim.js','city-v2-migration.js'])fs.copyFileSync(path.join(js,'dist',name),path.join(native,directory,name));
+run('node',[path.join(native,'export-map.mjs'),js,'--full-city'],native);
+run('node',[path.join(native,'export-map.mjs'),js],native);
+const {default:walking}=await import(pathToFileURL(path.join(js,'dist/walking-network.js')));
+fs.writeFileSync(path.join(native,'assets/walking.json'),JSON.stringify(walking));
+const exported=JSON.parse(fs.readFileSync(path.join(native,'assets/city.json'),'utf8'));
+fs.writeFileSync(path.join(native,'assets/bridges.json'),JSON.stringify(exported.chunks.flatMap(c=>c.roads).filter(r=>r.bridge)));
+fs.writeFileSync(path.join(native,'assets/landuse.json'),JSON.stringify(city.areas));
+const landuse=path.join(native,'scripts/landuse.gd');fs.writeFileSync(landuse,fs.readFileSync(landuse,'utf8').replace('water_polygons.append(PackedVector2Array(SEA))','# City V2: the river is defined by assets/landuse.json.'));
+run('python3',[path.join(native,'tools/build_bridge_profiles.py')],native);
+console.log('Experimental sources prepared. Rebuild bundles/manifests, verify ALL release gates before packing or publishing.');
