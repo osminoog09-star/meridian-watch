@@ -1,0 +1,126 @@
+diff -ruN a/dist/life.js b/dist/life.js
+--- a/dist/life.js	2026-10-18 01:21:39.426966034 +0300
++++ b/dist/life.js	2026-10-22 21:41:38.921340133 +0300
+@@ -26,6 +26,7 @@
+  drone:{agency:'police',label:'Оператор дрона',days:2,about:'Допуск к полётам дрона на поиске и погонях (нужно звание «Констебль»).'},
+  investigation:{agency:'police',label:'Курс следователя (криминальная полиция)',days:4,about:'Допуск к работе следователем: опросы, записи камер, базы, задержание по делу (нужно звание «Старший констебль»).'},
+  negotiation:{agency:'police',label:'Переговоры и деэскалация',days:3,about:'Ваш экипаж на 10% быстрее на конфликтах, семейных ссорах и шуме.',variants:['street-fight','domestic','noise-venue','noise-flat','yard-company'],bonus:1.1},
++ community:{agency:'police',label:'Работа участкового',days:3,about:'Допуск к должности участкового: профилактика, приём граждан, соседские споры и семейные конфликты, работа с жалобами (нужно звание «Констебль»).'},
+  traffic:{agency:'police',label:'Дорожный надзор',days:2,about:'Допуск к переводу в дорожную полицию: алкотестер, измерение скорости, оформление ДТП (нужно звание «Констебль»).'},
+  // Release H rescuers (Päästeamet): breathing apparatus is the yearly mandatory check, like shooting for the police.
+  ba:{agency:'rescue',label:'Дыхательный аппарат (ежегодный допуск)',days:1,mandatory:true,valid:180,about:'Обязательная проверка: работа в задымлении в дыхательном аппарате. Без допуска не будет повышения.'},
+@@ -120,6 +121,7 @@
+  rapid:{agency:'police',label:'Группа быстрого реагирования префектуры',course:'tactics',rank:2,minFitness:70,needsFirearms:true,about:'Отдельное подразделение префектуры, не патруль: командный центр направляет вас по всему городу только на опасные вызовы — оружие, драки, семейное насилие, задержание подозреваемых по делам криминальной полиции, погони за машиной из ориентировки, взлом с сигнализацией. Вызов ГБР даёт вдвое больше опыта. Шум, кражи и ДТП берут патрули. Если патрулю долго не идёт подкрепление — едете вы; если все патрули заняты и вызов ждёт — берёте его как дополнительный патруль. Задержание на 30% быстрее, второй экипаж не нужен. Вооружённого, закрывшегося в квартире, уговариваете и задерживаете сами; K-Komando вызывают только при заложнике, а при угрозе жизни вы действуете, не дожидаясь его.',bonus:{'street-fight':1.3,'fan-fight':1.3,domestic:1.3,'restraining-order':1.3,'suspect-found':1.3,'vehicle-alert':1.2,'alarm-burglary':1.2},noCaution:true},
+  k9:{agency:'police',label:'Кинолог',course:'k9',rank:1,about:'Поиск людей на 40% быстрее; по делам о кражах зацепка находится чаще (+20%).',bonus:{'missing-elder':1.4,'missing-child':1.4,'suspect-found':1.2},leadBonus:.2},
+  detective:{agency:'police',label:'Следователь криминальной полиции',course:'investigation',rank:2,detective:true,about:'Вы ведёте дела: свидетели, камеры, базы, задержание. Обычные вызовы патруля берут другие экипажи.'},
++ district:{agency:'police',label:'Участковый уполномоченный',course:'community',rank:1,about:'Свой район — тот, где вы живёте: шум, соседские споры, семейные ссоры, пьяные во дворе, запреты на приближение и кражи велосипедов — на 35% быстрее; каждый закрытый вами вызов в своём районе поднимает его доверие вдвое.',bonus:{'noise-flat':1.35,'noise-venue':1.35,'yard-company':1.35,'domestic':1.35,'drunk-person':1.35,'restraining-order':1.35,'bike-theft':1.35,'confused-person':1.35}},
+  traffic:{agency:'police',label:'Дорожная полиция',course:'traffic',rank:1,about:'Пьяные и опасные водители, ДТП, превышение у школ — на 30% быстрее; на рейдах «Трезвый водитель» и контроле скорости нарушителей находится в 1,5 раза больше.',bonus:{'drunk-driver':1.3,'dangerous-driving':1.3,crash:1.3,'school-speeding':1.3,'no-licence':1.3},raid:1.5},
+  diver:{agency:'rescue',label:'Водный спасатель',course:'water',rank:1,about:'Спасение на воде и льду на 40% быстрее, лодка и гидрокостюм всегда в машине.',bonus:{'water-ice':1.4,'water-swim':1.4,'water-boat':1.4}},
+  rope:{agency:'rescue',label:'Спасатель-высотник',course:'height',rank:1,about:'Лифты, колодцы, крыши — на 30% быстрее; в задымлённом подъезде людей находят быстрее.',bonus:{'rescue-lift':1.3,'animal-rescue':1.3,'fire-stairs':1.15}},
+diff -ruN a/dist/sim.js b/dist/sim.js
+--- a/dist/sim.js	2026-10-22 21:20:36.161641908 +0300
++++ b/dist/sim.js	2026-10-22 21:41:38.920658541 +0300
+@@ -47,6 +47,7 @@
+ import {checkAspiration,chooseAspiration} from './aspirations.js';
+ import {JOBS,jobChecks,applyForJob,withdrawJob,validTransfer} from './jobs.js';
+ import {HOME,beforeShift,monthLate,monthlyCost,moveHome,validHome,homeOf} from './home.js';
++import {IVS,ivsFull,ivsPlace,ivsCount,validIvs,DISTRICT_OFFICER} from './station.js';
+ import {promotionCheck,addSkill,skillPace,validSkills} from './promotion.js';
+ import {SUPERVISOR,leadNeeded,validLead,supervisorName} from './supervisor.js';
+ import {PREFECTURE,ARMED,GBR_VARIANTS,GBR_SUPPORT,makeArmed,gbrNeeded,gbrOnScene,kkOnScene,gbrStorms,prefectureCap,prefectureWait,validArmed} from './prefecture.js';
+@@ -264,7 +265,7 @@
+  for(const [k,a] of ps.entries()){if(!citizen(a.citizen)||a.residentId)continue;
+   const outcome=!police?(isEmsType(i.type)?(k===0?'hospital':'witness'):(k===0?'rescued':'witness')):a.role==='Пропавший человек'?(success?'found':'notfound'):k>0?'witness':!success?'fled':choice==='arrest'?'arrest':choice==='warn'?'warn':[3,5].includes(i.type)?'report':'talk';
+   const r=recordMet(s,a.citizen,{shift:s.shift,call:i.id,variant:String(i.variant??'').slice(0,39),role:a.role,outcome});if(r&&outcome==='arrest'){r.status='custody';r.until=s.shift+1;}}}
+-function recordConsequences(s,i,success){const districts=ensureDistricts(s),d=districtOf(i);addDistrictTrust(s,d,success?DISTRICT_TRUST_STEP.success+(priorityOf(s)===d?PRIORITY_RULES.districtBonus:0):DISTRICT_TRUST_STEP.failure);
++function recordConsequences(s,i,success){const districts=ensureDistricts(s),d=districtOf(i);addDistrictTrust(s,d,success?DISTRICT_TRUST_STEP.success+(priorityOf(s)===d?PRIORITY_RULES.districtBonus:0):DISTRICT_TRUST_STEP.failure);/* Claude City 2.0: the district officer's own district trusts him twice as fast */if(success&&s.mode==='career'&&s.life?.role==='district'&&i.units.includes(1)&&homeOf(s.life).district===d)addDistrictTrust(s,d,DISTRICT_TRUST_STEP.success*DISTRICT_OFFICER.trust);
+  const rule=FOLLOW_UPS[i.variant];if(!rule||s.followUps.length>=12)return;const choice=success?custodyDecision(i):null,chance=Math.min(.9,followUpChance(i.variant,success,i.decision,districts[d])*(choice?CUSTODY_FOLLOW_UP[choice]:1)*policyOf(s).followUp*(success?(i.talk?.followUp??1):1)*(1+.15*Math.min(4,arrests(personOf(s,i.scene?.participants?.[0]?.citizen)))));if(rng(s)>=chance)return;
+  const [a,b]=FOLLOW_UP_DELAY;s.followUps.push({at:s.time+a+rng(s)*(b-a),variant:rule.next,x:i.x,y:i.y,from:i.id,reason:rule.reason,...(i.scene?.participants?.[0]?.citizen?{who:i.scene.participants[0].citizen}:{})});}
+ function releaseFollowUps(s){if(!s.followUps?.length)return;const active=()=>s.incidents.filter(i=>!['resolved','missed'].includes(i.state)).length;for(const f of [...s.followUps]){if(s.time<f.at||active()>=6)continue;s.followUps=s.followUps.filter(x=>x!==f);const i=spawnIncident(s,null,{variant:f.variant,point:{x:f.x,y:f.y},followUp:{from:f.from,reason:f.reason,...(f.who?{who:f.who}:{})}});log(s,f.variant==='suspect-found'?`Диспетчер: вызов №${i.id} — ${f.reason}`:`Диспетчер: повторный вызов №${i.id} — ${f.reason}`);}}
+@@ -272,6 +273,7 @@
+  if(s.districts!==undefined&&!(s.districts&&typeof s.districts==='object'&&Object.entries(s.districts).every(([k,v])=>DISTRICT_IDS.includes(k)&&num(v,0,100))))return false;
+  if(s.followUps!==undefined&&!(Array.isArray(s.followUps)&&s.followUps.length<=12&&s.followUps.every(f=>num(f.at,0,2000)&&variantById(f.variant)&&containsWorldPoint(f)&&Number.isInteger(f.from)&&typeof f.reason==='string'&&f.reason.length<200&&(f.who===undefined||!!citizen(f.who)))))return false;
+  if(s.custodyDone!==undefined&&!(Number.isInteger(s.custodyDone)&&s.custodyDone>=0&&s.custodyDone<10000))return false;
++ if(!validIvs(s))return false;
+  if(!s.incidents.every(i=>(i.custodyChoice===undefined||Object.hasOwn(CUSTODY_CHOICES,i.custodyChoice))&&(i.medical===undefined||['called','treated'].includes(i.medical))&&(i.rescue===undefined||['called','working','done'].includes(i.rescue))))return false;
+  if(!validServices(s)||!validCases(s)||!validRadio(s)||!validPolicy(s)||!validLife(s)||!validTaxi(s)||!validBolo(s)||!validRoutine(s)||!validUpgrades(s)||!validComplaints(s)||!validPatrolWork(s)||!validHistory(s)||!validNews(s)||!validGoals(s)||!validTips(s)||!validCareer2(s)||!validService2(s)||!validWeek(s.life?.week)||!(s.agency===undefined||s.agency!=='police'&&validAgency(s.agency)&&isScheduled(s))/* Release L: 112 has a chief mode */||!validDesk(s.desk)||(s.desk!==undefined)!==isDispatch(s)||!s.units.every(u=>u.agency===undefined||isDispatch(s)&&['police','rescue','ems'].includes(u.agency))||!validChiefWeek(s.chiefWeek)||!validCity(s.city)||!s.incidents.every(i=>(i.bolo===undefined||Number.isInteger(i.bolo))&&(i.story===undefined||Number.isInteger(i.story)&&i.story>=1&&i.story<=7)&&(i.arc===undefined||Object.hasOwn(ARCS,i.arc))&&validFire(i.fire)&&(!isRescueType(i.type)||isRescue(s)||isDispatch(s))&&validPatient(i.patient)&&(!isEmsType(i.type)||isEms(s)||isDispatch(s))&&validCall(i.call)&&(i.call===undefined||isDispatch(s))&&validTalk(i.talk)))return false;
+  return s.incidents.every(i=>i.followUp===undefined||Number.isInteger(i.followUp.from)&&typeof i.followUp.reason==='string'&&i.followUp.reason.length<200);}
+@@ -286,11 +288,12 @@
+ function assignCustody(s,i){const choice=custodyDecision(i);if(choice==='warn'){const bonus=policyOf(s).warnDistrict;if(bonus){const d=ensureDistricts(s),id=districtOf(i);d[id]=Math.min(100,d[id]+bonus);}log(s,`Вызов №${i.id}: участников отпустили с предупреждением.`);return;}if(choice!=='arrest')return;const u=s.units.find(x=>i.units.includes(x.id));if(!u||u.transport)return;u.transport={from:i.id,label:callName(i),district:districtOf(i)};}
+ function tickCustody(s,u,dt){
+  if(u.status==='patrol'&&u.transport&&!u.foot&&u.incident===null){u.status='transporting';if(u.transport.hospital){routeTo(u,HOSPITAL);pushRadio(s,callsign(u),'Пациент в машине, едем в приёмное.');log(s,`${u.name}: пациент в машине, везём в больницу (вызов №${u.transport.from}).`);return true;}routeTo(u,HQ);radio(s,'transport',u,null);log(s,`${u.name}: задержанный в машине, везём в участок (вызов №${u.transport.from}).`);return true;}
+- if(u.status==='transporting'){if(!u.route.length){u.status='handover';if(u.transport?.hospital){const busy=s.units.filter(x=>x!==u&&x.status==='handover'&&x.transport?.hospital).length;u.handover=Math.min(60,HANDOVER_TIME*(u.transport.ecg?PATIENT.handoverEcg:1)*(1+.35*busy));log(s,`${u.name}: в приёмном отделении${busy?`, перед нами ${busy} ${busy===1?'бригада':'бригады'}`:''}, передаём пациента.`);}else{u.handover=HANDOVER_TIME;log(s,`${u.name}: в участке, передаём задержанного дежурному.`);}}return true;}
++ if(u.status==='transporting'){if(!u.route.length){u.status='handover';if(u.transport?.hospital){const busy=s.units.filter(x=>x!==u&&x.status==='handover'&&x.transport?.hospital).length;u.handover=Math.min(60,HANDOVER_TIME*(u.transport.ecg?PATIENT.handoverEcg:1)*(1+.35*busy));log(s,`${u.name}: в приёмном отделении${busy?`, перед нами ${busy} ${busy===1?'бригада':'бригады'}`:''}, передаём пациента.`);}else if(ivsFull(s)){u.handover=HANDOVER_TIME*IVS.transferTime;u.transport.transfer=true;log(s,`${u.name}: ИВС участка заполнен (${IVS.capacity}/${IVS.capacity}) — оформляем перевод задержанного в ИВС префектуры.`);}else{u.handover=HANDOVER_TIME;log(s,`${u.name}: в участке, передаём задержанного дежурному.`);}}return true;}
+  if(u.status==='handover'){u.handover-=dt;if(u.handover>0)return true;const t=u.transport;u.status='patrol';u.transport=null;delete u.handover;
+   if(t?.hospital){addTrust(s,.5);if(u.id===1||s.mode==='chief')s.xp+=xpGain(s,8);s.rank=rankOf(s);const file=(s.cases??[]).find(c=>c.id===t.from);if(file)file.status='Пациент передан в приёмное отделение';log(s,`${u.name}: пациент передан врачам приёмного отделения, карта вызова заполнена. Свободны.`);return true;}
+   addTrust(s,CUSTODY_REWARD.trust);const d=ensureDistricts(s);if(t&&d[t.district]!==undefined)d[t.district]=Math.min(100,d[t.district]+CUSTODY_REWARD.district);if(u.id===1||s.mode==='chief')s.xp+=xpGain(s,CUSTODY_REWARD.xp);s.rank=rankOf(s);s.custodyDone=(s.custodyDone??0)+1;
+-  const file=(s.cases??[]).find(c=>c.id===t?.from);if(file)file.status='Передано дежурному';radio(s,'handover',u,null);log(s,`${u.name}: рапорт по вызову №${t?.from} составлен, дело передано. Возвращаемся к патрулю.`);return true;}
++  const placed=!t?.transfer&&ivsPlace(s,t?.label);if(placed)log(s,`ИВС: задержанный по вызову №${t?.from} в камере (${ivsCount(s)}/${IVS.capacity}), материалы — следователю.`);
++  const file=(s.cases??[]).find(c=>c.id===t?.from);if(file)file.status=t?.transfer?'Переведён в ИВС префектуры':'Передано дежурному';radio(s,'handover',u,null);log(s,`${u.name}: рапорт по вызову №${t?.from} составлен, дело передано. Возвращаемся к патрулю.`);return true;}
+  return false;}
+ 
+ // Player choice at the scene (manual crews): arrest or release with a warning.
+diff -ruN a/dist/station.js b/dist/station.js
+--- a/dist/station.js	1970-01-01 03:00:00.000000000 +0300
++++ b/dist/station.js	2026-10-22 21:41:38.872100063 +0300
+@@ -0,0 +1,11 @@
++// Claude 22.10.2026 (City 2.0 «Участок»). Owner: «небольшой полицейский участок: патрульные, задержанные, участковые и
++// следователь». The detention block (ИВС) behind the station has six places; a detainee handed to the duty officer goes
++// into a cell for the rest of the shift (the case goes to the investigator, the court takes him next day). When the cells
++// are full the crew draws up a transfer to the prefecture's ИВС — a longer handover. The block is emptied every shift.
++export const IVS=Object.freeze({capacity:6,transferTime:2.5});
++export const ivsCount=s=>s?.ivs?.held?.length??0;
++export const ivsFull=s=>ivsCount(s)>=IVS.capacity;
++export function ivsPlace(s,label){if(!s.ivs||!Array.isArray(s.ivs.held))s.ivs={held:[]};if(ivsFull(s))return false;s.ivs.held.push({label:String(label??'').slice(0,100),at:Math.max(0,Math.round(s.time??0))});return true;}
++export const validIvs=s=>s?.ivs===undefined||!!s.ivs&&typeof s.ivs==='object'&&Array.isArray(s.ivs.held)&&s.ivs.held.length<=IVS.capacity&&s.ivs.held.every(h=>h&&typeof h.label==='string'&&h.label.length<=100&&Number.isInteger(h.at)&&h.at>=0&&h.at<=100000);
++// The district officer (участковый): his own district is the one he lives in.
++export const DISTRICT_OFFICER=Object.freeze({trust:1});
+diff -ruN a/tests/station.test.mjs b/tests/station.test.mjs
+--- a/tests/station.test.mjs	1970-01-01 03:00:00.000000000 +0300
++++ b/tests/station.test.mjs	2026-10-22 21:42:42.629508737 +0300
+@@ -0,0 +1,45 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,spawnIncident,tick,serialize,deserialize,assign,districtTrust,districtOf} from '../dist/sim.js';
++import {custodyFor,HANDOVER_TIME} from '../dist/calls.js';
++import {NODES} from '../dist/geography.js';
++import {IVS,ivsPlace,ivsCount,ivsFull,validIvs} from '../dist/station.js';
++import {ROLES,COURSES,roleBlocker,roleBonus} from '../dist/life.js';
++import {HOMES} from '../dist/home.js';
++// Claude 22.10 (City 2.0 «Участок»): the station's detention block and the district officer.
++
++test('the detention block holds six detainees and validates what it keeps',()=>{
++ const s={time:12};for(let k=0;k<IVS.capacity;k++)assert.equal(ivsPlace(s,'Драка №'+k),true);
++ assert.equal(ivsFull(s),true);assert.equal(ivsPlace(s,'седьмой'),false);assert.equal(ivsCount(s),6);assert.equal(validIvs(s),true);
++ assert.equal(validIvs({ivs:{held:new Array(7).fill({label:'x',at:1})}}),false);assert.equal(validIvs({ivs:{held:[{label:5,at:1}]}}),false);assert.equal(validIvs({}),true);
++});
++
++function arrest(fill){
++ for(let seed=1;seed<60;seed++){const s=createGame();s.seed=seed;s.nextIncident=9000;if(fill)s.ivs={held:Array.from({length:fill},(_,k)=>({label:'Ранее №'+k,at:1}))};const a=NODES[(seed*7)%NODES.length];
++  const i=spawnIncident(s,null,{variant:'street-fight',point:{x:a.x,y:a.y}});for(let k=0;k<6000&&!['resolved','missed'].includes(i.state);k++)tick(s,.1);
++  if(i.state==='resolved'&&custodyFor(i.variant,i.decision))return {s,i};}
++ return null;
++}
++test('an arrest ends in a cell of the station; when the cells are full the detainee is transferred to the prefecture',()=>{
++ const r=arrest(0);assert.ok(r);const {s,i}=r,u=s.units.find(x=>x.transport?.from===i.id);assert.ok(u);
++ let handover=0;for(let k=0;k<20000&&u.transport;k++){tick(s,.1);if(u.status==='handover')handover=Math.max(handover,u.handover??0);}
++ assert.equal(ivsCount(s),1);assert.ok(s.logs.some(l=>/ИВС: задержанный по вызову/.test(l.text)));assert.ok(handover<=HANDOVER_TIME+1e-9);
++ assert.deepEqual(deserialize(serialize(s)).ivs,s.ivs);
++ const f=arrest(IVS.capacity);assert.ok(f);const v=f.s.units.find(x=>x.transport?.from===f.i.id);let long=0;
++ for(let k=0;k<30000&&v.transport;k++){tick(f.s,.1);if(v.status==='handover')long=Math.max(long,v.handover??0);}
++ assert.ok(long>HANDOVER_TIME*2);assert.equal(ivsCount(f.s),IVS.capacity);assert.ok(f.s.logs.some(l=>/ИВС участка заполнен/.test(l.text)));
++ const file=(f.s.cases??[]).find(c=>c.id===f.i.id);if(file)assert.equal(file.status,'Переведён в ИВС префектуры');
++});
++
++test('the district officer: a role behind its own course, faster on neighbourhood calls, his district trusts him twice as fast',()=>{
++ assert.equal(ROLES.district.course,'community');assert.ok(COURSES.community);
++ const life={agency:'police',courses:{},fitness:60};assert.match(roleBlocker(life,'district',1,1),/Работа участкового/);life.courses.community=1;assert.equal(roleBlocker(life,'district',1,1),null);assert.match(roleBlocker(life,'district',0,1),/звание/);
++ assert.equal(roleBonus({role:'district'},'noise-flat'),1.35);assert.equal(roleBonus({role:'district'},'crash'),1);
++ const gain=role=>{const s=createGame('career',7182,{schedule:'ppa',service:'police'});s.nextIncident=9000;s.units.forEach(u=>u.auto=false);
++  const i=spawnIncident(s,null,{variant:'noise-flat',point:{x:NODES[0].x,y:NODES[0].y}}),d=districtOf(i);
++  s.life.role=role;s.life.home=Object.keys(HOMES).find(h=>HOMES[h].district===d);assert.ok(s.life.home,'a home in '+d);s.districts[d]=40;
++  assign(s,1,i.id,true);s.units[0].auto=true;const before=districtTrust(s,d);
++  for(let k=0;k<4000&&!['resolved','missed'].includes(i.state);k++)tick(s,.1);
++  return {ok:i.state==='resolved'&&i.units.includes(1),d:districtTrust(s,d)-before};};
++ const own=gain('district'),plain=gain(undefined);
++ assert.ok(own.ok&&plain.ok,'both calls closed by the player');assert.ok(own.d>plain.d*1.5,`${own.d} vs ${plain.d}`);
++});

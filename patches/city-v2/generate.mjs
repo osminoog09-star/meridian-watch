@@ -164,7 +164,7 @@ export function generate(){
  const insidePoly=(p,poly)=>{let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c;}return c;};
  const overlapsBuilding=poly=>{const ctr=mul(poly.reduce((s,p)=>add(s,p),[0,0]),1/poly.length),rad=Math.max(...poly.map(p=>dist(p,ctr)));for(let x=Math.floor((ctr[0]-80)/rc);x<=Math.floor((ctr[0]+80)/rc);x++)for(let y=Math.floor((ctr[1]-80)/rc);y<=Math.floor((ctr[1]+80)/rc);y++)for(const o of bgrid.get(rkey(x,y))??[]){if(dist(o.ctr,ctr)>o.rad+rad+1)continue;if(polysOverlap(o.poly,poly))return true;}return false;};
  const polysOverlap=(A,B)=>{for(const poly of [A,B])for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],ax=[-(b[1]-a[1]),b[0]-a[0]];const pa=A.map(p=>p[0]*ax[0]+p[1]*ax[1]),pb=B.map(p=>p[0]*ax[0]+p[1]*ax[1]);if(Math.max(...pa)<Math.min(...pb)-1.5||Math.max(...pb)<Math.min(...pa)-1.5)return false;}return true;};
- const place=(poly,floors,kind,d,name='',outside=false)=>{if(!name&&parks.some(pk=>poly.some(p=>insidePoly(p,pk))))return false;if(poly.some(p=>!(outside||insideTown(p))||riverDist(p)<RIVER_HALF+8||railDist(p)<12))return false;if(!clearRoads(poly))return false;if(overlapsBuilding(poly))return false;
+ const place=(poly,floors,kind,d,name='',outside=false)=>{if(!name&&parks.some(pk=>poly.some(p=>insidePoly(p,pk))))return false;if(poly.some(p=>!(outside||insideTown(p))||riverDist(p)<RIVER_HALF+8||railDist(p)<(name==='Железнодорожный вокзал'?7:12)))return false;if(!clearRoads(poly))return false;if(overlapsBuilding(poly))return false;
   const ctr=mul(poly.reduce((s,p)=>add(s,p),[0,0]),1/poly.length),rad=Math.max(...poly.map(p=>dist(p,ctr)));const k=rkey(Math.floor(ctr[0]/rc),Math.floor(ctr[1]/rc));if(!bgrid.has(k))bgrid.set(k,[]);bgrid.get(k).push({poly,ctr,rad});
   buildings.push({id:'v2-building-'+buildings.length,p:poly.map(P),h:floors,kind,district:d,name});return true;};
  const rect=(c,dir,w,dpt)=>{const u=norm(dir),v=perp(u);return [add(add(c,mul(u,-w/2)),mul(v,-dpt/2)),add(add(c,mul(u,w/2)),mul(v,-dpt/2)),add(add(c,mul(u,w/2)),mul(v,dpt/2)),add(add(c,mul(u,-w/2)),mul(v,dpt/2))];};
@@ -193,16 +193,16 @@ export function generate(){
  frontage([sq[0],sq[1]-110],['secondary','residential','living_street'],52,24,3,'civic','Ратуша',{setback:4});
  frontage([sq[0]-130,sq[1]-70],['secondary','residential','living_street'],34,20,2,'museum','Городской музей',{setback:4});
  frontage([sq[0]+150,sq[1]-60],['secondary','residential','primary'],40,18,1,'bus_station','Автовокзал',{setback:6});
- frontage([STATION[0],STATION[1]-10],['secondary'],56,16,2,'train_station','Железнодорожный вокзал',{setback:5});
+ frontage([[STATION[0],STATION[1]+10],[STATION[0]+60,STATION[1]],[STATION[0]-60,STATION[1]+20],[STATION[0]+120,STATION[1]-10],[-120,-700]],['secondary','primary','residential'],40,14,2,'train_station','Железнодорожный вокзал',{setback:4});
  frontage([sq[0]-60,sq[1]+150],['secondary','residential'],38,26,3,'school','Школа',{setback:10});
  frontage([sq[0]-180,sq[1]+40],['secondary','residential','living_street'],20,30,4,'church','Церковь',{setback:8});
  frontage([sq[0]+110,sq[1]+60],['primary','secondary'],22,14,2,'commercial','Бар «Мост»',{setback:3});
  frontage([sq[0]+20,sq[1]+90],['secondary','residential','living_street'],44,18,2,'retail','Рынок',{setback:5});
  frontage([1000,700],['secondary'],60,30,2,'retail','Торговый центр «Майский»',{setback:16});
- frontage([1150,-1000],['secondary'],60,34,2,'industrial','Лесопильный завод',{setback:14});
+ frontage([[1150,-1000],[900,-1150],[1250,-850],[700,-1050]],['secondary','residential'],50,30,2,'industrial','Лесопильный завод',{setback:10});
  frontage([500,-900],['secondary'],40,22,1,'industrial','Депо',{setback:10});
- frontage([1300,-600],['secondary','primary'],24,14,1,'retail','АЗС',{setback:10});
- frontage([980,160],['secondary'],44,26,3,'school','Школа «Заречье»',{setback:12});
+ frontage([[1300,-60],[1450,-60],[1200,-50],[1300,-600]],['primary','secondary'],22,12,1,'retail','АЗС',{setback:8});
+ frontage([[980,160],[1100,300],[900,-300],[1200,700],[1050,-50]],['secondary','service','residential'],40,22,3,'school','Школа «Заречье»',{setback:10});
  for(const k of Object.keys(BASES))if(!BASES[k]){if(process.env.CITY_DEBUG)console.error('base not placed: '+k);else throw Error('base not placed: '+k);}
  // district lots
  const STYLE={

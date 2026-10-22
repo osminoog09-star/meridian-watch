@@ -25,6 +25,12 @@ export async function claudeSteps(js,native,city){
  // the landmarks of the new plan: the ambulance post gets its own sign (the detention block is behind the station, under its sign)
  const at=name=>{const c=city.civic.find(x=>x.name===name);if(!c)throw Error('civic '+name);return `x:1.55+${c.entrance[0]}/1670,y:2.52+${c.entrance[1]}/1670`;};
  edit(path.join(native,'ui/map-view.js'),[["{kind:'hospital',...HOSPITAL,label:'Больница'}];","{kind:'hospital',...HOSPITAL,label:'Больница'},{kind:'ems',"+at('Опорный пункт скорой помощи')+",label:'Скорая · опорный пункт'}];"],["label:'Префектура · ГБР'","label:'Пост ГБР префектуры'"]]);
+ // the signs of the named buildings (railway and bus station, town hall, schools, market…) over their roofs
+ const SERVICES=['police','hospital','ambulance','fire_station'];
+ const signs=city.buildings.filter(b=>b.name&&!SERVICES.includes(b.kind)).map(b=>{const c=b.p.reduce((a,p)=>[a[0]+p[0]/b.p.length,a[1]+p[1]/b.p.length],[0,0]);return {name:b.name,kind:b.kind,x:Math.round(c[0]*10)/10,z:Math.round(c[1]*10)/10,top:b.h*3};});
+ fs.writeFileSync(path.join(native,'assets/signs.json'),JSON.stringify(signs));
+ for(const [from,to] of [['civic_signs.gd','scripts/civic_signs.gd'],['verify_civic_signs.gd','scripts/verify_civic_signs.gd']])fs.copyFileSync(new URL('./native/'+from,import.meta.url),path.join(native,to));
+ edit(path.join(native,'scripts/map.gd'),[[' landmarks = preload("res://scripts/landmarks.gd").new()\n add_child(landmarks)\n',' landmarks = preload("res://scripts/landmarks.gd").new()\n add_child(landmarks)\n add_child(preload("res://scripts/civic_signs.gd").new())\n']]);
  edit(path.join(native,'scripts/landmarks.gd'),[['"gbr":["1d2a44","Префектура · ГБР"],','"gbr":["1d2a44","Пост ГБР префектуры"],"ems":["f4f4f4","Скорая · опорный пункт"],"ivs":["5a7fc0","ИВС · задержанные"],']]);
  edit(path.join(native,'scripts/city_geometry.gd'),[
   [" if family==\"house\" or float(b.height)<8.0:\n  var wood := [\"b8a27f\",\"8c6d4f\",\"c9b48e\",\"a7b7a3\",\"b9483d\",\"d9d2c0\",\"7f8f9a\"]\n  wall = Color(wood[h%wood.size()])",
