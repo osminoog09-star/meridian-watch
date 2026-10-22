@@ -12,7 +12,9 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
+    env:
+      GODOT: 4.7.2
     steps:
       - uses: actions/checkout@v5
         with:
@@ -21,6 +23,7 @@ jobs:
         with:
           node-version: '22'
       - name: Reconstruct pinned sources and prepare City V2
+        id: prepare
         run: |
           python3 tools/city-v2/reconstruct.py build-js
           unzip -q Mercury_Native_Map_Checkpoint.zip -d build
@@ -32,6 +35,7 @@ jobs:
           cd build-js
           npm test
       - name: Godot and virtual display
+        id: engine
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y xvfb libgl1-mesa-dri
@@ -47,6 +51,7 @@ jobs:
           node tools/audit_service_long_shift.mjs
           "$GODOT_BIN" --headless --path . --script tools/audit_service_long_shift.gd
       - name: Portrait and landscape captures
+        if: "${{ !cancelled() && steps.prepare.outcome == 'success' && steps.engine.outcome == 'success' }}"
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: |
@@ -68,4 +73,96 @@ jobs:
             captures/
             build/native-map/audit/*.log
             build/native-map/audit/migration-audit.json
+            build/native-map/audit/long-diff-*.json
+          retention-days: 14
+      - name: Package verified native checkpoint
+        run: python3 tools/city-v2/pack.py Mercury_Native_Map_Checkpoint.zip build/native-map out/Mercury_Native_Map_Checkpoint.zip
+      - name: Candidate version
+        id: v
+        run: |
+          python3 - <<'PYCODE'
+          import json,os,urllib.request
+          url='https://raw.githubusercontent.com/osminoog09-star/meridian-watch-apk/main/android/update.json'
+          with urllib.request.urlopen(url) as response: code=int(json.load(response)['versionCode'])+1
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write(f'code={code}\nname=0.4.{code}-city-v2-part1\n')
+          PYCODE
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK packages (preinstalled SDK on the runner)
+        run: |
+          SM=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+          echo "ANDROID_HOME=$ANDROID_HOME"; ls $ANDROID_HOME/build-tools | tail -3; ls $ANDROID_HOME/platforms | tail -3
+          yes | $SM --licenses >/dev/null || true
+          $SM "platform-tools" "platforms;android-35" "build-tools;35.0.0" > $RUNNER_TEMP/sdk.log 2>&1 || { echo "::error::sdkmanager: $(tail -3 $RUNNER_TEMP/sdk.log | tr '\n' ' ')"; exit 1; }
+      - name: Godot and export templates
+        run: |
+          mkdir -p ~/godot && cd ~/godot
+          curl -sSLo g.zip https://github.com/godotengine/godot-builds/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_linux.x86_64.zip
+          unzip -q g.zip && mv Godot_v${GODOT}-stable_linux.x86_64 godot && chmod +x godot
+          curl -sSLo t.tpz https://github.com/godotengine/godot-builds/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_export_templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates && unzip -q t.tpz -d ~/.local/share/godot/export_templates
+          mv ~/.local/share/godot/export_templates/templates ~/.local/share/godot/export_templates/${GODOT}.stable
+      - name: Build the MercuryAndroid bridge from source (updater, migration, device metrics)
+        shell: bash
+        run: |
+          mkdir -p $RUNNER_TEMP/bridge && cd $RUNNER_TEMP/bridge
+          unzip -q ~/.local/share/godot/export_templates/${GODOT}.stable/android_source.zip -d src
+          AAR=$(find src -name "godot-lib*release*.aar" | head -1); echo "::notice::godot-lib: $AAR"
+          curl -sSLo ecj.jar https://repo1.maven.org/maven2/org/eclipse/jdt/ecj/3.33.0/ecj-3.33.0.jar
+          export ANDROID_JAR=$ANDROID_HOME/platforms/android-35/android.jar ANDROID_LAMBDA_STUBS=$ANDROID_HOME/build-tools/35.0.0/core-lambda-stubs.jar GODOT_ANDROID_AAR=$AAR ECJ_JAR=$PWD/ecj.jar
+          python3 $GITHUB_WORKSPACE/build/native-map/android-bridge/build.py > bridge.log 2>&1 || { echo "::error::bridge: $(tail -20 bridge.log | tr '\n' ' ' | cut -c1-1500)"; exit 1; }
+          ls -la $GITHUB_WORKSPACE/build/native-map/addons/mercury_android/MercuryAndroid.aar
+      - name: Keystore
+        id: key
+        run: |
+          test -f ci/signing/mercury-release.keystore || { echo "::error::Existing ci/signing key is required"; exit 1; }
+          cp ci/signing/mercury-release.keystore "$RUNNER_TEMP/release.keystore"
+          python3 - <<'PYCODE'
+          import json,os
+          from pathlib import Path
+          key=json.loads(Path('ci/signing/signing.json').read_text())
+          with open(os.environ['GITHUB_ENV'],'a') as env:
+           env.write('GODOT_ANDROID_KEYSTORE_RELEASE_PATH='+os.environ['RUNNER_TEMP']+'/release.keystore\n')
+           env.write('GODOT_ANDROID_KEYSTORE_RELEASE_USER='+key['alias']+'\n')
+           env.write('GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD='+key['password']+'\n')
+          print('::add-mask::'+key['password'])
+          PYCODE
+          echo "official=yes" >> "$GITHUB_OUTPUT"
+      - name: Export
+        shell: bash
+        run: |
+          cd build/native-map
+          export XDG_CONFIG_HOME=$RUNNER_TEMP/config
+          python3 ../../ci/android_presets.py . --version-code ${{ steps.v.outputs.code }} --version-name ${{ steps.v.outputs.name }} --out $GITHUB_WORKSPACE/out/mercury.apk --config $XDG_CONFIG_HOME
+          mkdir -p $GITHUB_WORKSPACE/out
+          step(){ name=$1; shift; start=$(date +%s); rc=0; timeout $1 "${@:2}" > $RUNNER_TEMP/$name.log 2>&1 || rc=$?; echo "::notice::$name: exit $rc after $(($(date +%s)-start)) s; tail: $(tail -6 $RUNNER_TEMP/$name.log | tr '\n' ' ' | cut -c1-900)"; return 0; }
+          step import 900 ~/godot/godot --headless --path . --import
+          step export 1500 ~/godot/godot --headless --path . --install-android-build-template --export-release "Android" $GITHUB_WORKSPACE/out/mercury.apk
+          if [ ! -s $GITHUB_WORKSPACE/out/mercury.apk ]; then
+            grep -iE "error|fail|exception|could not|unable" $RUNNER_TEMP/export.log | head -25 | while read -r l; do echo "::error::$l"; done
+            echo "::error::export log tail: $(tail -15 $RUNNER_TEMP/export.log | tr '\n' ' ' | cut -c1-1500)"
+            exit 1
+          fi
+      - name: Check the APK
+        id: check
+        run: |
+          BT=$ANDROID_HOME/build-tools/35.0.0
+          $BT/apksigner verify --print-certs out/mercury.apk | tee out/certificate.txt
+          # the published APKs (13, 14) are signed with this certificate; another key cannot update the installed game
+          OFFICIAL="0fdf02f8d7e3aaa79d0d571d46da8689b8a83348cd10df32267bdc786777232b 601ca75c9085929a09d63117ba5462b2e12b01f2be183ba742b5b8c19a5ce358"
+          got=$(grep -i "SHA-256 digest" out/certificate.txt | head -1 | awk '{print $NF}' | tr 'A-F' 'a-f')
+          echo "::notice::certificate SHA-256 $got"
+          if [ "${{ steps.key.outputs.official }}" = "yes" ] && ! echo "$OFFICIAL" | grep -qw "$got"; then echo "::error::the keystore in the secrets is not the key of the published APKs"; exit 1; fi
+          $BT/aapt dump badging out/mercury.apk | head -3 | tee out/badging.txt
+          unzip -l out/mercury.apk | grep -E "libmercury_quickjs|classes.dex" | tee out/contents.txt
+          grep -q libmercury_quickjs out/contents.txt
+          name=Mercury_Response_${{ steps.v.outputs.code }}${{ steps.key.outputs.official != 'yes' && '_TEST' || '' }}.apk
+          mv out/mercury.apk out/$name && (cd out && sha256sum $name | tee $name.sha256)
+          echo "file=$name" >> $GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: city-v2-signed-candidate
+          path: out/
           retention-days: 14
