@@ -1,0 +1,22 @@
+--- c6nat/ui/map-view.js	2026-10-22 21:20:35.305381236 +0300
++++ c7nat/ui/map-view.js	2026-10-22 21:43:05.583116159 +0300
+@@ -13,7 +13,7 @@
+ import {callsign,serviceCallsign} from './source/radio.js';
+ import {byId,point} from './source/geography.js';
+ /* Claude 17.10 (Release R4 «Город 2.0»): the places that matter, for the landmark masts and signs */
+-function placesOf(state){const out=[{kind:'hq',...HQ,label:'Полицейский участок'},{kind:'fire',...FIRE_STATION,label:'Пожарная часть'},{kind:'hospital',...HOSPITAL,label:'Больница'},{kind:'ems',x:1.55+965.348/1670,y:2.52+-10.728/1670,label:'Скорая · опорный пункт'}];if(prefectureOn(state))out.push({kind:'gbr',...GBR_BASE,label:'Пост ГБР префектуры'});if(state.mode==='career'&&state.life&&state.schedule==='ppa'){const h=homeOf(state.life),p=point(byId(h.district));out.push({kind:'home',x:p.x+.004,y:p.y+.003,label:'Ваш дом'});}return out;}
++function placesOf(state){const out=[{kind:'hq',...HQ,label:'Полицейский участок'+(state.ivs?.held?.length?` · ИВС ${state.ivs.held.length}/6`:'')},{kind:'fire',...FIRE_STATION,label:'Пожарная часть'},{kind:'hospital',...HOSPITAL,label:'Больница'},{kind:'ems',x:1.55+965.348/1670,y:2.52+-10.728/1670,label:'Скорая · опорный пункт'}];if(prefectureOn(state))out.push({kind:'gbr',...GBR_BASE,label:'Пост ГБР префектуры'});if(state.mode==='career'&&state.life&&state.schedule==='ppa'){const h=homeOf(state.life),p=point(byId(h.district));out.push({kind:'home',x:p.x+.004,y:p.y+.003,label:'Ваш дом'});}return out;}
+ import {streetPlan,planPosition,streetPending,cityClock} from './source/cityday.js';
+ /* Claude 17.10 (Release O3 «Живой город»): citizens of the registry on the streets near the camera, refreshed twice a second */
+ let street=[],streetAt=null;const PALETTE=['#c6a7e9','#ddcfa6','#9bbade','#ccaaa7','#a9d3b4','#e0c08a','#b7b7c9','#d7a3b8'];
+--- c6nat/scripts/landmarks.gd	2026-10-22 21:20:35.298451703 +0300
++++ c7nat/scripts/landmarks.gd	2026-10-22 21:43:05.583335629 +0300
+@@ -18,7 +18,7 @@
+   return
+  var seen := {}
+  for place in places:
+-  var key := str(place.get("kind",""))+"@"+str(snappedf(float(place.get("x",0)),0.0001))+","+str(snappedf(float(place.get("y",0)),0.0001))
++  var key := str(place.get("label",""))+"|"+str(place.get("kind",""))+"@"+str(snappedf(float(place.get("x",0)),0.0001))+","+str(snappedf(float(place.get("y",0)),0.0001))
+   seen[key] = true
+   if built.has(key):
+    continue
