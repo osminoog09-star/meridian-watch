@@ -68,22 +68,14 @@
     '
 - name: Keystore
   id: key
-  env:
-    KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-    KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-    KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-  run: "if [ -z \"$KS\" ] && [ -f ci/signing/mercury-release.keystore ]; then\n  #\
-    \ the project key made on the owner's request 16.10 (kept in this private repository;\
-    \ move it to Secrets when possible)\n  KS=$(base64 -w0 ci/signing/mercury-release.keystore);\
-    \ KS_PASS=$(python3 -c \"import json;print(json.load(open('ci/signing/signing.json'))['password'])\"\
-    ); KS_ALIAS=$(python3 -c \"import json;print(json.load(open('ci/signing/signing.json'))['alias'])\"\
-    )\nfi\nif [ -n \"$KS\" ]; then\n  echo \"$KS\" | base64 -d > $RUNNER_TEMP/release.keystore\n\
-    \  echo \"GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$RUNNER_TEMP/release.keystore\"\
-    \ >> $GITHUB_ENV\n  echo \"GODOT_ANDROID_KEYSTORE_RELEASE_USER=$KS_ALIAS\" >>\
-    \ $GITHUB_ENV\n  echo \"GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$KS_PASS\" >>\
-    \ $GITHUB_ENV\n  echo \"official=yes\" >> $GITHUB_OUTPUT\nelse\n  echo \"::error::Existing\
-    \ release signing key is required; no replacement key will be generated.\"\n \
-    \ exit 1\nfi\n"
+  run: "test -f ci/signing/mercury-release.keystore || { echo \"::error::Existing\
+    \ ci/signing key is required\"; exit 1; }\ncp ci/signing/mercury-release.keystore\
+    \ \"$RUNNER_TEMP/release.keystore\"\npython3 - <<'PYCODE'\nimport json,os\nfrom\
+    \ pathlib import Path\nkey=json.loads(Path('ci/signing/signing.json').read_text())\n\
+    with open(os.environ['GITHUB_ENV'],'a') as env:\n env.write('GODOT_ANDROID_KEYSTORE_RELEASE_PATH='+os.environ['RUNNER_TEMP']+'/release.keystore\\\
+    n')\n env.write('GODOT_ANDROID_KEYSTORE_RELEASE_USER='+key['alias']+'\\n')\n env.write('GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD='+key['password']+'\\\
+    n')\nprint('::add-mask::'+key['password'])\nPYCODE\necho \"official=yes\" >> \"\
+    $GITHUB_OUTPUT\"\n"
 - name: Export
   shell: bash
   run: "cd build/native-map\nexport XDG_CONFIG_HOME=$RUNNER_TEMP/config\npython3 ../../ci/android_presets.py\

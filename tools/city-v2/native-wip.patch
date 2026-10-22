@@ -73,3 +73,13 @@
   scene._process(1.0/30.0)
   var moved := 0
   var between_snapshots := 0
+--- a/tools/audit_service_long_shift.gd
++++ b/tools/audit_service_long_shift.gd
+@@ -22,6 +22,7 @@
+  for f in fixtures:
+   for req in f.requests:core.invoke(req)
+   if not eq(core.state(),f.state):
++   FileAccess.open("res://audit/long-diff-"+f.mode+"-"+f.service+".json",FileAccess.WRITE).store_string(JSON.stringify({"actual":core.state(),"expected":f.state}))
+    push_error("Two-shift parity failed: "+f.mode+" / "+f.service)
+    quit(2);return
+   print("PASS two complete shifts: ",f.mode," / ",f.service)

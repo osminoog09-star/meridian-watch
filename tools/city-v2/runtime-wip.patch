@@ -55,12 +55,13 @@
  // Zones are described without a city name.
 --- a/dist/sim.js
 +++ b/dist/sim.js
-@@ -1,3 +1,4 @@
+@@ -1,3 +1,5 @@
++import {MAP_METRES} from './world-scale.js';
 +import {migrateCityV2Population} from './city-v2-migration.js';
  import {urgentMovement} from './response-priority.js';import {setSirens} from './visits.js';
  import {recordAssessment,completeAssessment,developmentBonus,validAssessment} from './professional.js';
  import {ensureTraining,trainingEvent,validTraining} from './training.js';
-@@ -206,16 +207,16 @@
+@@ -206,16 +208,16 @@
  }
  export function serialize(s){return JSON.stringify(s);}
  export function deserialize(raw){
@@ -81,7 +82,7 @@
  }
  import {departmentIndex,ensureStaff,syncCrew,tickStaff,crewNeedsRest,crewReady,prepareStaffShift,validStaff} from './staff.js';
  import {walkAccess,beginPoliceWalk,crewAtScene,returnPoliceWalk,tickPoliceWalk,policeWalkReason,validPoliceWalk} from './police-walk.js';
-@@ -299,7 +300,7 @@
+@@ -299,7 +301,7 @@
  // 0.7.1 v1 ambulance service: hospital -> scene (treat) -> hospital (handover) -> done.
  /* Claude 17.10 (owner: «ГБР и больница в странных местах»): the bases stand at real buildings of the map — the hospital
     complex, a depot on Uus-Sauga, the prefecture team's base in the south-east quarter — at the driveway to each, not at district centres */
@@ -90,7 +91,7 @@
  /* Release J: the 112 desk — who may take a call, a crew sent to the wrong kind of call, the operators */
  function dispatchReady(s,u,i){if(!isDispatch(s))return true;const c=i.call;return !!c&&c.status==='routed'&&s.time>=(c.release??0)&&c.sent===unitAgency(s,u);}
  function wrongCrew(s,u,i){if(!isDispatch(s)||unitAgency(s,u)===typeAgency(i.type))return false;const right=typeAgency(i.type);pushRadio(s,callsign(u),`На месте. Это не наш вызов — нужна ${SERVICES[right].toLowerCase()}. Передайте в 112.`);log(s,`${u.name}: вызов №${i.id} не по профилю, нужна ${SERVICES[right].toLowerCase()}. Вызов передан заново.`);
-@@ -355,9 +356,9 @@
+@@ -355,9 +357,9 @@
  export const serviceStatus=a=>SERVICE_TEXT[a.kind??'ambulance']?.[a.status]??'';
  
  // 0.7.2 v1 rescue service: station -> scene (safe zone, work) -> station.
@@ -102,6 +103,17 @@
  /* Release M: the command centre sends the rapid response team (the player's car if the player serves in it) and, at a barricade, K-Komando */
  function stormNote(s,i){if(i.stormed||!gbrStorms(i,i.age*WORLD_SECONDS_PER_TICK_SECOND/60)||kkOnScene(i))return;i.stormed=true;log(s,`ГБР: на вызове №${i.id} угроза жизни заложника — действуем сами, не дожидаясь K-Komando.`);pushRadio(s,'ГБР','Угроза жизни, заходим. Оцепление держать.');}
  function prefectureCalls(s){for(const i of s.incidents){if(['resolved','missed'].includes(i.state))continue;
+@@ -621,7 +623,9 @@
+  return Array.isArray(s.cases)&&s.cases.length<=CASE_LIMIT&&s.cases.every(c=>Number.isInteger(c.id)&&str(c.name,160)&&str(c.district,40)&&Number.isFinite(c.time)&&typeof c.success==='boolean'&&(c.decision===null||str(c.decision,160))&&[null,'arrest','warn'].includes(c.custody)&&typeof c.medical==='boolean'&&(c.rescue===undefined||typeof c.rescue==='boolean')&&(c.lead===undefined||typeof c.lead==='boolean')&&(c.protocol===undefined||str(c.protocol,160))&&(c.fromShift===undefined||Number.isInteger(c.fromShift)&&c.fromShift>=1&&c.fromShift<=s.shift)&&(c.evidence===undefined||c.evidence===null||str(c.evidence,80))&&(c.repeatOf===null||Number.isInteger(c.repeatOf))&&str(c.outcome,160)&&str(c.status,60));}
+ 
+ // R13 patrol work between calls (patrolwork.js). Roster campaigns only.
+-function taskPlace(u,id,district=null){const place=TASKS[id].place;if(place==='station')return HQ;const list=placeNodes(NODES,place,byId('centre')).filter(p=>district?districtOf(p)===district:u.zone==='all'||!p.sector||p.sector===u.zone);const pool=list.length?list:NODES;return pool.reduce((b,p)=>Math.hypot(p.x-u.x,p.y-u.y)<Math.hypot(b.x-u.x,b.y-u.y)?p:b,pool[0]);}
++// Millimetre precision gives symmetric authored blocks the same tie-break in V8 and QuickJS.
++const taskDistance=(a,b)=>Math.round(Math.hypot(a.x-b.x,a.y-b.y)*MAP_METRES*1000);
++function taskPlace(u,id,district=null){const place=TASKS[id].place;if(place==='station')return HQ;const list=placeNodes(NODES,place,byId('centre')).filter(p=>district?districtOf(p)===district:u.zone==='all'||!p.sector||p.sector===u.zone);const pool=list.length?list:NODES;return pool.reduce((b,p)=>taskDistance(p,u)<taskDistance(b,u)?p:b,pool[0]);}
+ function startTask(s,u,id,auto=false,extra=null){if(!TASKS[id])return false;const fast=id==='breath-check'&&has(s,'breath'),c=extra?.caseId?s.life?.cases?.find(x=>x.id===extra.caseId):null;u.task={id,phase:'moving',left:taskTicks(id,fast),start:s.time,auto,...(c?{caseId:c.id}:{})};u.status='proactive';routeTo(u,taskPlace(u,id,c?.district));
+  if(c){log(s,`${u.name}: дело «${CASE_KINDS[c.kind].title}» — ${TASKS[id].short}.`);pushRadio(s,callsign(u),`Работаем по делу: ${TASKS[id].short}.`);return true;}
+  log(s,`${u.name}: ${auto?'вызовов нет — ':''}${TASKS[id].short}.`);pushRadio(s,callsign(u),`Свободны, встаём на ${TASKS[id].short}.`);u.tasksToday=(u.tasksToday??0)+1;return true;}
 --- a/dist/visits.js
 +++ b/dist/visits.js
 @@ -7,11 +7,7 @@
