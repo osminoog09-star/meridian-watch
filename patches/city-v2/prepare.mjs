@@ -17,6 +17,8 @@ fs.copyFileSync(path.join(tools,'verify-country.gd'),path.join(native,'tools/ver
 const city=generate();write(city,path.join(js,'dist'));
 for(const directory of ['simulation/source','ui/source'])for(const name of ['city-data.js','geography.js','quarter-data.js','walking-network.js','fiction.js','visits.js','sim.js','city-v2-migration.js'])fs.copyFileSync(path.join(js,'dist',name),path.join(native,directory,name));
 const {claudeSteps}=await import('./claude-steps.mjs');await claudeSteps(js,native,city);
+// Claude City 2.0 «Машины»: the car kit (town cars, parked cars, the bus), the ambulance van and the fire engine, W1 traffic and bus lines
+run('patch',['-p1','-i',path.join(tools,'native-cars.patch')],native);
 run('node',[path.join(native,'export-map.mjs'),js,'--full-city'],native);
 run('node',[path.join(native,'export-map.mjs'),js],native);
 const {default:walking}=await import(pathToFileURL(path.join(js,'dist/walking-network.js')));

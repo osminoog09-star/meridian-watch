@@ -124,7 +124,7 @@ export function generate(){
  const roads=[],nodes=new Map(),node=p=>{const k=P(p).join(',');if(!nodes.has(k))nodes.set(k,'v2-'+k);return nodes.get(k);};
  streets.forEach((st,si)=>{let pts=[];const mine=segs.map((g,k)=>[g,k]).filter(([g])=>g.si===si);mine.forEach(([g,k],n)=>{if(n===0){const s0=snaps.get(si+':'+st.pts[0].join(','));pts.push(s0??P(g.a));}const c=cuts[k].sort((a,b)=>a[0]-b[0]);for(const [,p] of c)pts.push(p);const last=n===mine.length-1;const s1=last?snaps.get(si+':'+st.pts.at(-1).join(',')):null;pts.push(s1??P(g.b));});
   pts=pts.filter((p,i)=>i===0||dist(p,pts[i-1])>0.5);if(pts.length<2)return;
-  const w=WIDTH[st.kind],speed=st.kind==='primary'?50:st.kind==='secondary'?40:st.kind==='service'?10:st.kind==='living_street'?20:30;
+  const w=st.name==='Ратушная площадь'?7:WIDTH[st.kind],speed=st.kind==='primary'?50:st.kind==='secondary'?40:st.kind==='service'?10:st.kind==='living_street'?20:30;
   roads.push({id:'v2-road-'+roads.length,p:pts,nodes:pts.map(node),kind:st.kind,name:st.name,drive:true,bridge:!!st.bridge,oneway:st.oneway??'no',width:w,speedTags:{maxspeed:String(speed)},...(st.junction?{junction:st.junction}:{})});});
  // exits beyond the town (for the countryside roads of G5)
  const EXITS=[['Северный тракт',[230,-1450],[300,-2750]],['Западный тракт',[-1560,10],[-1900,40]],['Восточный тракт',[1640,-60],[2000,-80]],['Южный тракт',[1080,1760],[1200,2150]]];

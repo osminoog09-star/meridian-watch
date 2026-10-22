@@ -1,0 +1,456 @@
+diff -ruN a/scripts/car_kit.gd b/scripts/car_kit.gd
+--- a/scripts/car_kit.gd	1970-01-01 03:00:00.000000000 +0300
++++ b/scripts/car_kit.gd	2026-10-22 21:20:09.163133869 +0300
+@@ -0,0 +1,160 @@
++extends RefCounted
++# Claude 22.10.2026 (City 2.0, «Машины»). Owner: «даже машины говно». A small kit of town cars with real shapes: a side
++# profile per body (hood, windscreen, roof, boot) extruded across the width, a glass greenhouse under a painted roof,
++# bumpers, lights and eight-sided wheels. Bodies: hatchback, sedan, wagon, delivery van, pickup and the town bus.
++# One mesh per (body, paint), cached by the callers; cheap enough for the phone (≈200–400 triangles a car).
++# The model's forward is +x, width along z, ground at y=0 (as actor-models.json). parked=true turns it to forward −z
++# (the MultiMesh basis of the parked cars) and keeps white paint for the per-instance tint.
++const Geometry = preload("res://scripts/city_geometry.gd")
++const BODIES := ["hatch","sedan","wagon","van","pickup"]
++const DARK := Color("23272a")
++const TRIM := Color("3a4045")
++const GLASS := Color("2d4652")
++const LIGHT := Color("fff1c4")
++const TAIL := Color("b5302c")
++var geo = Geometry.new()
++var turn := false
++func p3(x: float,y: float,z: float) -> Vector3:
++	return Vector3(z,y,-x) if turn else Vector3(x,y,z)
++# a side profile (x,y) extruded from z0 to z1
++func extrude(st: SurfaceTool,profile: Array,z0: float,z1: float,color: Color,side_color: Color = Color(0,0,0,0)) -> void:
++	var poly := PackedVector2Array()
++	for p in profile:
++		poly.append(p)
++	var area := 0.0
++	for i in range(poly.size()):
++		area += poly[i].cross(poly[(i+1)%poly.size()])
++	if area<0.0:
++		poly.reverse()
++	var tris := Geometry2D.triangulate_polygon(poly)
++	var sc: Color = side_color if side_color.a>0.0 else color
++	for zz in [z0,z1]:
++		var n := p3(0,0,signf(zz-(z0+z1)/2.0))-p3(0,0,0)
++		for i in range(0,tris.size(),3):
++			var a: Vector2 = poly[tris[i]]
++			var b: Vector2 = poly[tris[i+1]]
++			var c: Vector2 = poly[tris[i+2]]
++			geo.triangle(st,p3(a.x,a.y,zz),p3(b.x,b.y,zz),p3(c.x,c.y,zz),sc,n)
++	for i in range(poly.size()):
++		var a: Vector2 = poly[i]
++		var b: Vector2 = poly[(i+1)%poly.size()]
++		var e := b-a
++		var n2 := Vector2(e.y,-e.x).normalized()
++		var n := p3(n2.x,n2.y,0)-p3(0,0,0)
++		geo.quad(st,p3(a.x,a.y,z0),p3(b.x,b.y,z0),p3(b.x,b.y,z1),p3(a.x,a.y,z1),color,n)
++func box(st: SurfaceTool,x0: float,x1: float,y0: float,y1: float,z0: float,z1: float,color: Color) -> void:
++	extrude(st,[Vector2(x0,y0),Vector2(x1,y0),Vector2(x1,y1),Vector2(x0,y1)],z0,z1,color)
++func wheel(st: SurfaceTool,x: float,z: float,r: float,w: float) -> void:
++	var ring: Array = []
++	for k in range(8):
++		var a := TAU*(k+0.5)/8.0
++		ring.append(Vector2(x+cos(a)*r,r+sin(a)*r))
++	var zs := [z-w/2.0,z+w/2.0]
++	extrude(st,ring,zs[0],zs[1],DARK)
++	# the hub on the outer face
++	var hub: Array = []
++	for k in range(6):
++		var a := TAU*k/6.0
++		hub.append(Vector2(x+cos(a)*r*0.5,r+sin(a)*r*0.5))
++	var outer: float = zs[1]+0.01 if z>0 else zs[0]-0.03
++	extrude(st,hub,outer,outer+0.02,Color("9aa2a7"))
++# Body proportions: length, width, sill, belt, roof height, hood/screen/roof/rear-window points, wheel radius
++func spec(body: String) -> Dictionary:
++	match body:
++		"hatch":
++			return {"l":3.95,"w":1.74,"belt":0.88,"h":1.48,"cab":[1.0,0.25,-1.35,-1.85],"r":0.31,"nose":0.62,"tail":0.95}
++		"wagon":
++			return {"l":4.7,"w":1.82,"belt":0.9,"h":1.5,"cab":[1.05,0.3,-2.0,-2.25],"r":0.33,"nose":0.62,"tail":0.92}
++		"van":
++			return {"l":4.95,"w":1.96,"belt":1.05,"h":2.15,"cab":[1.85,1.35,-2.4,-2.45],"r":0.35,"nose":0.8,"tail":1.0}
++		"pickup":
++			return {"l":5.0,"w":1.88,"belt":1.0,"h":1.82,"cab":[1.15,0.5,-0.55,-0.7],"r":0.37,"nose":0.85,"tail":1.0}
++		_:
++			return {"l":4.55,"w":1.8,"belt":0.86,"h":1.44,"cab":[0.95,0.2,-0.95,-1.45],"r":0.32,"nose":0.6,"tail":0.84}
++func build(body: String,paint: Color,parked: bool = false) -> ArrayMesh:
++	turn = parked
++	var st := SurfaceTool.new()
++	st.begin(Mesh.PRIMITIVE_TRIANGLES)
++	geo.floor_height = 0.0
++	if body=="bus":
++		bus(st,paint)
++	else:
++		car(st,body,paint)
++	st.index()
++	geo.surface = 0.0
++	return st.commit()
++func car(st: SurfaceTool,body: String,paint: Color) -> void:
++	var s := spec(body)
++	var l: float = s.l
++	var w: float = s.w
++	var hl := l/2.0
++	var hw := w/2.0
++	var sill := 0.3
++	var belt: float = s.belt
++	var cab: Array = s.cab
++	geo.surface = 6.0
++	# the lower body: a sloped nose, a slightly higher tail, rounded corners in profile
++	var lower := [Vector2(-hl+0.05,sill),Vector2(hl-0.05,sill),Vector2(hl,s.nose-0.12),Vector2(hl-0.12,s.nose),Vector2(cab[0],belt),Vector2(cab[3],belt+0.02),Vector2(-hl+0.1,s.tail),Vector2(-hl,s.tail-0.15)]
++	if body=="pickup":
++		# the bed: the body behind the cab stays at belt height, open on top (dark floor)
++		lower = [Vector2(-hl+0.05,sill),Vector2(hl-0.05,sill),Vector2(hl,s.nose-0.12),Vector2(hl-0.12,s.nose),Vector2(cab[0],belt),Vector2(cab[3],belt),Vector2(-hl,belt),Vector2(-hl,sill+0.2)]
++	extrude(st,lower,-hw,hw,paint)
++	# the greenhouse: glass, under a painted roof
++	geo.surface = 7.0
++	var top: float = s.h
++	var inset := 0.1
++	extrude(st,[Vector2(cab[0],belt),Vector2(cab[1],top-0.05),Vector2(cab[2],top-0.05),Vector2(cab[3],belt)],-hw+inset,hw-inset,GLASS)
++	geo.surface = 6.0
++	extrude(st,[Vector2(cab[1]-0.04,top-0.06),Vector2(cab[2]+0.02,top-0.06),Vector2(cab[2]+0.06,top),Vector2(cab[1]-0.1,top)],-hw+inset-0.02,hw-inset+0.02,paint)
++	# pillars between the side windows
++	var mid: float = (cab[1]+cab[2])/2.0
++	for z in [-hw+inset-0.015,hw-inset+0.005]:
++		box(st,mid-0.05,mid+0.05,belt,top-0.06,z,z+0.01,paint)
++	if body=="van":
++		# a delivery van: blind side panels behind the doors
++		box(st,cab[2]+0.05,cab[1]-0.75,belt+0.02,top-0.08,-hw+inset-0.02,hw-inset+0.02,paint)
++	if body=="pickup":
++		box(st,cab[3]-0.02,-hl+0.06,belt-0.06,belt-0.04,-hw+0.08,hw-0.08,TRIM)
++	# bumpers, grille, lights, plates
++	box(st,hl-0.06,hl+0.04,sill-0.02,sill+0.2,-hw+0.04,hw-0.04,TRIM)
++	box(st,-hl-0.04,-hl+0.06,sill-0.02,sill+0.2,-hw+0.04,hw-0.04,TRIM)
++	box(st,hl-0.02,hl+0.02,s.nose-0.24,s.nose-0.1,-hw*0.45,hw*0.45,TRIM)
++	for side in [-1.0,1.0]:
++		box(st,hl-0.06,hl+0.02,s.nose-0.2,s.nose-0.06,side*hw*0.62-0.18,side*hw*0.62+0.18,LIGHT)
++		box(st,-hl-0.02,-hl+0.07,s.tail-0.3,s.tail-0.14,side*hw*0.7-0.16,side*hw*0.7+0.16,TAIL)
++		# mirrors
++		box(st,cab[0]-0.15,cab[0]-0.02,belt+0.05,belt+0.17,side*(hw+0.02)-0.06,side*(hw+0.02)+0.06,TRIM)
++	box(st,hl+0.02,hl+0.05,sill+0.05,sill+0.17,-0.24,0.24,Color("eceee6"))
++	# wheels in arches
++	var wb := l*0.31
++	for x in [wb,-wb]:
++		for z in [-hw+0.12,hw-0.12]:
++			wheel(st,x,z,s.r,0.24)
++func bus(st: SurfaceTool,paint: Color) -> void:
++	var l := 11.2
++	var hl := l/2.0
++	var hw := 1.26
++	geo.surface = 6.0
++	# a rounded box: sloped front, the roof a little lower at the ends
++	extrude(st,[Vector2(-hl,0.42),Vector2(hl,0.42),Vector2(hl+0.05,1.1),Vector2(hl-0.05,2.85),Vector2(hl-0.35,3.05),Vector2(-hl+0.3,3.05),Vector2(-hl,2.85)],-hw,hw,paint)
++	geo.surface = 7.0
++	# a continuous window band, the windscreen and the rear window
++	for z in [-hw-0.01,hw-0.01]:
++		box(st,-hl+0.4,hl-0.6,1.35,2.55,z,z+0.02,GLASS)
++	box(st,hl-0.02,hl+0.06,1.2,2.75,-hw+0.12,hw-0.12,GLASS)
++	box(st,-hl-0.04,-hl+0.02,1.7,2.6,-hw+0.25,hw-0.25,GLASS)
++	geo.surface = 6.0
++	# a colour stripe under the windows, doors on the kerb side, the destination board
++	for z in [-hw-0.015,hw-0.005]:
++		box(st,-hl+0.1,hl-0.1,0.95,1.2,z,z+0.02,Color("1f7f86"))
++	for x in [hl-1.3,-0.4]:
++		box(st,x-0.6,x+0.6,0.45,2.6,hw,hw+0.025,Color("344c52"))
++	box(st,hl+0.05,hl+0.08,2.62,2.88,-0.7,0.7,Color("f2b13a"))
++	box(st,hl-0.02,hl+0.08,0.38,0.62,-hw+0.05,hw-0.05,TRIM)
++	for side in [-1.0,1.0]:
++		box(st,hl+0.02,hl+0.08,0.75,0.95,side*0.95-0.18,side*0.95+0.18,LIGHT)
++		box(st,-hl-0.04,-hl+0.02,0.75,1.0,side*1.0-0.12,side*1.0+0.12,TAIL)
++	box(st,-2.0,1.2,3.05,3.3,-0.7,0.7,TRIM)
++	for x in [3.6,-3.4]:
++		for z in [-hw+0.15,hw-0.15]:
++			wheel(st,x,z,0.5,0.3)
+diff -ruN a/scripts/city_geometry.gd b/scripts/city_geometry.gd
+--- a/scripts/city_geometry.gd	2026-10-22 21:20:09.143473388 +0300
++++ b/scripts/city_geometry.gd	2026-10-22 21:20:09.145420395 +0300
+@@ -340,7 +340,11 @@
+   if car_mesh==null:
+    make_furniture_meshes()
+   if not parked.is_empty():
+-   instance.add_child(furniture_node("ParkedCars",car_mesh,parked,mat))
++   # Claude 22.10 (City 2.0 «Машины»): five car bodies of the kit, one MultiMesh each
++   for v in range(car_meshes.size()):
++    var group: Array = parked.filter(func(item): return int(item[2])==v)
++    if not group.is_empty():
++     instance.add_child(furniture_node("ParkedCars"+("" if v==0 else str(v)),car_meshes[v],group,mat))
+   if not lamps.is_empty():
+    instance.add_child(furniture_node("StreetLamps",lamp_mesh,lamps,mat))
+  if lod==0 and not street_trees.is_empty():
+@@ -409,10 +413,11 @@
+ var parked: Array = []
+ var lamps: Array = []
+ static var car_mesh: ArrayMesh
++static var car_meshes: Array = []
+ static var lamp_mesh: ArrayMesh
+ func parked_car(_st: SurfaceTool,at: Vector3,forward: Vector3,tint: float) -> void:
+  var paint := Color(CAR_COLORS[int(tint*CAR_COLORS.size())%CAR_COLORS.size()])
+- parked.append([Transform3D(Basis(forward.cross(Vector3.UP).normalized(),Vector3.UP,-forward),at),paint])
++ parked.append([Transform3D(Basis(forward.cross(Vector3.UP).normalized(),Vector3.UP,-forward),at),paint,int(fposmod(tint*53.0,1.0)*5.0)%5])
+ # One car and one lamp post, shared by all tiles (MultiMesh): white paint is tinted per car by the instance colour.
+ func make_furniture_meshes() -> void:
+  var keep_s := surface
+@@ -427,6 +432,11 @@
+  surface = 7.0
+  obox(st,Vector3.UP*0.92+Vector3(0,0,0.25),fwd,Vector3(2.2,0.5,1.56),Color("2a3238"),Color.WHITE)
+  car_mesh = st.commit()
++ var kit = preload("res://scripts/car_kit.gd").new()
++ car_meshes = []
++ for body in kit.BODIES:
++  car_meshes.append(kit.build(body,Color.WHITE,true))
++ car_mesh = car_meshes[0]
+  st = SurfaceTool.new()
+  st.begin(Mesh.PRIMITIVE_TRIANGLES)
+  surface = 6.0
+diff -ruN a/scripts/live_actors.gd b/scripts/live_actors.gd
+--- a/scripts/live_actors.gd	2026-10-22 21:20:09.134121724 +0300
++++ b/scripts/live_actors.gd	2026-10-22 21:20:09.136094013 +0300
+@@ -7,6 +7,7 @@
+ var flashes_enabled := true
+ var vehicle_lights = preload("res://scripts/vehicle_lighting.gd").new()
+ var skins = preload("res://scripts/vehicle_skin.gd").new()
++var kit = preload("res://scripts/car_kit.gd").new()
+ var humans = preload("res://scripts/human_skin.gd").new()
+ var walk_state: Dictionary = {}
+ var models: Dictionary
+@@ -23,19 +24,41 @@
+   var key := "simple-"+kind
+   if not shared.has(key):
+    var box := BoxMesh.new()
+-   box.size = Vector3(0.5,1.7,0.5) if kind in ["civilian","officer"] else Vector3(4.2,1.5,1.8)
++   box.size = Vector3(0.5,1.7,0.5) if kind in ["civilian","officer"] else (Vector3(11.2,3.0,2.5) if kind=="bus" else Vector3(4.2,1.5,1.8))
+    shared[key] = box
+   return shared[key]
+  if shared.has(kind):
+   return shared[kind]
++ # Claude 22.10 (City 2.0 «Машины»): the town bus from the car kit; the ambulance is the ambulance van in white with a
++ # yellow-green band, the fire service comes in the red engine (the original game's models, no more boxes on an SUV)
++ if kind=="bus":
++  shared[kind] = kit.build("bus",Color("e9e6da"))
++  return shared[kind]
+  if kind in ["ambulance","rescue"]:
+-  shared[kind] = preload("res://scripts/service_models.gd").build(model("suv"),kind)
++  shared[kind] = from_model(models["ambulance-van" if kind=="ambulance" else "engine"],kind,{"paint":"#f3f1e8","stripe":"#c9d33a","trim":"#3a4146"} if kind=="ambulance" else {"paint":"#b5302a","stripe":"#f0ece2","metal":"#a7adb0","trim":"#3a3f43"})
+   return shared[kind]
+- var data: Dictionary = models[kind]
++ shared[kind] = from_model(models[kind],kind,{})
++ return shared[kind]
++# Claude 22.10: civilian cars — five bodies of the kit in the colours of a Baltic town, one cached mesh per body and colour
++const TOWN_PAINT := ["e8e8e4","2b2f33","8d9399","5f6a72","1f3550","7a1e22","b7b9b4","3c4a3a","c9c3b4","4a4f57","9a2f2a","24548a","d9cfa8","6d3f2a"]
++func town_car(id: String) -> Mesh:
++ var h := absi(hash(id))
++ var body: String = kit.BODIES[h%kit.BODIES.size()]
++ if h%11==0:
++  body = "van"
++ var paint: String = TOWN_PAINT[(h/7)%TOWN_PAINT.size()]
++ if body=="van" and h%3!=0:
++  paint = "eceee8"
++ var key := "town-"+body+"-"+paint
++ if not shared.has(key):
++  shared[key] = kit.build(body,Color(paint))
++ return shared[key]
++func from_model(data: Dictionary,kind: String,overrides: Dictionary) -> Mesh:
+  var builder := SurfaceTool.new()
+  builder.begin(Mesh.PRIMITIVE_TRIANGLES)
+  var geometry = Geometry.new()
+  var palette := {"paint":"#d0d9de","trim":"#414b53","plate":"#f2f3e9","glass":"#274855","seal":"#273039","metal":"#89949a","stripe":"#295696","tire":"#252a2d","headlight":"#fff1bd","taillight":"#b73734","rubber":"#273039","beaconA":"#397fe6","beaconB":"#4385f1","skin":"#d2aa8d","uniform":"#28435c","cloth":"#8d786e","pants":"#3a4654","shoe":"#252a2d","hair":"#44372f"}
++ palette.merge(overrides,true)
+  for face in data.faces:
+   if kind in ["sedan","suv"] and face.get("group","") in ["police","aid","search"]:
+    continue
+@@ -49,8 +72,7 @@
+   for index in range(1,vertices.size()-1):
+    geometry.triangle(builder,vertices[0],vertices[index],vertices[index+1],Color(palette.get(face.material,"#777e87")),normal)
+  builder.index()
+- shared[kind] = builder.commit()
+- return shared[kind]
++ return builder.commit()
+ # Claude 15.10: the service vehicles of Claude's F–J (fire engines, ambulances) use the original game's models.
+ const SERVICE_MODELS := {"engine":"engine","ladder":"ladder","tanker":"tanker","ambulance":"ambulance-van","resus":"resus","suv":"suv","rapid":"suv"}
+ static func vehicle_model_of(vehicle_type: String) -> String:
+@@ -186,15 +208,27 @@
+    citizen["walking"] = true
+    show_person(actor,citizen,"civilian",key,position,detail)
+    person_count += 1
++ # W1 (Codex, ported to City 2.0 by Claude): scheduled town traffic and two bus lines, after the crews and services
++ for vehicle in view.get("traffic",[]):
++  poses.append({"pose":vehicle,"kind":"civilian","model":"bus" if vehicle.get("bus",false) else "town"})
+  for item in poses:
+   if car_count>=MAX_CARS:
+    break
+   var position: Vector3 = world(item.pose)
++  if str(item.pose.get("id","")).begins_with("traffic-") or str(item.pose.get("id","")).begins_with("bus-"):
++   var heading := float(item.pose.get("heading",0.0))
++   position += Vector3(-sin(heading),0,cos(heading))*1.35
+   if position.distance_to(focus)>radius:
+    continue
+   var car := cars[car_count]
+   car.material_override = materials.get(item.kind,materials.police)
+-  if item.kind in ["police","civilian"] and quality!="simple" and not item.get("style",{}).is_empty():
++  if item.kind=="civilian" and item.model in ["sedan","town"] and quality!="simple":
++   skins.hide_doors(car)
++   car.mesh = town_car(str(item.pose.get("id",car_count)))
++  elif item.model=="town":
++   skins.hide_doors(car)
++   car.mesh = model("sedan")
++  elif item.kind in ["police","civilian"] and quality!="simple" and not item.get("style",{}).is_empty():
+    skins.apply(car,models[item.model],item.model,item.style,item.pose.get("doors",{}),lights_enabled and flashes_enabled and bool(item.pose.get("emergency",false)),fmod(Time.get_ticks_msec()/1000.0,1.0)<0.5,quality=="models")
+   else:
+    skins.hide_doors(car)
+diff -ruN a/scripts/verify_car_kit.gd b/scripts/verify_car_kit.gd
+--- a/scripts/verify_car_kit.gd	1970-01-01 03:00:00.000000000 +0300
++++ b/scripts/verify_car_kit.gd	2026-10-22 21:20:09.169346323 +0300
+@@ -0,0 +1,19 @@
++extends SceneTree
++# Claude 22.10 (City 2.0 «Машины»): every car body and the bus build as one surface with sane dimensions, both as a
++# moving car (forward +x) and as a parked car (forward −z).
++func _initialize() -> void:
++ var kit = preload("res://scripts/car_kit.gd").new()
++ var ok := true
++ for body in kit.BODIES+["bus"]:
++  var m: ArrayMesh = kit.build(body,Color("7a1e22"))
++  var p: ArrayMesh = kit.build(body,Color.WHITE,true)
++  var a := m.get_aabb()
++  var b := p.get_aabb()
++  var long := 10.0 if body=="bus" else 3.5
++  ok = ok and m.get_surface_count()==1 and a.size.x>long and a.size.z>1.6 and a.size.y>1.3 and a.size.y<3.6
++  ok = ok and b.size.z>long and b.size.x>1.6 and absf(a.size.x-b.size.z)<0.01
++  if not ok:
++   push_error("car kit body "+body+" "+str(a)+" "+str(b))
++   break
++ print("Car kit: hatch, sedan, wagon, van, pickup, bus ","PASS" if ok else "FAILED")
++ quit(0 if ok else 1)
+diff -ruN a/ui/map-view.js b/ui/map-view.js
+--- a/ui/map-view.js	2026-10-22 21:20:09.153841493 +0300
++++ b/ui/map-view.js	2026-10-22 21:20:09.156376523 +0300
+@@ -1,3 +1,4 @@
++import {warmTraffic,trafficActors} from './street-traffic.js';
+ import {crewPresentation} from './source/crew.js';
+ import {sceneAnchor} from './source/scenes.js';
+ import {emergencyLights} from './source/lighting.js';
+@@ -19,7 +20,7 @@
+ function citizensNear(state){const el=state.population?.elapsed??0,scene=globalThis.nativeScene;if(!scene||state.mode==='chief'&&state.setupPending)return [];
+  /* Performance (17.10): the plan (who is outside, their routes) at most every 0.7 s of real time and only when needed; positions every frame are cheap */
+  const now=Date.now(),radius=Math.min(.35,Math.max(260,1.6*6500/Math.max(.2,scene.zoom??6))/1670),moved=!streetAt||Math.hypot(scene.x-streetAt.x,scene.y-streetAt.y)>radius*.3||Math.abs(radius-streetAt.radius)>radius*.3;
+- if(now-(streetAt?.time??0)>700&&(moved||now-streetAt.time>2500||streetPending()||street.some(e=>!e.walk&&cityClock(el).minute>=e.until))){streetAt={x:scene.x,y:scene.y,radius,time:now};street=streetPlan(el,scene,{rain:globalThis.nativeAudioFrame?.environment?.weather==='rain',routes:1,radius}).map(e=>({...e,nativeStyle:humanStyle(false,PALETTE[e.id%PALETTE.length]),vehicleStyle:vehicleStyle({color:PALETTE[(e.id>>3)%PALETTE.length]},false)}));}
++ if(now-(streetAt?.time??0)>700&&(moved||now-streetAt.time>2500||streetPending()||street.some(e=>!e.walk&&cityClock(el).minute>=e.until))){warmTraffic();streetAt={x:scene.x,y:scene.y,radius,time:now};street=streetPlan(el,scene,{rain:globalThis.nativeAudioFrame?.environment?.weather==='rain',routes:1,radius}).map(e=>({...e,nativeStyle:humanStyle(false,PALETTE[e.id%PALETTE.length]),vehicleStyle:vehicleStyle({color:PALETTE[(e.id>>3)%PALETTE.length]},false)}));}
+  const minute=cityClock(el).minute;return street.map(e=>{const p=planPosition(e,minute);return {id:e.id,name:e.name,car:e.car,x:p.x,y:p.y,heading:p.heading,status:e.car?'citizenCar':'citizenWalk',nativeStyle:e.nativeStyle,vehicleStyle:e.vehicleStyle};});}
+ /* Release J1: the taxi orders and the current ride on the map, drawn like calls */
+ const taxiMarks=state=>{const r=state.units[0]?.ride,list=(state.taxi?.orders??[]).map(o=>({id:1000+o.id,x:o.from.x,y:o.from.y,state:'waiting',type:0,anchor:{x:o.from.x,y:o.from.y},participants:[]}));if(r){const p=r.phase==='ride'?r.to:r.from;list.push({id:2000+r.id,x:p.x,y:p.y,state:'onscene',type:0,anchor:{x:p.x,y:p.y},participants:[]});}return list;};
+@@ -45,6 +46,7 @@
+   ).map(r=>({...r,...residentPosition(r),walking:['walkVisit','walkBack'].includes(r.status)&&!!r.route?.length,nativeStyle:humanStyle(false,residentProfile(r.id)?.color),vehicleStyle:vehicleStyle({color:residentProfile(r.id)?.color},false)})),
+   citizens:citizensNear(state),
+   places:placesOf(state),
++  traffic:state.mode==='chief'&&state.setupPending?[]:trafficActors(state.population?.elapsed??0,globalThis.nativeScene,Math.min(.35,Math.max(260,1.6*6500/Math.max(.2,globalThis.nativeScene?.zoom??6))/1670)),
+   incidents:state.agency==='taxi'?taxiMarks(state):state.incidents.filter(i=>!['resolved','missed'].includes(i.state)).map(i=>({
+    id:i.id,x:i.x,y:i.y,state:i.state,type:i.type,anchor:sceneAnchor(i),
+    participants:(i.scene?.participants??[]).filter(a=>a.visible).map(a=>({...a,nativeStyle:humanStyle(false,residentProfile(a.residentId)?.color),walking:!!a.route?.length}))
+diff -ruN a/ui/street-traffic.js b/ui/street-traffic.js
+--- a/ui/street-traffic.js	1970-01-01 03:00:00.000000000 +0300
++++ b/ui/street-traffic.js	2026-10-22 21:20:09.175419671 +0300
+@@ -0,0 +1,78 @@
++// Native W1 (Codex): scheduled road traffic. Presentation only; no saved state or simulation RNG.
++// Claude 22.10 (City 2.0): the two bus lines of the new town — Old Posad → square → Zarechye → Maisky over the old
++// bridge, and the North Settlement → square → River Park → Pine Wood over the south bridge.
++import {byId,roadRoute} from './source/geography.js';
++import {worldMinutes} from './source/transport.js';
++import {MAP_METRES} from './source/world-scale.js';
++
++export const LINES=[['vana','centre','ulejoe','mai'],['raama','centre','beach','raekula']];
++const paths=[];
++const mod=(n,d)=>(n%d+d)%d;
++export function rushAt(minute){const m=mod(minute,1440);return m>=420&&m<540||m>=960&&m<1110;}
++function build(index){
++ const stops=[...LINES[Math.floor(index/2)]];if(index%2)stops.reverse();
++ const legs=[];
++ for(let k=1;k<stops.length;k++){
++  const a=byId(stops[k-1]),b=byId(stops[k]);
++  const points=[a,...roadRoute(a,b)],segments=[];
++  for(let j=1;j<points.length;j++){
++   const from=points[j-1],to=points[j],metres=Math.hypot(to.x-from.x,to.y-from.y)*MAP_METRES;
++   if(metres<.01)continue;
++   const centre=byId('centre'),central=Math.hypot((from.x+to.x)/2-centre.x,(from.y+to.y)/2-centre.y)*MAP_METRES<650;
++   segments.push({from,to,metres,central,kmh:Math.min(32,to.roadSpeed?.kmh??30)});
++  }
++  legs.push(segments);
++ }
++ return {index,stops,legs};
++}
++// Build only one directional route per refresh. Never run pathfinding per vehicle/frame.
++export function warmTraffic(){if(paths.length<4)paths.push(build(paths.length));return paths.length===4;}
++const timelines=new Map();
++function pose(path,age,departure,bus){
++ if(age<0)return null;
++ const peak=rushAt(departure),key=`${path.index}-${peak}-${bus}`;
++ let timeline=timelines.get(key);
++ if(!timeline){
++  timeline=[];let end=0;
++  for(const leg of path.legs){
++   for(const s of leg){
++    const kmh=Math.min(s.kmh,bus?28:32,peak&&s.central?12:Infinity);
++    const start=end;end+=s.metres/kmh*60/1000;timeline.push({...s,start,end,stopped:false});
++   }
++   const s=leg.at(-1);
++   if(bus&&s){const start=end;end+=25/60;timeline.push({...s,from:s.to,start,end,stopped:true});}
++  }
++  timelines.set(key,timeline);
++ }
++ if(!timeline.length||age>=timeline.at(-1).end)return null;
++ let lo=0,hi=timeline.length-1;while(lo<hi){const mid=(lo+hi)>>1;if(timeline[mid].end<=age)lo=mid+1;else hi=mid;}
++ const s=timeline[lo],f=(age-s.start)/(s.end-s.start);
++ const heading=s.stopped&&lo>0?Math.atan2(timeline[lo-1].to.y-timeline[lo-1].from.y,timeline[lo-1].to.x-timeline[lo-1].from.x):Math.atan2(s.to.y-s.from.y,s.to.x-s.from.x);
++ return {x:s.from.x+(s.to.x-s.from.x)*f,y:s.from.y+(s.to.y-s.from.y)*f,heading,stopped:s.stopped};
++}
++export function trafficActors(elapsed,focus,radius){
++ if(!focus||!Number.isFinite(elapsed)||!Number.isFinite(focus.x)||!Number.isFinite(focus.y))return [];
++ const now=17*60+worldMinutes(elapsed),out=[];
++ for(const path of paths){
++  // Half-minute slots at peak, every third slot otherwise; empty streets at night.
++  for(let slot=Math.floor(now*2);slot>=Math.floor((now-45)*2);slot--){
++   const departure=slot/2+path.index*.07,m=mod(departure,1440);
++   if(m<330||m>=1380||!rushAt(departure)&&mod(slot,3)!==0)continue;
++   const p=pose(path,now-departure,departure,false);if(!p)continue;
++   const d=Math.hypot(p.x-focus.x,p.y-focus.y);if(d>radius)continue;
++   out.push({...p,id:`traffic-${path.index}-${slot}`,bus:false,d});
++  }
++  // Each route runs in both directions, 05:30–23:00, with a 10-minute headway.
++  for(let slot=Math.floor(now/10);slot>=Math.floor((now-60)/10);slot--){
++   const departure=slot*10+path.index*1.25,m=mod(departure,1440);
++   if(m<330||m>=1380)continue;
++   const p=pose(path,now-departure,departure,true);if(!p)continue;
++   const d=Math.hypot(p.x-focus.x,p.y-focus.y);if(d>radius)continue;
++   // Claude 22.10: both lines stop at the square; the second line's bus waits one bus-length behind
++   const back=p.stopped&&path.index>=2?14/MAP_METRES:0;
++   out.push({...p,x:p.x-Math.cos(p.heading)*back,y:p.y-Math.sin(p.heading)*back,id:`bus-${path.index}-${slot}`,bus:true,line:Math.floor(path.index/2)+1,d});
++  }
++ }
++ // Buses first; reserve native slots for the player's units, services and residents.
++ return [...out.filter(a=>a.bus).sort((a,b)=>a.d-b.d).slice(0,4),...out.filter(a=>!a.bus).sort((a,b)=>a.d-b.d).slice(0,24)];
++}
+diff -ruN a/ui/test-street-traffic.mjs b/ui/test-street-traffic.mjs
+--- a/ui/test-street-traffic.mjs	1970-01-01 03:00:00.000000000 +0300
++++ b/ui/test-street-traffic.mjs	2026-10-22 21:20:09.182542917 +0300
+@@ -0,0 +1,22 @@
++import assert from 'node:assert/strict';
++import {warmTraffic,trafficActors} from './street-traffic.js';
++import {byId,onRoad} from './source/geography.js';
++const focus=byId('centre'),elapsed=m=>(m+420)/.75;
++for(let k=0;k<4;k++)warmTraffic();
++let peak=0,quiet=0,stops=0;
++for(let m=0;m<60;m+=2){
++ const a=trafficActors(elapsed(480+m),focus,.35),b=trafficActors(elapsed(720+m),focus,.35);
++ peak+=a.filter(v=>!v.bus).length;quiet+=b.filter(v=>!v.bus).length;
++ assert(a.length<=28);assert(a.filter(v=>v.bus).length<=4);
++ for(const v of a){assert(onRoad(v));assert(Number.isFinite(v.heading));}
++ assert.deepEqual(a,trafficActors(elapsed(480+m),focus,.35),'paused time must not move vehicles');
++}
++assert(peak>quiet*1.5,'rush-hour traffic must visibly increase');
++assert.equal(trafficActors(elapsed(120),focus,10).length,0,'night service ends');
++for(let m=480;m<500;m+=.1)stops+=trafficActors(elapsed(m),focus,10).filter(v=>v.bus&&v.stopped).length;
++assert(stops>0,'buses dwell at stops');
++const before=trafficActors(elapsed(480),focus,.35);
++trafficActors(elapsed(900),byId('mai'),.2);
++assert.deepEqual(before,trafficActors(elapsed(480),focus,.35),'save reload/camera changes must preserve schedules');
++assert.deepEqual(trafficActors(0,null,.35),[]);
++console.log('W1 traffic: road geometry, density, stops, night schedule, determinism and limits PASS');
