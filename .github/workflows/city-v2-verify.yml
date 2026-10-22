@@ -59,10 +59,10 @@ jobs:
           for size in 369x905 905x369; do
             out="$GITHUB_WORKSPACE/captures/$size"
             mkdir -p "$out/screens" "$out/camera"
-            xvfb-run -a "$GODOT_BIN" --path build/native-map --rendering-driver opengl3 --resolution "$size" --script scripts/render_screens.gd -- --native-ui --out "$out/screens"
+            xvfb-run -a "$GODOT_BIN" --path build/native-map --rendering-driver opengl3 --audio-driver Dummy --resolution "$size" --script scripts/render_screens.gd -- --native-ui --out "$out/screens"
             for condition in day night snow; do
               mkdir -p "$out/$condition"
-              xvfb-run -a "$GODOT_BIN" --path build/native-map --rendering-driver opengl3 --resolution "$size" --script scripts/render_camera.gd -- --native-ui --out "$out/$condition" --storage "$GITHUB_WORKSPACE/render-saves/$condition.json" --world '0:0:0;600:-1200:-2;1200:-480:-1;2400:-1440:-1'
+              xvfb-run -a "$GODOT_BIN" --path build/native-map --rendering-driver opengl3 --audio-driver Dummy --resolution "$size" --script scripts/render_camera.gd -- --native-ui --out "$out/$condition" --storage "$GITHUB_WORKSPACE/render-saves/$condition.json" --clean-world --world '0:0:2;360:-720:1;720:-288:2;1440:-864:2'
             done
           done
       - uses: actions/upload-artifact@v4

@@ -70,3 +70,7 @@ node tools/city-v2/prepare.mjs /path/to/clean-js-release-g1 /path/to/native-map
 `reconstruct.py` restores pinned 0.9.2 sources by SHA-256 and release-g1 patches. `prepare.mjs` also exports walking.json and bridges.json (previously stale), and `build.mjs` rebuilds manifests and bundles. City V2 CI captures portrait/landscape day, night and snow using the existing render tools. Captures must be inspected before any release.
 
 Latest CI attempt 39549793236 passed JS and failed one native fixture (50/51): insufficient moving frames between snapshots. The fixture now uses a fixed long route; exact pose/follow assertions remain intact. The next run includes this correction, sidewalks and G5. Previous 51/51 and 7/7 results refer to the earlier local integration, not acceptance of these newest changes.
+
+## Visual revision, 22 October
+
+CI 39715750014 passed all automated gates and produced signed candidate APK 130 (existing certificate). Actual renders showed the 240 m blocks were too sparse. The candidate was not published. The revised plan uses 144 m blocks, full-width carriageways, paved civic areas and weather-aware land use. Near-equal subdivision points are canonicalized to avoid zero-length routing edges; the promenade walking entrance stays on the landward side of the river. Render-camera now supports clean world captures; normal UI screenshots remain part of the gate. Local sources were recovered after workspace maintenance and are being reverified.

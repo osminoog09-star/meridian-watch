@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {generate,validate,write,DISTRICTS,BASES} from './generate.mjs';
+import {generate,validate,write,DISTRICTS,BASES,LAYOUT_SCALE} from './generate.mjs';
 
 test('authored city preserves every public district ID and every service base',()=>{
  const c=generate();assert.deepEqual(c.districts.map(d=>d[0]),['centre','ulejoe','raama','beach','mai','papiniidu','vana','raekula']);
@@ -15,8 +15,8 @@ test('both directions connect every node, including district anchors and drivewa
  assert.ok(c.roads.some(r=>r.kind==='service'));assert.ok(c.roads.some(r=>r.junction==='roundabout'));
 });
 test('only the two designed bridge corridors cross the river',()=>{
- const c=generate(),crossing=c.roads.filter(r=>Math.min(...r.p.map(p=>p[0]))<496&&Math.max(...r.p.map(p=>p[0]))>704);
- assert.equal(crossing.length,2);assert.deepEqual(crossing.map(r=>r.p[0][1]).sort((a,b)=>a-b),[-1200,720]);assert.ok(crossing.every(r=>r.bridge));
+ const c=generate(),crossing=c.roads.filter(r=>Math.min(...r.p.map(p=>p[0]))<496*LAYOUT_SCALE&&Math.max(...r.p.map(p=>p[0]))>704*LAYOUT_SCALE);
+ assert.equal(crossing.length,2);assert.deepEqual(crossing.map(r=>r.p[0][1]).sort((a,b)=>a-b),[-1200,720].map(v=>v*LAYOUT_SCALE));assert.ok(crossing.every(r=>r.bridge));
 });
 test('negative controls reject disconnected roads, off-road bases and building-road collisions',()=>{
  const c=generate();c.roads.push({id:'broken',nodes:['isolated-a','isolated-b'],p:[[9000,0],[9050,0]],width:6,oneway:'no'});assert.throws(()=>validate(c),/strongly connected/);
@@ -34,6 +34,6 @@ test('sidewalks are outside carriageways and cross the river only on designed br
  assert.ok(net.segments.some(s=>s.crossing));assert.ok(net.segments.some(s=>s.shared));
  for(const s of net.segments){
   if(s.roadId&&!s.shared){const r=roads.get(s.roadId),a=r.p[0],b=r.p.at(-1),p=s.p[0];const distance=Math.abs((b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]))/Math.hypot(b[0]-a[0],b[1]-a[1]);assert.ok(distance>r.width/2+1,'sidewalk must clear carriageway');}
-  const mid=[(s.p[0][0]+s.p[1][0])/2,(s.p[0][1]+s.p[1][1])/2];if(mid[0]>496&&mid[0]<704)assert.ok(s.bridge,'walking over river requires a bridge');
+  const mid=[(s.p[0][0]+s.p[1][0])/2,(s.p[0][1]+s.p[1][1])/2];if(mid[0]>496*LAYOUT_SCALE&&mid[0]<704*LAYOUT_SCALE)assert.ok(s.bridge,'walking over river requires a bridge');
  }
 });
