@@ -3,7 +3,9 @@ import {createNearestPoint} from './nearest-point.js';
 import {containsWorldPoint,projectGeo} from './city-coverage.js';
 import {roadSpeed} from './road-speed.js';
 import {streetName,districtName} from './fiction.js';
-export const MAP_ID='meridian-city-v2';
+// Claude 23.10: the plan revision is part of the map id — a save from an earlier revision of the town is migrated
+// (people and cars snapped to the new streets, routes rebuilt) instead of being rejected as damaged.
+export const MAP_ID='meridian-city-v2'+(data.revision?'@'+data.revision:'');
 export const project=projectGeo;
 export const point=n=>({x:n.x,y:n.y});
 const graph=new Map();

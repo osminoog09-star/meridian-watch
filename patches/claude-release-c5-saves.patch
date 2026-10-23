@@ -1,0 +1,77 @@
+diff -ruN a/dist/sim.js b/dist/sim.js
+--- a/dist/sim.js	2026-10-23 09:44:14.989529736 +0300
++++ b/dist/sim.js	2026-10-23 09:44:14.991109023 +0300
+@@ -207,11 +207,14 @@
+  n.finance={opening:n.budget,entries:[],legacy:false};n.previousReport={shift:s.shift,resolved:s.resolved,missed:s.missed,carried:n.incidents.length,finance:financialSummary(closed)};
+  log(n,`Новая смена. Расходы: ${cost}.${support?' Субсидия: '+support+'.':''} ${isScheduled(n)?' Смена начинается с инструктажа в участке.':` Продолжаем вызовы: ${n.incidents.length}. Занятые экипажи остаются на месте.`}`);return n;
+ }
++// Claude 23.10: every revision of the City 2.0 plan ("meridian-city-v2", "meridian-city-v2@<rev>") is the same town; a save
++// of another revision is migrated like an old city.
++const cityRevision=id=>typeof id==='string'&&/^meridian-city-v2(@[0-9a-f]{6,16})?$/.test(id);
+ export function serialize(s){return JSON.stringify(s);}
+ export function deserialize(raw){
+- const s=JSON.parse(raw),num=(x,min=0,max=1e9)=>Number.isFinite(x)&&x>=min&&x<=max,str=x=>typeof x==='string'&&x.length<500,pointInMap=p=>['parnu-city-osm-1',MAP_ID].includes(s.mapId)?containsWorldPoint(p):p&&num(p.x,0,5)&&num(p.y,0,5);
+- const valid=s&&[1,2].includes(s.version)&&['career','chief'].includes(s.mode)&&num(s.seed,0,4294967295)&&validSchedule(s)&&num(s.time,0,s.shiftLength)&&Number.isInteger(s.shift)&&s.shift>0&&Number.isInteger(s.rank)&&s.rank>=0&&s.rank<RANKS.length&&num(s.xp)&&num(s.budget)&&num(s.trust,0,100)&&num(s.resolved)&&num(s.missed)&&num(s.nextIncident,-1000,10000)&&Number.isInteger(s.nextId)&&typeof s.ended==='boolean'&&Array.isArray(s.units)&&s.units.length<=(s.agency==='dispatch'?9:6)&&new Set(s.units.map(u=>u.id)).size===s.units.length&&s.units.every((u,k)=>Number.isInteger(u.id)&&u.id>0&&str(u.name)&&Array.isArray(u.people)&&u.people.length>=1&&u.people.length<=crewLimitOf(s)&&u.people.every(str)&&pointInMap(u)&&num(u.fatigue,0,100)&&(u.pursuing===undefined||typeof u.pursuing==='boolean')&&typeof u.auto==='boolean'&&typeof u.cross==='boolean'&&['all','west','east'].includes(u.zone)&&['patrol','idle','responding','decision','working','returning','resting','transporting','handover','servicing','briefing','break','reports','proactive'].includes(u.status)&&validTask(u.task)&&(u.task===undefined)===(u.status!=='proactive')&&(u.transport===undefined||u.transport===null||Number.isInteger(u.transport.from)&&typeof u.transport.label==='string'&&u.transport.label.length<120&&typeof u.transport.district==='string')&&(u.handover===undefined||num(u.handover,0,100))&&(u.incident===null||Number.isInteger(u.incident))&&Array.isArray(u.route)&&u.route.length<3000&&u.route.every(pointInMap))&&Array.isArray(s.incidents)&&s.incidents.length<30&&s.incidents.every(i=>Number.isInteger(i.id)&&Number.isInteger(i.type)&&TYPES[i.type]&&validVariant(i)&&(s.mapId===MAP_ID?atNode(i):['parnumaa-1','parnu-city-osm-1'].includes(s.mapId)?Number.isFinite(i.x)&&Number.isFinite(i.y):Number.isInteger(i.x)&&Number.isInteger(i.y))&&pointInMap(i)&&num(i.age)&&num(i.progress)&&['waiting','assigned','onscene','resolved','missed'].includes(i.state)&&Array.isArray(i.units)&&i.units.every(id=>Number.isInteger(id)&&id>0))&&Array.isArray(s.logs)&&s.logs.length<=45&&s.logs.every(l=>num(l.time)&&str(l.text))&&Array.isArray(s.history)&&s.history.length<=50&&s.history.every(h=>num(h.id)&&str(h.name)&&num(h.time)&&typeof h.success==='boolean');
+- if(!valid||!validHero(s.hero)||!validPeople(s.people)||!s.incidents.every(i=>validJoint(i.joint)&&validArmed(i)&&validLead(i))||s.mapId&&!['parnumaa-1','parnu-city-osm-1',MAP_ID].includes(s.mapId))throw Error('Несовместимое сохранение');ensureDepartment(s);for(const u of s.units)if(u.currentSpeedKmh!==undefined&&(!Number.isFinite(u.currentSpeedKmh)||u.currentSpeedKmh<0||u.currentSpeedKmh>200))u.currentSpeedKmh=0;
++ const s=JSON.parse(raw),num=(x,min=0,max=1e9)=>Number.isFinite(x)&&x>=min&&x<=max,str=x=>typeof x==='string'&&x.length<500,pointInMap=p=>s.mapId==='parnu-city-osm-1'||cityRevision(s.mapId)?containsWorldPoint(p):p&&num(p.x,0,5)&&num(p.y,0,5);
++ const valid=s&&[1,2].includes(s.version)&&['career','chief'].includes(s.mode)&&num(s.seed,0,4294967295)&&validSchedule(s)&&num(s.time,0,s.shiftLength)&&Number.isInteger(s.shift)&&s.shift>0&&Number.isInteger(s.rank)&&s.rank>=0&&s.rank<RANKS.length&&num(s.xp)&&num(s.budget)&&num(s.trust,0,100)&&num(s.resolved)&&num(s.missed)&&num(s.nextIncident,-1000,10000)&&Number.isInteger(s.nextId)&&typeof s.ended==='boolean'&&Array.isArray(s.units)&&s.units.length<=(s.agency==='dispatch'?9:6)&&new Set(s.units.map(u=>u.id)).size===s.units.length&&s.units.every((u,k)=>Number.isInteger(u.id)&&u.id>0&&str(u.name)&&Array.isArray(u.people)&&u.people.length>=1&&u.people.length<=crewLimitOf(s)&&u.people.every(str)&&pointInMap(u)&&num(u.fatigue,0,100)&&(u.pursuing===undefined||typeof u.pursuing==='boolean')&&typeof u.auto==='boolean'&&typeof u.cross==='boolean'&&['all','west','east'].includes(u.zone)&&['patrol','idle','responding','decision','working','returning','resting','transporting','handover','servicing','briefing','break','reports','proactive'].includes(u.status)&&validTask(u.task)&&(u.task===undefined)===(u.status!=='proactive')&&(u.transport===undefined||u.transport===null||Number.isInteger(u.transport.from)&&typeof u.transport.label==='string'&&u.transport.label.length<120&&typeof u.transport.district==='string')&&(u.handover===undefined||num(u.handover,0,100))&&(u.incident===null||Number.isInteger(u.incident))&&Array.isArray(u.route)&&u.route.length<3000&&u.route.every(pointInMap))&&Array.isArray(s.incidents)&&s.incidents.length<30&&s.incidents.every(i=>Number.isInteger(i.id)&&Number.isInteger(i.type)&&TYPES[i.type]&&validVariant(i)&&(s.mapId===MAP_ID?atNode(i):['parnumaa-1','parnu-city-osm-1'].includes(s.mapId)||cityRevision(s.mapId)?Number.isFinite(i.x)&&Number.isFinite(i.y):Number.isInteger(i.x)&&Number.isInteger(i.y))&&pointInMap(i)&&num(i.age)&&num(i.progress)&&['waiting','assigned','onscene','resolved','missed'].includes(i.state)&&Array.isArray(i.units)&&i.units.every(id=>Number.isInteger(id)&&id>0))&&Array.isArray(s.logs)&&s.logs.length<=45&&s.logs.every(l=>num(l.time)&&str(l.text))&&Array.isArray(s.history)&&s.history.length<=50&&s.history.every(h=>num(h.id)&&str(h.name)&&num(h.time)&&typeof h.success==='boolean');
++ if(!valid||!validHero(s.hero)||!validPeople(s.people)||!s.incidents.every(i=>validJoint(i.joint)&&validArmed(i)&&validLead(i))||s.mapId&&!['parnumaa-1','parnu-city-osm-1'].includes(s.mapId)&&!cityRevision(s.mapId))throw Error('Несовместимое сохранение');ensureDepartment(s);for(const u of s.units)if(u.currentSpeedKmh!==undefined&&(!Number.isFinite(u.currentSpeedKmh)||u.currentSpeedKmh<0||u.currentSpeedKmh>200))u.currentSpeedKmh=0;
+  const usedOfficers=s.units.flatMap(u=>u.officerIds??[]),usedVehicles=s.units.map(u=>u.vehicleId);
+  if(!Array.isArray(s.officers)||!s.officers.every(o=>Number.isInteger(o.id)&&str(o.name)&&str(o.specialty)&&num(o.skill,0,1)&&num(o.salary)&&validOfficerRoster(o))||!Array.isArray(s.vehicles)||s.vehicles.length>(s.agency==='dispatch'?9:6)||!s.vehicles.every(v=>Number.isInteger(v.id)&&str(v.name)&&validVehicleState(v))||!Array.isArray(s.candidates)||!s.candidates.every(c=>Number.isInteger(c.id)&&str(c.name)&&str(c.specialty)&&num(c.skill,0,1)&&num(c.fee)&&num(c.salary))||!['nextOfficerId','nextVehicleId','nextUnitId'].every(k=>Number.isInteger(s[k])&&s[k]>0)||typeof s.setupPending!=='boolean'||new Set(usedOfficers).size!==usedOfficers.length||new Set(usedVehicles).size!==usedVehicles.length||!s.units.every(u=>Array.isArray(u.officerIds)&&u.officerIds.length>=1&&u.officerIds.length<=crewLimitOf(s)&&u.officerIds.length===u.people.length&&u.officerIds.every(id=>s.officers.some(o=>o.id===id))&&s.vehicles.some(v=>v.id===u.vehicleId)&&num(u.skill,0,1)))throw Error('Повреждены данные отделения');
+  const live=s.incidents.filter(i=>!['resolved','missed'].includes(i.state));
+diff -ruN a/dist/traffic.js b/dist/traffic.js
+--- a/dist/traffic.js	2026-10-23 09:44:14.992638201 +0300
++++ b/dist/traffic.js	2026-10-23 09:44:14.994052758 +0300
+@@ -1,7 +1,7 @@
+ import {MAP_METRES} from './world-scale.js';
+ import {VEHICLE_DYNAMICS} from './transport.js';
+ 
+-export const TRAFFIC=Object.freeze({minimumGap:3.5,emergencyGap:2.5,reactionSeconds:1.4,yieldDistance:70,yieldSpeed:8,yieldOffsetMetres:2,lookAhead:150,junctionLookAhead:120,junctionClearance:20,junctionStopLine:3,planningSeconds:4.5});
++export const TRAFFIC=Object.freeze({minimumGap:3.5,emergencyGap:2.5,reactionSeconds:1.4,yieldDistance:70,yieldSpeed:8,yieldOffsetMetres:2,lookAhead:150,junctionLookAhead:120,passKmh:12,junctionClearance:20,junctionStopLine:3,planningSeconds:4.5});
+ const metres=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y)*MAP_METRES;
+ const endpoint=e=>e.route?.[0];
+ 
+@@ -81,6 +81,9 @@
+   const leaders=obstacles.filter(o=>o!==item&&!(item.emergency&&o.entity.yieldingToEmergency)&&!atGoal(o)).map(o=>({...o,gap:aheadGap(e,o.entity)})).filter(o=>o.gap!==null).sort((a,b)=>a.gap-b.gap);
+   const lead=leaders[0];if(!lead)continue;
+   const desiredGap=minimum+Math.max(0,e.motionSpeedKmh??e.currentSpeedKmh??0)/3.6*TRAFFIC.reactionSeconds,span=Math.max(.1,desiredGap-minimum),factor=Math.max(0,Math.min(1,(lead.gap-minimum)/span));
++  // Claude 23.10 (owner: «две машины зависли в одном месте и всё»): a car standing at another call — a crew at work, a
++  // broken-down vehicle — is driven around at walking pace, never waited behind for the rest of the shift.
++  if(lead.blocking&&!lead.entity.route?.length){apply(e,Math.min(item.desired,Math.max(item.desired*factor,TRAFFIC.passKmh)),'Объезжает стоящую машину',lead.id);continue;}
+   apply(e,item.desired*factor,factor===0?'Ожидает свободный участок':'Держит дистанцию',lead.id);
+  }
+ 
+diff -ruN a/tests/city-revision.test.mjs b/tests/city-revision.test.mjs
+--- a/tests/city-revision.test.mjs	1970-01-01 03:00:00.000000000 +0300
++++ b/tests/city-revision.test.mjs	2026-10-23 09:44:14.998413081 +0300
+@@ -0,0 +1,17 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {createGame,tick,serialize,deserialize} from '../dist/sim.js';
++import {MAP_ID,nearestRoad,point} from '../dist/geography.js';
++// Claude 23.10 (owner: after the update the game started anew and two cars froze): a save from an earlier revision of
++// the City 2.0 plan loads — people and cars are snapped to the current streets and routes rebuilt — never rejected.
++test('a save of an earlier plan revision is migrated, not rejected',()=>{
++ assert.match(MAP_ID,/^meridian-city-v2@[0-9a-f]{10}$/);
++ const g=createGame('career',4711,{schedule:'ppa',service:'police'});for(let k=0;k<300;k++)tick(g,.5);
++ const old=JSON.parse(serialize(g));old.mapId='meridian-city-v2';
++ // the old plan had its streets a few metres elsewhere: shift every car and every resident off the current graph
++ for(const u of old.units){u.x+=4/1670;u.y-=3/1670;for(const p of u.route??[]){p.x+=4/1670;p.y-=3/1670;}}
++ for(const r of old.population?.residents??[]){r.x+=5/1670;r.y+=2/1670;for(const p of r.route??[]){p.x+=5/1670;p.y+=2/1670;}}
++ const s=deserialize(JSON.stringify(old));assert.equal(s.mapId,MAP_ID);assert.equal(s.xp,g.xp);assert.equal(s.shift,g.shift);
++ for(const u of s.units)if(!u.route.length&&['patrol','idle'].includes(u.status))assert.deepEqual(point(u),point(nearestRoad(u)));
++ for(let k=0;k<400;k++)tick(s,.5);assert.doesNotThrow(()=>deserialize(serialize(s)));
++ assert.throws(()=>deserialize(JSON.stringify({...old,mapId:'meridian-city-v2@zz'})));
++});
+diff -ruN a/tests/traffic.test.mjs b/tests/traffic.test.mjs
+--- a/tests/traffic.test.mjs	2026-10-23 09:44:14.995576577 +0300
++++ b/tests/traffic.test.mjs	2026-10-23 09:44:14.997037798 +0300
+@@ -80,3 +80,9 @@
+  const other=drive();planTraffic([{entity:parked,id:'unit-1',desired:0,emergency:false,blocking:true,scene:7},{entity:other,id:'unit-3',desired:30,emergency:false,scene:8}]);
+  assert.ok(other.trafficTargetKmh<30,'a crew of another call still queues behind it');
+ });
++
++test('a crew of another call drives around a crew standing on its street instead of waiting forever (Claude, 23.10.2026)',()=>{
++ const k=1/MAP_METRES,parked={x:1,y:1,route:[],heading:0},other={x:1-2*k,y:1,route:[{x:1,y:1},{x:1+40*k,y:1}],heading:0,currentSpeedKmh:0};
++ planTraffic([{entity:parked,id:'unit-1',desired:0,emergency:false,blocking:true,scene:7},{entity:other,id:'unit-3',desired:50,emergency:true,scene:8}]);
++ assert.ok(other.trafficTargetKmh>=TRAFFIC.passKmh&&other.trafficTargetKmh<50);assert.equal(other.trafficReason,'Объезжает стоящую машину');
++});

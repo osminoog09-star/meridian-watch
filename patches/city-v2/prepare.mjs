@@ -54,7 +54,9 @@ const ROADS := [
  l=l.replace('var palette := {"square":"#aaa494",','var palette := {"railway":"#6f675e","square":"#aaa494",').replace('var layers := {"square":-0.5,','var layers := {"railway":-0.45,"square":-0.5,');if(!l.includes('"railway":"#6f675e"'))throw Error('landuse palette');fs.writeFileSync(lf,l);}
 // Claude C3 «Участок»: the detention block and the district officer (JS), the station sign with the cell count (native)
 run('patch',['-p1','-i',path.join(tools,'claude-release-c3-station.patch')],js);
-for(const directory of ['simulation/source','ui/source'])for(const name of ['sim.js','life.js','station.js'])fs.copyFileSync(path.join(js,'dist',name),path.join(native,directory,name));
+// Claude C5: saves of an earlier plan revision migrate; cars drive around a crew standing on their street
+run('patch',['-p1','-i',path.join(tools,'claude-release-c5-saves.patch')],js);
+for(const directory of ['simulation/source','ui/source'])for(const name of ['sim.js','life.js','station.js','traffic.js'])fs.copyFileSync(path.join(js,'dist',name),path.join(native,directory,name));
 run('patch',['-p1','-i',path.join(tools,'native-station.patch')],native);
 run('python3',[path.join(native,'tools/build_bridge_profiles.py')],native);
 console.log('Experimental sources prepared. Rebuild bundles/manifests, verify ALL release gates before packing or publishing.');
