@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import {generate,validate} from './generate.mjs';
+const city=generate();validate(city);
+const colors={centre:'#ddbb84',ulejoe:'#a7bacb',raama:'#c8b792',beach:'#80ac89',mai:'#b7bdd1',papiniidu:'#a5aaac',vana:'#bf9476',raekula:'#afc49b'};
+const p=points=>points.map(p=>p.join(',')).join(' ');
+const parts=[`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2600 -4400 7800 8000"><rect x="-2600" y="-4400" width="7800" height="8000" fill="#18292c"/><text x="-2250" y="-4000" fill="#f2eee1" font-family="sans-serif" font-size="190">МЕРИДИАН · ГОРОД 2.0</text><text x="-2250" y="-3750" fill="#a9c0bc" font-family="sans-serif" font-size="100">Часть 1 · схема дорог и районов · не игровой рендер</text>`];
+for(const a of city.areas)parts.push(`<polygon points="${p(a.p)}" fill="${a.kind==='water'?'#44879c':'#325a46'}"/>`);
+for(const r of city.roads)parts.push(`<polyline points="${p(r.p)}" fill="none" stroke="${r.bridge?'#e6c878':r.kind==='primary'?'#c2c5b5':r.kind==='secondary'?'#8d9c95':'#536c68'}" stroke-width="${r.width*(r.kind==='primary'?3:2)}"/>`);
+for(const b of city.buildings)parts.push(`<polygon points="${p(b.p)}" fill="${colors[b.district]}"/>`);
+for(const [id,name,x,y] of city.districts)parts.push(`<rect x="${x-155}" y="${y-100}" width="${name.length*43+70}" height="105" rx="16" fill="#142326" opacity=".94"/><text x="${x-130}" y="${y-25}" fill="#f6f0da" font-family="sans-serif" font-size="72">${name}</text>`);
+for(const [name,[x,y]] of Object.entries(city.bases))parts.push(`<circle cx="${x}" cy="${y}" r="25" fill="#ed8b69"/><text x="${x+35}" y="${y+70}" fill="#f5c5a8" font-family="sans-serif" font-size="50">${name}</text>`);
+parts.push('<text x="-2200" y="3200" fill="#a9c0bc" font-family="sans-serif" font-size="85">Два моста · круг · объездная · кварталы · дворовые въезды</text></svg>');
+fs.writeFileSync(process.argv[2]??'city-v2-plan.svg',parts.join('\n'));
