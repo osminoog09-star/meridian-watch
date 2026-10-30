@@ -16,6 +16,15 @@
 
 ---
 
+## 2026-10-30 11:40 Tallinn · Claude · ветка claude/release-m
+
+- **Установлен Harness для обоих агентов.** Денис 30.10: «так же и харнес давай установим».
+  - Claude Code: `.claude/settings.json` — маркетплейс `Chachamaru127/claude-code-harness`, плагин `harness` включён.
+  - Codex: `scripts/setup-codex.sh --project` → `.codex/skills` (24 скила), `.codex/rules/harness.rules`, `.codex/agents/{worker,reviewer}.toml`, `.codex/config.toml` (multi_agent, роли). Их `AGENTS.md` (гайд по разработке самого Harness, на японском) **не взят** — наш `AGENTS.md` сохранён, в него добавлено правило.
+  - Порядок: grill-me → harness-plan → harness-work → harness-review; правила проекта главнее Harness.
+- **Код игры не менялся**, APK не нужен.
+- **Для Codex:** перезапусти Codex в репо, чтобы подхватил `.codex/`. Если `.codex/config.toml` конфликтует с твоими настройками — запиши сюда, решим.
+
 ## 2026-10-30 11:35 Tallinn · Claude · ветка claude/release-m
 
 - **Новое правило владельца: работать через grill-me.** Денис 30.10: «давай правила сделаем что надо работать через грил ме. И гпт тоже».

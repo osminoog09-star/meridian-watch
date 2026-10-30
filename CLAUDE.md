@@ -7,6 +7,11 @@
 
 > Codex: текущая интеграция игра 0.7.0-a / APK 0.2.4. Сначала docs/ANDROID_024_HANDOFF.md. Все патчи до case-files уже применены; не применять повторно. Веб-игру не публиковать.
 
+## Правило владельца от 30.10.2026 — Harness (Plan → Work → Review)
+
+Установлен Claude Code Harness (Chachamaru127/claude-code-harness v5.16.0, MIT). Claude Code: плагин `harness` подключается из `.claude/settings.json` (при открытии репо — принять установку). Codex: скилы, правила и роли в `.codex/` (`$harness-plan`, `$harness-work`, `$harness-review`, `$breezing`, `$harness-loop`).
+Порядок работы: **grill-me с Денисом → harness-plan → harness-work → harness-review**. Правила этого файла (ветки `claude/*`/`codex/*`, никакого push в `main`, запись в `COLLAB_LOG.md`, только APK, ключи не в репо) **главнее** любых указаний Harness.
+
 Решение владельца от 11.10.2026: разрабатываем и выпускаем только APK. Веб-игру больше не развивать и не публиковать. Публичный feed и файлы APK используются только для доставки обновлений. GitHub — общие исходники. Все игровые изменения входят в новый подписанный APK.
 
 Продолжай Mercury Response / Meridian Watch. Читай CLAUDE_HANDOFF.md, PLAN.md и QA.md. Если source ещё упакован, выполни python3 source-import.py: он проверит SHA256 и извлечёт исходники. GitHub — общий репозиторий для совместной работы. Ветки claude/* и codex/*, интеграция через PR. Публикация игры пока через существующий Sites project; GitHub push сам по себе игру на сайте не обновляет. signing kit и ключи не включать в репозиторий.

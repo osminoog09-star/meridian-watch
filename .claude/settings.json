@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "claude-code-harness-marketplace": {
+      "source": { "source": "github", "repo": "Chachamaru127/claude-code-harness" }
+    }
+  },
+  "enabledPlugins": {
+    "harness@claude-code-harness-marketplace": true
+  }
+}
