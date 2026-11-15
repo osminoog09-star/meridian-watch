@@ -89,3 +89,61 @@ test('riot needs three units and trust gains shrink near the ceiling', () => {
   const low = gain(40), high = gain(95);
   if (low.ok && high.ok) assert.ok(high.d < low.d, `low ${low.d} high ${high.d}`);
 });
+
+// ---------- 2.0 ----------
+const blankCall = (s, type, node, extra = {}) => { const c = {id: s.nextId++, type, node: node.id, x: node.x, y: node.y, district: node.district, place: 't', created: s.t, deadline: s.t + 1800, wait: 1800, state: 'pending', approach: null, progress: 0, work: 0, choiceAt: 0, suspectId: null, own: false, auto: false, caseId: null, reaction: null, onView: false, ...extra}; s.calls.push(c); return c; };
+
+test('a hidden crime next to a patrol is spotted, far away it vanishes unseen', () => {
+  const s = createGame(21, 'X', {mode: 'sandbox'}); s.nextCallAt = Infinity; s.settings.waves = false;
+  const u = s.units[0]; for (const x of s.units) sim.moveUnit(s, x.id, STATION);
+  const near = blankCall(s, 'drugs', u.node, {state: 'hidden', vanishAt: s.t + 3600});
+  const far = callNodes.find(n => Math.hypot(n.x - STATION.x, n.y - STATION.y) > 1.5);
+  const lost = blankCall(s, 'speeding', far, {state: 'hidden', vanishAt: s.t + 120});
+  tick(s, 4);
+  assert.notEqual(near.state, 'hidden'); assert.ok(near.onView);
+  for (let k = 0; k < 60; k++) tick(s, 4);
+  assert.equal(lost.state, 'done'); assert.ok(s.stats.unseen >= 1);
+});
+
+test('armor cuts injuries in shootouts', () => {
+  const injuries = armor => { let n = 0; for (let seed = 1; seed <= 60; seed++) { const s = createGame(seed, 'X', {mode: 'sandbox'}); s.nextCallAt = Infinity; const on = s.units.slice(0, 2); for (const u of on) u.gear.armor = armor;
+    const c = blankCall(s, 'shooting', on[0].node, {state: 'active', approach: 0, work: 1, progress: 2, reaction: 'fight'}); for (const u of on) { u.callId = c.id; u.status = 'onscene'; } tick(s, 2); n += s.stats.injuries; } return n; };
+  assert.ok(injuries('heavy') < injuries('none'));
+});
+
+test('spikes stop a fleeing suspect', () => {
+  const s = createGame(5, 'X', {mode: 'sandbox'}); s.nextCallAt = Infinity;
+  const node = callNodes[500], c = blankCall(s, 'carjack', node);
+  tick(s, 0.5); // announce не вызывается для ручного вызова — создаём погоню напрямую
+  const sus = {id: s.nextId++, callId: c.id, x: node.x, y: node.y, heading: 0, node, path: [], dest: null, speed: 8, meter: 0, until: s.t + 900, started: s.t};
+  s.suspects.push(sus); c.suspectId = sus.id;
+  assert.ok(sim.placeSpike(s, node).ok);
+  tick(s, 2);
+  assert.equal(c.state, 'done'); assert.equal(s.stats.arrests, 1);
+});
+
+test('an early warrant carries a risk of arresting the wrong person', () => {
+  const s = createGame(8, 'X', {mode: 'sandbox'});
+  s.cases.push({id: 1, title: 'Убийство', district: 0, evidence: 40, fails: 0, state: 'open', nextAt: Infinity, opened: s.t, search: {x: 1, y: 1, r: 450}});
+  assert.equal(sim.arrestNow(s, 1).ok, false);
+  s.cases[0].evidence = 55; assert.ok(sim.arrestNow(s, 1).ok);
+  const raid = s.calls.find(c => c.type === 'raid'); assert.ok(raid.innocentRisk > 0.25 && raid.innocentRisk < 0.35);
+});
+
+test('sandbox and challenges start correctly and challenges end with a verdict', () => {
+  const sand = createGame(2, 'X', {mode: 'sandbox', difficulty: 'hard', money: 12000});
+  assert.equal(sand.rank, 4); assert.equal(sand.money, 12000); assert.equal(playerUnit(sand), null);
+  const ch = createGame(2, 'X', {mode: 'challenge', challenge: 'riotnight'});
+  assert.equal(ch.units.filter(u => u.type === 'van').length, 2);
+  ch.trust = 90; while (ch.phase === 'shift') tick(ch, 4);
+  assert.ok(['won', 'over'].includes(ch.phase));
+});
+
+test('a 1.2 save (v2) migrates to 2.0', () => {
+  const s = createGame(4); const raw = JSON.parse(serialize(s));
+  raw.v = 2; raw.policies = {hard: true}; delete raw.policy; delete raw.settings; delete raw.informants; delete raw.undercover; delete raw.spikes;
+  for (const u of raw.units) delete u.gear;
+  const m = deserialize(JSON.stringify(raw));
+  assert.equal(m.v, 3); assert.equal(m.policy.force, 'hard'); assert.ok(m.units.every(u => u.gear.armor === 'vest'));
+  tick(m, 60);
+});

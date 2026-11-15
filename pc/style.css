@@ -128,3 +128,59 @@ select{font:inherit;font-size:12px;color:var(--text);background:#16232c;border:1
 .statgrid{grid-template-columns:repeat(4,1fr)}
 @media(max-width:1500px){.stat{min-width:86px}#top{gap:14px}}
 #card{scrollbar-color:#3a4c57 transparent}
+
+/* 3D: подписи поверх сцены */
+#labels{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+.lbl{position:absolute;left:0;top:0;white-space:nowrap;font:700 11px "Segoe UI",system-ui,sans-serif;will-change:transform}
+.lbl.unit{background:rgba(12,20,26,.86);color:#e6eef2;padding:2px 8px 2px 6px;border-radius:10px;display:flex;align-items:center;gap:5px;border:1px solid rgba(255,255,255,.1)}
+.lbl.unit i{width:7px;height:7px;border-radius:50%;background:var(--c)}
+.lbl.unit.me{background:#ffd166;color:#2a1f00}.lbl.unit.sel{outline:2px solid #7ef0e0}
+.lbl.call{display:flex;align-items:center;gap:6px;background:rgba(12,20,26,.88);padding:3px 9px 3px 3px;border-radius:16px;color:#e6eef2;border:1px solid rgba(255,255,255,.12);position:absolute}
+.lbl.call b{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;border:2px solid var(--c);color:var(--c);font:700 13px "Segoe UI Symbol","Segoe UI",sans-serif;background:rgba(0,0,0,.35)}
+.lbl.call s{display:block;width:34px;height:4px;border-radius:2px;background:rgba(255,255,255,.14);overflow:hidden;text-decoration:none}
+.lbl.call s u{display:block;height:100%}
+.lbl.call em{font-style:normal;font-size:10px;background:#ffe08a;color:#10202a;border-radius:6px;padding:1px 6px;animation:blink2 .8s steps(2) infinite}
+.lbl.call em.red{background:#ff4d5e;color:#fff}
+.lbl.call.sel{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+@keyframes blink2{50%{opacity:.35}}
+.lbl.district{background:rgba(12,20,26,.8);color:#e6eef2;padding:4px 11px;border-radius:12px;font-size:12px;letter-spacing:.5px;display:flex;align-items:center;gap:6px}
+.lbl.district i{width:8px;height:8px;border-radius:50%}.lbl.district b{color:#fff}.lbl.district span{color:#c59bff;font-weight:600}
+.lbl.station{color:#9fd0ff;background:rgba(12,20,26,.8);padding:2px 8px;border-radius:8px;font-size:10px;letter-spacing:1.5px}
+.lbl.pop{padding:3px 10px;border-radius:10px;font-size:12px}.lbl.pop.good{background:#6ee7b0;color:#0d2a22}.lbl.pop.bad{background:#d8455a;color:#fff}
+.lbl.wp{width:18px;height:18px;border-radius:50%;background:#7ef0e0;color:#06211d;display:grid;place-items:center;font-size:10px}
+.lbl.spike{color:#ffd166;font-size:12px;text-shadow:0 0 6px #000}
+#boot{position:fixed;inset:0;display:grid;place-content:center;text-align:center;font-size:34px;font-weight:300;letter-spacing:8px;color:#e6eef2;background:#0b1320;z-index:20}
+#boot b{font-weight:800}#boot small{display:block;font-size:12px;letter-spacing:3px;color:#8fa3af;margin-top:10px}
+body.ready #boot{display:none}
+.seg{display:flex;gap:6px}.seg button{flex:1}
+
+/* 2.0: подразделения, снаряжение, дела, отделение, газета */
+.wx{font-style:normal;margin-left:4px;color:#ffd98a}
+.wave{font-size:11px;font-weight:700;color:#ff9aa4;background:rgba(255,77,94,.14);border:1px solid rgba(255,77,94,.4);border-radius:8px;padding:5px 9px;white-space:nowrap;animation:blink 1.6s ease-in-out infinite}
+.wave[hidden],#spikeBtn[hidden],#casesBox[hidden]{display:none}
+.role{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:1px 6px;border-radius:5px;color:#0b161c;background:var(--c);vertical-align:1px}
+.gi{font-style:normal;font-size:10px;color:#cfe0e8;background:rgba(255,255,255,.08);border-radius:4px;padding:0 4px;margin-right:2px}
+.unit.hurt{border-color:rgba(255,77,94,.45);background:rgba(255,77,94,.06)}
+.route{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;font-size:11px;color:var(--muted)}.route button{padding:3px 8px;font-size:11px}
+#casesBox{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+#cases{max-height:24vh}
+.case{border:1px solid rgba(197,155,255,.3);border-radius:10px;padding:8px 10px;background:rgba(197,155,255,.05);cursor:pointer}
+.case b{font-size:12px}.case small{color:var(--muted);font-size:11px}.case button{width:100%;margin-top:6px;font-size:11px;padding:5px}
+.bar.ev i{background:#c59bff}
+.tabs{display:flex;gap:6px;margin:6px 0 14px;flex-wrap:wrap}.tabs button.on{background:rgba(110,231,216,.2);border-color:var(--accent);color:var(--accent)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+table.gear{width:100%;border-collapse:collapse;font-size:12px}table.gear th{text-align:left;color:var(--muted);font-weight:600;font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:6px}
+table.gear td{padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}table.gear select{max-width:100%;width:100%}table.gear small{display:block;color:var(--muted);font-size:11px;margin-top:4px}
+.intel{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}.intel .seg button{font-size:11px;padding:5px}
+.paper{background:#f1ebdd;color:#1d1a14;border-radius:6px;padding:16px 20px;margin:14px 0;font-family:Georgia,"Times New Roman",serif;box-shadow:inset 0 0 40px rgba(120,100,60,.25)}
+.paper .mast{font-size:26px;font-weight:700;letter-spacing:1px;border-bottom:3px double #3b352a;padding-bottom:6px;display:flex;justify-content:space-between;align-items:baseline}
+.paper .mast small{font-size:11px;font-family:"Segoe UI",sans-serif;color:#6b6252;letter-spacing:1px;text-transform:uppercase}
+.paper h4{font-size:30px;margin:10px 0 2px;line-height:1.1}.paper .sub{color:#4a4335!important;font-style:italic;margin:0 0 10px!important;font-size:14px!important}
+.paper .cols{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 18px;border-top:1px solid #b9ae95;padding-top:8px}
+.paper .cols b{font-size:15px}.paper .cols p{color:#3b352a!important;font-size:13px!important;line-height:1.45!important;margin:3px 0!important}
+.paper .poll{display:flex;flex-wrap:wrap;gap:6px 18px;border-top:1px solid #b9ae95;margin-top:10px;padding-top:8px;font-family:"Segoe UI",sans-serif;font-size:12px;color:#4a4335}
+.statgrid{grid-template-columns:repeat(4,1fr)}
+body.spike-mode #map{cursor:crosshair}
+.lbl.unit .rl{font-size:9px;opacity:.8}
+.lbl.casezone{color:#e3d2ff;background:rgba(40,20,70,.75);border:1px solid rgba(197,155,255,.45);padding:3px 9px;border-radius:10px;font-size:11px}
+#top button{white-space:nowrap}

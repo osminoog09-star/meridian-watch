@@ -30,6 +30,7 @@ export function createAudio() {
     click() { tone(1200, 0, 0.03, 'sine', 0.05); },
     good() { tone(660, 0, 0.12, 'sine', 0.16); tone(880, 0.1, 0.12, 'sine', 0.16); tone(1320, 0.2, 0.25, 'sine', 0.14); },
     bad() { tone(220, 0, 0.3, 'sawtooth', 0.09, -90); },
+    hint() { static_(0, 0.18, 0.025); tone(1800, 0.05, 0.05, 'triangle', 0.035, -600); tone(1500, 0.14, 0.05, 'triangle', 0.03, -500); },
     alert() { tone(980, 0, 0.1, 'square', 0.08); tone(980, 0.16, 0.1, 'square', 0.08); },
     rank() { [523, 659, 784, 1047].forEach((f, k) => tone(f, k * 0.11, 0.3, 'triangle', 0.16)); },
     siren(on) {
