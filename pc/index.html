@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mercury Response</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="title">
+<canvas id="map"></canvas>
+<div id="hud">
+  <header id="top" class="glass">
+    <div class="brand"><span class="shield">M</span><div><b>MERCURY</b> RESPONSE<small>ПОЛИЦИЯ ПЯРНУ</small></div></div>
+    <div class="stat"><span>СМЕНА <i id="shiftNo">1</i></span><strong id="clock">18:00</strong><div class="bar"><i id="shiftBar"></i></div></div>
+    <div class="stat"><span>ДОВЕРИЕ ГОРОДА</span><strong id="trust">55%</strong><div class="bar trust"><i id="trustBar"></i></div></div>
+    <div class="stat"><span>ПРЕСТУПНОСТЬ</span><strong id="crime">0%</strong><div class="bar"><i id="crimeBar"></i></div></div>
+    <div class="stat" id="moneyBox"><span>БЮДЖЕТ</span><strong id="money">0 €</strong><small id="income"></small></div>
+    <div class="stat wide"><span id="rankTitle"></span><strong id="xpText"></strong><div class="bar xp"><i id="xpBar"></i></div></div>
+    <div class="spacer"></div>
+    <div class="speed">
+      <button data-act="pause" id="pauseBtn" title="Пауза (пробел)">❚❚</button>
+      <button data-act="speed" data-v="1" title="Клавиша 1">1×</button>
+      <button data-act="speed" data-v="2" title="Клавиша 2">2×</button>
+      <button data-act="speed" data-v="4" title="Клавиша 3">4×</button>
+    </div>
+    <button id="autoBtn" data-act="auto" title="Автодиспетчер сам распределяет подчинённые экипажи. Своей машиной вы всегда управляете сами; опыта за вызовы автодиспетчера меньше.">Автодиспетчер: выкл</button>
+    <button id="heatBtn" data-act="heat" title="Карта преступности по районам (V)">Районы</button>
+    <button id="shopBtn" data-act="shop" class="accent" title="Клавиша B">Личное дело</button>
+    <button data-act="menu" title="Esc">☰</button>
+  </header>
+  <aside id="unitsPanel" class="glass"><h2>Экипажи <span id="unitCount"></span></h2><div id="units" class="scroll"></div></aside>
+  <aside id="callsPanel" class="glass"><h2>Вызовы <span id="callCount"></span></h2><div id="calls" class="scroll"></div><div id="callDetail"></div></aside>
+  <div id="coach" class="glass" hidden></div>
+  <div id="radio" class="glass"></div>
+  <div id="miniWrap" class="glass"><canvas id="minimap"></canvas></div>
+  <div id="pausedBanner" hidden>ПАУЗА</div>
+  <div id="toasts"></div>
+</div>
+<div id="overlay" hidden><div id="card" class="glass"></div></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
