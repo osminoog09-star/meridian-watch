@@ -19,7 +19,8 @@ protocol.registerSchemesAsPrivileged([
   {scheme: 'mercury', privileges: {standard: true, secure: true, supportFetchAPI: true, stream: true}},
 ]);
 
-if (!app.requestSingleInstanceLock()) app.quit();
+const primary = app.requestSingleInstanceLock();
+if (!primary) app.quit();
 
 async function serve(request) {
   const url = new URL(request.url);
@@ -85,7 +86,7 @@ app.on('second-instance', () => {
 });
 app.on('window-all-closed', () => app.quit());
 
-app.whenReady().then(() => {
+if (primary) app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   protocol.handle('mercury', serve);
   // Игре не нужны камера, микрофон, геолокация и уведомления.

@@ -27,7 +27,8 @@ function createTraffic(count) {
 function makeDemo() { const d = sim.createGame(20261114); d.rank = 3; d.auto = true; d.t = 21.5 * 3600; d.shiftEnd = d.t + 1e9; d.tutorial = 2; return d; }
 
 // ---------- сохранения ----------
-function save() { if (!state) return; try { localStorage.setItem(SAVE_KEY, sim.serialize(state)); } catch {} }
+let saveWarned = false;
+function save() { if (!state) return; try { localStorage.setItem(SAVE_KEY, sim.serialize(state)); saveWarned = false; } catch { if (!saveWarned) { saveWarned = true; toast('Не удалось сохранить игру: нет доступа к хранилищу', 'bad'); } } }
 function loadSaved() { try { const raw = localStorage.getItem(SAVE_KEY); return raw ? sim.deserialize(raw) : null; } catch { return null; } }
 function startGame(saved = null, name = '') {
   state = saved ?? sim.createGame(undefined, name); speed = 1; paused = false; view.unit = sim.playerUnit(state)?.id ?? state.units[0]?.id ?? null; view.call = null;
@@ -92,6 +93,13 @@ function refresh(force = false) {
   setHtml('radio', s.log.slice(0, 4).map(l => `<div class="k-${l.kind}"><time>${sim.clockText(l.t)}</time>${esc(l.text)}</div>`).join(''));
   const tip = coach(); $('coach').hidden = !tip || !!overlay; if (tip) setHtml('coach', tip);
 }
+const etaCache = new Map();
+function etaOf(s, u, target) {
+  const key = u.id + ':' + (u.path[0]?.id ?? u.node.id) + ':' + target.id, hit = etaCache.get(key);
+  if (hit && performance.now() - hit.at < 1500) return hit.v;
+  if (etaCache.size > 200) etaCache.clear();
+  const v = sim.eta(s, u, target); etaCache.set(key, {v, at: performance.now()}); return v;
+}
 function callDetail(c) {
   if (!c) return '';
   const s = state, t = CALLS[c.type], assigned = sim.unitsFor(s, c), on = sim.unitsOn(s, c), node = nearestNode(c.x, c.y), me = sim.playerUnit(s);
@@ -105,7 +113,7 @@ function callDetail(c) {
   }
   if (c.state !== 'active' || c.suspectId) {
     const backup = sim.canBackup(s) && me?.callId === c.id, target = c.suspectId ? (s.suspects.find(x => x.id === c.suspectId)?.node ?? node) : node;
-    const free = s.units.filter(u => u.callId !== c.id && (sim.isFree(u) || u.status === 'enroute') && (sim.canCommand(s, u) || backup)).map(u => ({u, eta: sim.eta(s, u, target)})).sort((a, b) => a.eta - b.eta);
+    const free = s.units.filter(u => u.callId !== c.id && (sim.isFree(u) || u.status === 'enroute') && (sim.canCommand(s, u) || backup)).map(u => ({u, eta: etaOf(s, u, target)})).sort((a, b) => a.eta - b.eta);
     const own = free.find(x => x.u.player);
     if (s.rank < 3 && own) html += `<button class="primary" data-act="dispatchBest">Принять вызов своим экипажем · ${minutes(own.eta)} &nbsp;<kbd>G</kbd></button>`;
     else if (s.rank >= 3 && free.length) html += `<button class="primary" data-act="dispatchBest">Направить ближайший экипаж &nbsp;<kbd>G</kbd></button>`;
@@ -117,11 +125,12 @@ function callDetail(c) {
 }
 function coach() {
   const s = state;
-  if (!s || s.shift > 1 || s.career.own >= 4 || s.phase !== 'shift') return '';
+  if (!s || s.shift > 1 || s.career.own >= 4 || s.phase !== 'shift' || s.rank >= 3) return '';
   const live = sim.liveCalls(s), me = sim.playerUnit(s);
   if (live.some(c => c.state === 'choice' && sim.playerDecides(s, c))) return 'Морозов: «Мы на месте. Решай, как действуем» — выберите вариант в карточке вызова справа. <b>Процент — шанс успеха.</b>';
   if (live.some(c => c.state === 'pending') && me && sim.isFree(me)) return 'Новый вызов! Нажмите <b>«Принять вызов своим экипажем»</b> (клавиша <kbd>G</kbd>) — или кликните <b>правой кнопкой</b> по значку вызова на карте.';
   if (!s.career.own && !live.length) return 'Вы — стажёр в <b>' + esc(me?.callsign ?? '') + '</b>, наставник Морозов рядом. Пока патрулируем. Карта: тяните мышью, колесо — масштаб.';
+  if (me?.status === 'hold' && !me.path.length) return 'Экипаж ждёт приказа на месте. Нажмите <kbd>P</kbd>, чтобы вернуться в патруль.';
   if (s.career.own >= 1) return 'Так держать. Опыт идёт за вызовы вашего экипажа. <kbd>Пробел</kbd> — пауза, <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> — скорость, <kbd>B</kbd> — личное дело.';
   return '';
 }
@@ -136,7 +145,7 @@ const helpHtml = `<h3>Как играть</h3><p>Вы начинаете ста�
 function showTitle() {
   document.body.classList.add('title'); state = null; audio.siren(false);
   const saved = loadSaved();
-  openOverlay('title', `<span class="eyebrow">ПОЛИЦЕЙСКАЯ КАРЬЕРА · ПК-ВЕРСИЯ 1.1</span><h1><b>MERCURY</b> RESPONSE</h1>
+  openOverlay('title', `<span class="eyebrow">ПОЛИЦЕЙСКАЯ КАРЬЕРА · ПК-ВЕРСИЯ 1.2</span><h1><b>MERCURY</b> RESPONSE</h1>
   <p>Вчера — академия. Сегодня — первая смена в патруле. Дослужитесь от стажёра до комиссара.</p>
   <div class="menu">${saved ? `<button class="primary" data-act="continue">Продолжить · ${RANKS[saved.rank].title.toLowerCase()} ${esc(saved.player.name)}, смена ${saved.shift}</button>` : ''}
   <label class="name">Имя офицера<input id="playerName" maxlength="24" placeholder="Например: Денис" autocomplete="off"></label>
@@ -216,7 +225,8 @@ const actions = {
 document.addEventListener('click', e => { if (e.target.closest('.zone, input')) return; const el = e.target.closest('[data-act]'); if (!el) return; audio.unlock(); audio.click(); actions[el.dataset.act]?.(el.dataset); });
 document.addEventListener('change', e => { const id = e.target.dataset?.zone; if (id && state) { result(sim.setZone(state, +id, +e.target.value)); e.target.blur(); refresh(true); } });
 document.addEventListener('pointerdown', () => { pointerDown = true; }, true);
-document.addEventListener('pointerup', () => { pointerDown = false; }, true);
+for (const type of ['pointerup', 'pointercancel']) document.addEventListener(type, () => { pointerDown = false; }, true);
+window.addEventListener('blur', () => { pointerDown = false; drag = null; miniDrag = false; $('map').classList.remove('drag'); });
 
 // ---------- мышь на карте ----------
 const map = $('map'); let drag = null;
@@ -260,6 +270,7 @@ const keys = {
 document.addEventListener('keyup', e => held.delete(e.code)); window.addEventListener('blur', () => held.clear());
 document.addEventListener('keydown', e => {
   audio.unlock();
+  if ((e.code === 'Enter' || e.code === 'NumpadEnter') && overlay === 'title') { e.preventDefault(); (document.querySelector('#card .menu button.primary'))?.click(); return; }
   if (e.code === 'Escape') { e.preventDefault(); if (overlay === 'title' || overlay === 'over') return; if (overlay === 'summary') return; if (overlay) { if (state?.phase === 'summary') showSummary(); else if (state) closeOverlay(); else showTitle(); } else if (state) showMenu(); return; }
   if (overlay || !state || e.ctrlKey || e.altKey || e.metaKey || ['INPUT', 'SELECT'].includes(e.target.tagName)) return;
   if (PAN[e.code]) { held.add(e.code); e.preventDefault(); return; }
@@ -299,7 +310,8 @@ function frame(now) {
     else if (held.size && !overlay) { let dx = 0, dy = 0; for (const k of held) { dx += PAN[k][0]; dy += PAN[k][1]; } renderer.pan(dx * 1000 * real, dy * 1000 * real); }
     renderer.draw(world, state ? view : {unit: null, call: null, traffic: view.traffic}, real);
     if (state) {
-      const u = selectedUnit(); audio.siren(running && (state.suspects.length > 0 || (u && u.status === 'enroute' && renderer.following() === u.id)));
+      const loud = x => x && (x.status === 'enroute' || x.status === 'pursuit'), followed = state.units.find(x => x.id === renderer.following());
+      audio.siren(running && (loud(sim.playerUnit(state)) || loud(followed)));
       if (now - uiAt > 200) { uiAt = now; refresh(); }
       if (now - saveAt > 20000) { saveAt = now; if (state.phase === 'shift') save(); }
     }

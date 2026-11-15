@@ -79,3 +79,13 @@ test('resting restores a tired unit', () => {
   for (let k = 0; k < 3000 && u.status !== 'patrol'; k++) tick(s, 2);
   assert.equal(u.status, 'patrol'); assert.ok(u.fatigue < 20);
 });
+
+test('riot needs three units and trust gains shrink near the ceiling', () => {
+  const s = createGame(11); s.rank = 4;
+  const c = {type: 'riot', id: -1};
+  const one = sim.successChance(s, c, 0, s.units.slice(0, 1)), three = sim.successChance(s, c, 0, s.units.slice(0, 3));
+  assert.ok(three - one > 0.35, `one ${one} three ${three}`);
+  const gain = trust => { const g = createGame(12); g.trust = trust; g.calls.push({id: 999, type: 'alarm', node: STATION.id, x: STATION.x, y: STATION.y, district: STATION.district, state: 'pending', own: true}); const call = g.calls.at(-1), before = g.trust; for (const u of g.units) u.callId = null; sim.dispatch(g, playerUnit(g).id, call.id); for (let k = 0; k < 3000 && call.state !== 'done'; k++) { tick(g, 2); if (call.state === 'choice') chooseApproach(g, call.id, 0); } return {d: g.trust - before, ok: g.stats.resolved > 0}; };
+  const low = gain(40), high = gain(95);
+  if (low.ok && high.ok) assert.ok(high.d < low.d, `low ${low.d} high ${high.d}`);
+});

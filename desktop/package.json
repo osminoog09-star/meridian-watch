@@ -1,17 +1,17 @@
 {
   "name": "mercury-response-desktop",
   "productName": "Mercury Response",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Mercury Response — настольная версия полицейской стратегии",
   "private": true,
   "main": "main.js",
   "scripts": {
     "sync": "node sync-game.mjs",
     "start": "node sync-game.mjs && electron .",
-    "build": "node sync-game.mjs && electron-packager . \"Mercury Response\" --platform=win32 --arch=x64 --out=out --overwrite --icon=icon.ico --app-version=1.1.0 --ignore=\"^/out\" --ignore=\"^/sync-game\\.mjs$\" --ignore=\"^/make-icon\\.py$\""
+    "build": "node sync-game.mjs && electron-packager . \"Mercury Response\" --platform=win32 --arch=x64 --out=out --overwrite --icon=icon.ico --app-version=1.2.0 --ignore=\"^/out\" --ignore=\"^/sync-game\\.mjs$\" --ignore=\"^/make-icon\\.py$\""
   },
   "devDependencies": {
-    "@electron/packager": "^18.3.6",
-    "electron": "^33.2.0"
+    "@electron/packager": "20.3.0",
+    "electron": "45.2.1"
   }
 }

@@ -102,7 +102,9 @@ export function successChance(s, call, index, units = unitsOn(s, call)) {
   if (s.upgrades[a.trait]) p += 0.1;
   if (a.trait === 'force' && s.policies.hard) p += 0.08;
   if (a.trait === 'talk' && s.policies.community) p += 0.08;
-  if (units.length >= 2) p += 0.1; else if (type.needs === 2) p -= 0.15;
+  const needs = type.needs ?? 1;
+  if (units.length >= 2) p += 0.1;
+  if (units.length < needs) p -= 0.15 * (needs - units.length);
   const tired = Math.max(...units.map(u => u.fatigue));
   if (tired > 65) p -= (tired - 65) / 100 * 0.6;
   return clamp(p, 0.08, 0.97);
@@ -228,9 +230,10 @@ function spawnCall(s, forced = null, at = null, caseId = null) {
   let key = forced;
   if (!key) {
     const pool = Object.entries(CALLS).filter(([, c]) => c.rank <= s.rank && !c.special);
-    let total = 0; for (const [, c] of pool) total += night ? c.n : c.d;
+    const weight = c => (night ? c.n : c.d) * (c.sev === 3 ? cityGrowth(s) : 1);
+    let total = 0; for (const [, c] of pool) total += weight(c);
     let roll = rnd(s) * total;
-    for (const [k, c] of pool) { roll -= night ? c.n : c.d; if (roll <= 0) { key = k; break; } }
+    for (const [k, c] of pool) { roll -= weight(c); if (roll <= 0) { key = k; break; } }
     key ??= pool[0][0];
   }
   let node = at;
@@ -278,12 +281,12 @@ function reward(s, c, success, extra = {}) {
   const share = c.own ? 1 : s.rank >= 3 ? (c.auto ? 0.35 : 0.6) : 0;
   if (success) {
     const money = canManage(s) ? 15 * sev + (extra.arrest ? 20 : 0) : 0, xp = gainXp(s, (8 * sev + (extra.arrest ? 5 : 0)) * share);
-    s.money += money; s.stats.income += money; s.trust = clamp(s.trust + (sev === 3 ? 0.9 : 0.45) + (s.upgrades.cam && sev >= 2 ? 0.5 : 0), 0, 100);
+    s.money += money; s.stats.income += money; s.trust = clamp(s.trust + ((sev === 3 ? 0.9 : 0.45) + (s.upgrades.cam && sev >= 2 ? 0.5 : 0)) * Math.max(0.25, 1 - s.trust / 135), 0, 100);
     s.stats.resolved++; s.career.resolved++; if (c.own) { s.stats.own++; s.career.own++; }
     crimeShift(s, c.district, -(1 * sev + (extra.arrest ? 2 : 0)));
     emit(s, {type: 'resolved', x: c.x, y: c.y, text: xp ? '+' + xp + ' опыта' : 'Вызов закрыт', own: c.own});
   } else {
-    s.trust = clamp(s.trust - sev * 1.5 - (extra.missed ? sev * 0.5 + 0.5 : 0) - (s.policies.hard ? 1 : 0), 0, 100); gainXp(s, 2 * share);
+    s.trust = clamp(s.trust - (sev * 1.5 + (extra.missed ? sev * 0.5 + 0.5 : 0) + (s.policies.hard ? 1 : 0)) * (0.5 + 0.5 * Math.min(1, s.trust / 70)), 0, 100); // у дна потери мягче — есть шанс отыграться gainXp(s, 2 * share);
     if (extra.missed) s.stats.missed++; else s.stats.failed++;
     s.career.failed++; crimeShift(s, c.district, (extra.missed ? 4 : 2.5) * sev);
     emit(s, {type: 'failed', x: c.x, y: c.y, text: extra.missed ? 'Вызов пропущен' : 'Неудача', own: c.own});
@@ -344,7 +347,8 @@ function tickUnit(s, u, dt) {
   const v = VEHICLES[u.type], tire = (s.upgrades.rest ? 0.7 : 1) * (s.policies.presence ? 1.25 : 1) * dt / 3600;
   switch (u.status) {
     case 'patrol':
-      if (u.fatigue >= 92) { u.status = 'returning'; setRoute(u, STATION); say(s, `${u.callsign}: экипаж вымотан, едем в участок.`, 'unit'); break; }
+      // экипажи под диспетчером отдыхают заранее; свой экипаж и подчинённые без автодиспетчера — на усмотрение игрока
+      if (u.fatigue >= (u.player || (canCommand(s, u) && !s.auto) ? 92 : 85)) { u.status = 'returning'; setRoute(u, STATION); say(s, `${u.callsign}: экипаж вымотан, едем в участок.`, 'unit'); break; }
       if (!u.path.length) {
         let target = null;
         if (u.zone >= 0 && districtNodes[u.zone].length) target = pick(s, districtNodes[u.zone]);
@@ -420,7 +424,7 @@ function tickCall(s, c, dt) {
     }
     return;
   }
-  c.progress += dt * (1 + 0.5 * (on.length - 1)) * (type.needs === 2 && on.length < 2 ? 0.7 : 1);
+  c.progress += dt * (1 + 0.5 * (on.length - 1)) * (on.length < (type.needs ?? 1) ? 0.7 : 1);
   if (c.progress >= c.work) resolve(s, c);
 }
 // Диспетчер ведёт экипажи, которыми игрок не командует; с автодиспетчером — все, кроме машины игрока до сержанта.
@@ -436,10 +440,11 @@ function aiDispatch(s) {
     if (u) dispatch(s, u.id, c.id, 'ai');
   }
 }
+const cityGrowth = s => Math.min(1.5, 1 + 0.03 * (s.shift - 1));
 function callInterval(s) {
   const pressure = 1.25 - cityCrime(s) / 200; // спокойный город — реже вызовы
   const base = Math.max(7, 12.5 - s.rank * 0.8) / (1 + Math.max(0, s.units.length - 3) * 0.13) * (isNight(s.t) ? 0.85 : 1) * pressure;
-  return base * MIN * (0.55 + rnd(s) * 0.9);
+  return base / cityGrowth(s) * MIN * (0.55 + rnd(s) * 0.9);
 }
 export function tick(s, dt) {
   if (s.phase !== 'shift') return;
