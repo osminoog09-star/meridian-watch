@@ -38,6 +38,7 @@ function makeUnit(s, type) {
     status: 'patrol', callId: null, suspectId: null, fatigue: 5, busyUntil: 0, handled: 0, zone: -1, waypoints: [], wp: 0, player: false, focus: 'response'};
 }
 export const _trafficStop = (s, u) => trafficStop(s, u);
+export const _spawnSuspect = (s, c, node) => spawnSuspect(s, c, node); // для тестов и проверок графики
 export const roleOf = u => VEHICLES[u.type]?.role ?? 'patrol';
 const isHeli = u => roleOf(u) === 'heli';
 function newStats() { return {resolved: 0, failed: 0, missed: 0, arrests: 0, escaped: 0, income: 0, fines: 0, responseSum: 0, responseN: 0, own: 0, xp: 0, solved: 0, spotted: 0, unseen: 0, injuries: 0, wrongful: 0, crashes: 0, overkill: 0, events: []}; }

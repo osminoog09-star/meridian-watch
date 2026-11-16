@@ -76,10 +76,14 @@ const toMetres = pts => { const out = new Float32Array(pts.length); for (let i =
 const NOISE_GLSL = `
   float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash2(i), hash2(i + vec2(1, 0)), u.x), mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), u.x), u.y); }`;
+    return mix(mix(hash2(i), hash2(i + vec2(1, 0)), u.x), mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), u.x), u.y); }
+  float cloudShade(vec2 p, float t) {
+    float c = vnoise(p * 0.0016 + vec2(t * 0.011, t * 0.004)) * 0.65 + vnoise(p * 0.0047 + vec2(t * 0.018, -t * 0.006)) * 0.35;
+    return smoothstep(0.5, 0.74, c);
+  }`;
 function textured(mat, kind, uniforms) {
   mat.onBeforeCompile = shader => {
-    shader.uniforms.uTime = uniforms.uTime; shader.uniforms.uNight = uniforms.uNight; shader.uniforms.uWet = uniforms.uWet;
+    shader.uniforms.uTime = uniforms.uTime; shader.uniforms.uNight = uniforms.uNight; shader.uniforms.uWet = uniforms.uWet; shader.uniforms.uCloud = uniforms.uCloud;
     shader.vertexShader = 'varying vec2 vGW;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vGW = (modelMatrix * vec4(transformed, 1.0)).xz;');
     const body = kind === 'water' ? `
         float w1 = vnoise(vGW * 0.045 + vec2(uTime * 0.25, uTime * 0.11)), w2 = vnoise(vGW * 0.11 - vec2(uTime * 0.18, -uTime * 0.07));
@@ -94,9 +98,9 @@ function textured(mat, kind, uniforms) {
       : `
         float n = vnoise(vGW * 0.11) * 0.45 + vnoise(vGW * 0.023) * 0.35 + vnoise(vGW * 0.9) * 0.2;
         diffuseColor.rgb *= 0.84 + 0.3 * n;`;
-    let frag = shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>' + body);
+    let frag = shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>' + body + '\n diffuseColor.rgb *= 1.0 - 0.24 * uCloud * (1.0 - uNight) * cloudShade(vGW, uTime);');
     if (kind === 'road') frag = frag.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n roughnessFactor = mix(roughnessFactor, 0.12, uWet * (0.35 + 0.65 * pud));');
-    shader.fragmentShader = 'uniform float uTime;\nuniform float uNight;\nuniform float uWet;\nvarying vec2 vGW;\n' + NOISE_GLSL + '\n' + frag;
+    shader.fragmentShader = 'uniform float uTime;\nuniform float uNight;\nuniform float uWet;\nuniform float uCloud;\nvarying vec2 vGW;\n' + NOISE_GLSL + '\n' + frag;
   };
   mat.customProgramCacheKey = () => 'tex-' + kind;
   return mat;
@@ -104,18 +108,43 @@ function textured(mat, kind, uniforms) {
 function windowMaterial(uniforms) {
   const mat = new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.86, metalness: 0.02, flatShading: true});
   mat.onBeforeCompile = shader => {
-    shader.uniforms.uNight = uniforms.uNight; shader.uniforms.uHeat = uniforms.uHeat; shader.uniforms.uHeatOn = uniforms.uHeatOn;
-    shader.vertexShader = 'attribute vec3 aMeta;\nattribute float aU;\nattribute float aDist;\nvarying vec3 vMeta;\nvarying float vU;\nvarying float vY;\nvarying float vDist;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vMeta = aMeta; vU = aU; vY = transformed.y; vDist = aDist;');
-    shader.fragmentShader = 'uniform float uNight;\nuniform float uHeat[16];\nuniform float uHeatOn;\nvarying vec3 vMeta;\nvarying float vU;\nvarying float vY;\nvarying float vDist;\n' + shader.fragmentShader
+    shader.uniforms.uNight = uniforms.uNight; shader.uniforms.uHeat = uniforms.uHeat; shader.uniforms.uHeatOn = uniforms.uHeatOn; shader.uniforms.uTime = uniforms.uTime; shader.uniforms.uCloud = uniforms.uCloud;
+    shader.vertexShader = 'attribute vec3 aMeta;\nattribute float aU;\nattribute float aDist;\nvarying vec3 vMeta;\nvarying float vU;\nvarying float vY;\nvarying float vDist;\nvarying vec2 vGW;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vMeta = aMeta; vU = aU; vY = transformed.y; vDist = aDist; vGW = (modelMatrix * vec4(transformed, 1.0)).xz;');
+    shader.fragmentShader = 'uniform float uNight;\nuniform float uTime;\nuniform float uCloud;\nuniform float uHeat[16];\nuniform float uHeatOn;\nvarying vec3 vMeta;\nvarying float vU;\nvarying float vY;\nvarying float vDist;\nvarying vec2 vGW;\n' + NOISE_GLSL + '\n' + shader.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
-        float winMask = 0.0, winLit = 0.0;
-        if (vMeta.x > 0.5 && vMeta.z > 3.8) {
-          vec2 cell = vec2(vU / 3.3, (vY - 0.7) / 3.1);
+        float winMask = 0.0, winLit = 0.0, winGlow = 1.0;
+        float style = floor(vMeta.x - 0.5); // 0 жильё, 1 общественное, 2 торговля, 3 промышленность
+        if (vMeta.x > 0.5 && vMeta.z > 2.5) {
+          float bh0 = fract(sin(vMeta.y * 311.7 + vMeta.z * 17.3) * 9137.1);
+          vec2 sz = vec2(2.9 + bh0 * 1.0, 3.0); vec4 box = vec4(0.22 + bh0 * 0.06, 0.78 - bh0 * 0.06, 0.3, 0.78);
+          if (style > 0.5 && style < 1.5) { sz = vec2(2.9, 3.7); box = vec4(0.28, 0.72, 0.18, 0.86); } // высокие окна
+          if (style > 2.5) { sz = vec2(7.0, 4.2); box = vec4(0.06, 0.94, 0.62, 0.86); } // ленточное остекление цехов
+          vec2 cell = vec2(vU / sz.x, (vY - (vMeta.z < 4.0 ? 0.0 : 0.7)) / sz.y);
           vec2 f = fract(cell);
-          winMask = step(0.24, f.x) * step(f.x, 0.76) * step(0.3, f.y) * step(f.y, 0.78) * step(0.9, vY) * step(vY, vMeta.z - 0.7);
+          winMask = step(box.x, f.x) * step(f.x, box.y) * step(box.z, f.y) * step(f.y, box.w) * step(0.9, vY) * step(vY, vMeta.z - 0.7);
           float h = fract(sin(dot(vec3(floor(cell), vMeta.y * 91.7), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+          float bh = fract(sin(vMeta.y * 311.7 + vMeta.z * 17.3) * 9137.1);
+          // витрины первого этажа у магазинов и части жилых домов на главных улицах
+          float shopFront = style > 1.5 && style < 2.5 ? 1.0 : 0.0;
+          float top = min(3.6, vMeta.z - 0.1);
+          if (shopFront > 0.5 && vY < top) {
+            float fu = fract(vU / 4.6);
+            winMask = step(0.45, vY) * step(vY, top - 0.75) * step(0.07, fu) * step(fu, 0.93);
+            h = h * 0.6; winGlow = 0.45;
+            float awning = step(top - 0.62, vY) * step(vY, top - 0.14);
+            vec3 awn = mix(vec3(0.62, 0.16, 0.12), vec3(0.12, 0.36, 0.3), step(0.5, bh));
+            awn = mix(awn, vec3(0.86, 0.84, 0.8), step(0.5, fract(vU / 1.15)) * step(bh, 0.85));
+            diffuseColor.rgb = mix(diffuseColor.rgb, awn, awning);
+          }
+          if (style < 0.5 && vMeta.z > 9.0 && bh < 0.45 && vY > 3.2) { // балконы у многоэтажек
+            float balc = step(0.14, f.x) * step(f.x, 0.86) * step(0.0, f.y) * step(f.y, 0.3);
+            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.12 + 0.04, balc);
+            diffuseColor.rgb *= 1.0 - 0.35 * balc * step(f.y, 0.06);
+          }
           winLit = winMask * step(h, 0.3 + 0.35 * vMeta.y);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.13, 0.17, 0.22), winMask * 0.72);
+          float sky = smoothstep(0.0, 1.0, f.y) * 0.5 + 0.12 * step(0.5, fract(f.x * 2.0 + f.y));
+          vec3 glass = mix(vec3(0.11, 0.15, 0.2), vec3(0.42, 0.52, 0.62), sky * (1.0 - uNight));
+          diffuseColor.rgb = mix(diffuseColor.rgb, glass, winMask * 0.78);
         }
         if (vMeta.x > 0.5) {
           diffuseColor.rgb *= mix(0.55, 1.0, smoothstep(0.0, 4.5, vY)); // контактная тень у земли
@@ -123,6 +152,7 @@ function windowMaterial(uniforms) {
           diffuseColor.rgb *= 1.0 - 0.1 * floorLine; // междуэтажные карнизы
           diffuseColor.rgb *= 1.0 + 0.12 * step(vMeta.z - 0.45, vY); // парапет
         }
+        if (vMeta.x < 0.5) diffuseColor.rgb *= 1.0 - 0.22 * uCloud * (1.0 - uNight) * cloudShade(vGW, uTime); // только крыши
         if (uHeatOn > 0.001) {
           float heat = uHeat[int(vDist + 0.5)];
           if (heat >= 0.0) {
@@ -131,11 +161,12 @@ function windowMaterial(uniforms) {
           }
         }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance += vec3(1.0, 0.7, 0.38) * winLit * uNight * 1.35;`);
+        totalEmissiveRadiance += vec3(1.0, 0.7, 0.38) * winLit * winGlow * uNight * 1.35;`);
   };
   return mat;
 }
 
+const STYLE_ID = {home: 0, civic: 1, shop: 2, ind: 3};
 const WALL = {home: ['#e8dfcf', '#dcd2c0', '#f1e9da', '#d2cabb'], civic: ['#f2efe7', '#e9e5dc', '#f6f3ec', '#e3dfd6'], shop: ['#eadfcb', '#e2d5bf', '#f0e6d4', '#ddd0bb'], ind: ['#b9bcbc', '#aaaeae', '#c5c7c5', '#a0a4a5']};
 const ROOF = {home: ['#b5573c', '#6d7680', '#c9764b', '#8a6a5a'], civic: ['#6a7a90', '#71819a', '#63738a', '#7788a0'], shop: ['#8a7f76', '#7d746d', '#958a80', '#6f6862'], ind: ['#7c8487', '#858d90', '#737b7e', '#8b9295']};
 const GROUND = {land: '#93a383', residential: '#aeb5a3', industrial: '#b3afa8', commercial: '#bdb6ad', grass: '#86ad6a', scrub: '#7ea263', park: '#77b062', forest: '#558f4d', pitch: '#79bd67', beach: '#e5d6a4', water: '#3f80b2'};
@@ -148,7 +179,7 @@ export function createRenderer(canvas, minimap) {
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(38, 1, 2, 60000);
   scene.fog = new THREE.Fog(0xa9c3d6, 3000, 20000);
-  const uniforms = {uTime: {value: 0}, uWet: {value: 0}, uNight: {value: 0}, uHeat: {value: new Array(16).fill(-1)}, uHeatOn: {value: 0}};
+  const uniforms = {uTime: {value: 0}, uWet: {value: 0}, uCloud: {value: 0.5}, uNight: {value: 0}, uHeat: {value: new Array(16).fill(-1)}, uHeatOn: {value: 0}};
   // качество: auto выбирает по видеокарте; поверх — динамическое разрешение
   const PRESETS = {
     high: {msaa: 4, fxaa: false, shadow: 4096, shadowEvery: 1, bloom: true, treeShadow: true, maxScale: 1.5},
@@ -168,6 +199,34 @@ export function createRenderer(canvas, minimap) {
   sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.6;
   scene.add(hemi, sun, sun.target);
 
+  // ---------- небо ----------
+  const skyUni = {uTop: {value: new THREE.Color()}, uHorizon: {value: new THREE.Color()}, uSun: {value: new THREE.Vector3(0, 1, 0)}, uSunCol: {value: new THREE.Color()}, uNight: {value: 0}, uTime: uniforms.uTime};
+  const skyDome = new THREE.Mesh(new THREE.SphereGeometry(30000, 32, 16), new THREE.ShaderMaterial({
+    uniforms: skyUni, side: THREE.BackSide, depthWrite: false, fog: false,
+    vertexShader: 'varying vec3 vDir; void main() { vDir = normalize((modelMatrix * vec4(position, 1.0)).xyz - cameraPosition); gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0); gl_Position.z = gl_Position.w; }',
+    fragmentShader: `uniform vec3 uTop; uniform vec3 uHorizon; uniform vec3 uSun; uniform vec3 uSunCol; uniform float uNight; uniform float uTime; varying vec3 vDir;
+      float h3(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453); }
+      void main() {
+        vec3 d = normalize(vDir); float h = max(d.y, 0.0);
+        vec3 col = mix(uHorizon, uTop, pow(h, 0.55));
+        float s = max(dot(d, normalize(uSun)), 0.0);
+        col += uSunCol * (pow(s, 900.0) * 6.0 + pow(s, 12.0) * 0.18) * (1.0 - uNight * 0.75);
+        vec3 cell = floor(d * 260.0); float st = step(0.9965, h3(cell)) * (0.6 + 0.4 * sin(uTime * 2.0 + h3(cell + 1.0) * 30.0));
+        col += vec3(0.9, 0.95, 1.0) * st * uNight * smoothstep(0.05, 0.35, h);
+        gl_FragColor = vec4(col, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  }));
+  skyDome.renderOrder = -100; skyDome.frustumCulled = false; scene.add(skyDome);
+  const cloudLayer = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+    uniforms: {uTime: uniforms.uTime, uAlpha: {value: 0}, uTint: {value: new THREE.Color(1, 1, 1)}}, transparent: true, depthWrite: false, fog: false,
+    vertexShader: 'varying vec2 vGW; void main() { vGW = (modelMatrix * vec4(position, 1.0)).xz; gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform float uTime; uniform float uAlpha; uniform vec3 uTint; varying vec2 vGW;` + NOISE_GLSL + `
+      void main() { float c = cloudShade(vGW, uTime); gl_FragColor = vec4(uTint, c * uAlpha); }`,
+  }));
+  cloudLayer.position.y = 900; cloudLayer.renderOrder = 40; cloudLayer.frustumCulled = false; scene.add(cloudLayer);
+
   // ---------- статичный город ----------
   const city = new THREE.Group(); scene.add(city);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(BOUNDS.maxX * M * 3, BOUNDS.maxY * M * 3).rotateX(-Math.PI / 2), textured(new THREE.MeshStandardMaterial({color: GROUND.land, roughness: 1, depthWrite: false}), 'ground', uniforms));
@@ -184,11 +243,12 @@ export function createRenderer(canvas, minimap) {
 
   // дороги: лента + скруглённые стыки, слоями по классу
   const roadLayers = [[-1], [0], [1, 2], [3], [4, 5]], roadBuilders = roadLayers.map(() => new Builder()), marks = new Builder(), walk = new Builder(), walkCol = lin('#c9c6be');
-  const lampSpots = [];
+  const lampSpots = [], mainCells = new Set(), parkSpots = [];
   for (const r of roads) {
     const layer = roadLayers.findIndex(l => l.includes(r.rank)), b = roadBuilders[layer];
     const pts = toMetres(r.pts), half = (r.rank < 0 ? 1.4 : r.w * 0.55), col = lin(r.rank < 0 ? '#c3b79c' : ROAD_COLOR[r.rank]);
     let along = 0, nextLamp = 20;
+    if (r.rank >= 3) { const pm = toMetres(r.pts); for (let i = 0; i + 3 < pm.length; i += 2) { const dx = pm[i + 2] - pm[i], dz = pm[i + 3] - pm[i + 1], k = Math.ceil(Math.hypot(dx, dz) / 8); for (let s = 0; s <= k; s++) { const cx = Math.floor((pm[i] + dx * s / k) / 20), cz = Math.floor((pm[i + 1] + dz * s / k) / 20); for (let a = -1; a <= 1; a++) for (let b2 = -1; b2 <= 1; b2++) mainCells.add((cx + a) * 100000 + cz + b2); } } }
     for (let i = 0; i < pts.length; i += 2) {
       const x = pts[i], z = pts[i + 1];
       const sw = half + 2.3;
@@ -207,6 +267,14 @@ export function createRenderer(canvas, minimap) {
           marks.vert(ax + wx, 0, az + wz, 0, 1, 0, mc); marks.vert(bx - wx, 0, bz - wz, 0, 1, 0, mc); marks.vert(ax - wx, 0, az - wz, 0, 1, 0, mc);
         }
       }
+      if (r.rank >= 1 && r.rank <= 3 && len > 26) { // припаркованные машины у бордюра
+        const ux = dx / len, uz = dz / len, yaw = Math.atan2(-uz, ux);
+        for (let s = 11; s < len - 11 && parkSpots.length < 4 * 12000; s += 6.2) {
+          const hh = Math.abs(Math.sin((x + s) * 12.9898 + (z - s) * 78.233) * 43758.5453) % 1; if (hh > 0.3) continue;
+          const side = hh < 0.15 ? 1 : -1, off = (half - 1.05) * side;
+          parkSpots.push(x + ux * s - uz * off, z + uz * s + ux * off, yaw + (side < 0 ? Math.PI : 0), hh * 97);
+        }
+      }
       if (r.rank >= 2) { while (nextLamp < along + len) { const t = (nextLamp - along) / len, side = (lampSpots.length % 2 ? 1 : -1) * (half + 1.2); lampSpots.push(x + dx * t - dz / len * side, z + dz * t + dx / len * side); nextLamp += 42; } }
       along += len;
     }
@@ -223,6 +291,7 @@ export function createRenderer(canvas, minimap) {
     let b = tiles.get(key); if (!b) { b = new Builder({aMeta: 3, aU: 1, aDist: 1}); tiles.set(key, b); }
     b.cur.aDist = nearestNode(bd.pts[0], bd.pts[1])?.district ?? 15;
     let a2 = 0; for (let i = 0; i < n; i++) { const j = (i + 1) % n; a2 += pts[i * 2] * pts[j * 2 + 1] - pts[j * 2] * pts[i * 2 + 1]; }
+    const onMain = bd.style === 'home' && (Math.floor(Math.abs(pts[0]) * 3.7) % 5) < 3 && mainCells.has(Math.floor(pts[0] / 20) * 100000 + Math.floor(pts[1] / 20)), styleId = onMain ? 2 : STYLE_ID[bd.style];
     const ccw = a2 > 0, wall = lin(WALL[bd.style][bd.tone]), roof = lin(ROOF[bd.style][bd.tone]), h = bd.h, seed = bd.lit ? 0.9 : 0.25 + (bd.tone * 0.13);
     const walls = wall.clone().multiplyScalar(0.92);
     let u = 0;
@@ -230,7 +299,7 @@ export function createRenderer(canvas, minimap) {
       let i = k, j = (k + 1) % n; if (ccw) [i, j] = [j, i];
       const x1 = pts[i * 2], z1 = pts[i * 2 + 1], x2 = pts[j * 2], z2 = pts[j * 2 + 1], len = Math.hypot(x2 - x1, z2 - z1);
       if (len < 0.05) continue;
-      const nx = -(z2 - z1) / len, nz = (x2 - x1) / len, meta = {aMeta: [1, seed, h]};
+      const nx = -(z2 - z1) / len, nz = (x2 - x1) / len, meta = {aMeta: [1 + styleId, seed, h]};
       const v = (x, y, z, uu) => b.vert(x, y, z, nx, 0, nz, walls, {...meta, aU: uu});
       v(x1, 0, z1, u); v(x2, 0, z2, u + len); v(x2, h, z2, u + len);
       v(x1, 0, z1, u); v(x2, h, z2, u + len); v(x1, h, z1, u);
@@ -370,7 +439,19 @@ export function createRenderer(canvas, minimap) {
   })();
   const carMat = new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.45, metalness: 0.3});
   const MAX_TRAFFIC = 160;
+  const lightGeo = (() => {
+    const box = (x, z, hex) => { const g = new THREE.BoxGeometry(0.08, 0.2, 0.34).translate(x, 0.88, z), c = lin(hex), arr = []; for (let i = 0; i < g.attributes.position.count; i++) arr.push(c.r, c.g, c.b); g.setAttribute('color', new THREE.Float32BufferAttribute(arr, 3)); return g.toNonIndexed(); };
+    return mergeGeometries([box(2.22, 0.62, '#fff6dc'), box(2.22, -0.62, '#fff6dc'), box(-2.22, 0.66, '#ff1c10'), box(-2.22, -0.66, '#ff1c10')]);
+  })();
+  const lightMat = new THREE.MeshBasicMaterial({vertexColors: true, toneMapped: false});
   const traffic = new THREE.InstancedMesh(carGeo, carMat, MAX_TRAFFIC); traffic.castShadow = true; traffic.frustumCulled = false; scene.add(traffic);
+  const parkedCars = new THREE.InstancedMesh(carGeo, carMat, Math.max(1, parkSpots.length / 4));
+  {
+    const pc = ['#9aa7ad', '#c9c2b2', '#7d8f9b', '#a38f86', '#8b9a8c', '#d8dcde', '#5d6b78', '#b33a3a', '#2f4f8f', '#e0c27a', '#3c3f44', '#efefef', '#1d2228'].map(lin), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), pos = new THREE.Vector3(), one = new THREE.Vector3(0.96, 0.96, 0.96);
+    for (let i = 0; i < parkSpots.length / 4; i++) { const [x, z, yaw, h] = parkSpots.slice(i * 4, i * 4 + 4); q.setFromAxisAngle(up, yaw); m4.compose(pos.set(x, 0, z), q, one); parkedCars.setMatrixAt(i, m4); parkedCars.setColorAt(i, pc[Math.floor(h) % pc.length]); }
+    parkedCars.count = parkSpots.length / 4; parkedCars.castShadow = false; parkedCars.receiveShadow = true; scene.add(parkedCars);
+  }
+  const trafficLights = new THREE.InstancedMesh(lightGeo, lightMat, MAX_TRAFFIC); trafficLights.frustumCulled = false; trafficLights.count = 0; scene.add(trafficLights);
   const beamMat = new THREE.MeshBasicMaterial({map: SOFT, color: new THREE.Color(1, 0.92, 0.72), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false});
   const beamGeo = new THREE.PlaneGeometry(16, 7).rotateX(-Math.PI / 2).translate(10, 0.08, 0);
   const trafficBeams = new THREE.InstancedMesh(beamGeo, beamMat, MAX_TRAFFIC); trafficBeams.frustumCulled = false; trafficBeams.renderOrder = -7; scene.add(trafficBeams);
@@ -399,25 +480,38 @@ export function createRenderer(canvas, minimap) {
   for (const m of [officers, perps]) { m.castShadow = true; m.frustumCulled = false; m.count = 0; scene.add(m); }
   const figM = new THREE.Matrix4(), figQ = new THREE.Quaternion(), figS = new THREE.Vector3(), figP = new THREE.Vector3(), figUp = new THREE.Vector3(0, 1, 0);
   function figure(mesh, n, x, z, yaw, s, sy = 1, head = null) { figQ.setFromAxisAngle(figUp, yaw); figS.set(s, s * sy, s); figP.set(x, 0, z); figM.compose(figP, figQ, figS); mesh.setMatrixAt(n, figM); if (head) head.setMatrixAt(n, figM); }
-  function drawFigures(state, boost) {
+  function drawFigures(state, boost, dt = 0) {
     let no = 0, np = 0;
     if (boost <= 4) {
-      const s = Math.min(boost, 2.2) * 1.25;
+      const s = Math.min(boost, 2.2) * 1.25, lead = new Map(), spot = new Map();
+      for (const u of state.units) if (u.status === 'onscene' && !u.fly && u.callId != null && !lead.has(u.callId)) lead.set(u.callId, u);
+      // подозреваемые: стоят, мечутся на переговорах, на коленях при сдаче, идут к машине под конвоем
+      for (const c of state.calls) {
+        if (!['choice', 'standoff', 'active'].includes(c.state) || c.suspectId || !callType(c).suspect || c.reaction === 'flee') continue;
+        const a = callType(c).approaches[c.approach], p = c.state === 'active' ? clamp(c.progress / Math.max(1, c.work), 0, 1) : 0;
+        const fight = c.reaction === 'fight' && c.state === 'active', escort = c.state === 'active' && a?.arrest && !fight && p > 0.5, car = lead.get(c.id);
+        let x = c.x * M + 7 * s, z = c.y * M + 3 * s;
+        if (c.state === 'standoff') x += Math.sin(time * (1 + (100 - c.standoff.stability) / 40) + c.id) * 2.2 * s;
+        if (escort && car) { const k = smooth(0.5, 1, p); x += (car.x * M + 2.2 * s - x) * k; z += (car.y * M + 2.2 * s - z) * k; }
+        const kneel = c.state === 'active' && !fight && !escort && (c.reaction === 'surrender' || (a?.arrest && p > 0.25));
+        spot.set(c.id, {x, z, p, fight, escort, arrest: !!a?.arrest});
+        if (np < 60) figure(perps, np++, x, z, fight ? Math.atan2((car?.x ?? c.x) * M - x, (car?.y ?? c.y) * M - z) : time * (c.state === 'standoff' ? 0.6 : 0) + c.id, s, kneel ? 0.55 : 1, perpHeads);
+        if (fight && Math.random() < dt * 2.5) emit(x, z, 'spark');
+      }
+      // офицеры: подходят, надевают наручники, ведут к машине; в перестрелке укрываются за машиной
       for (const u of state.units) {
         if (u.status !== 'onscene' || u.fly) continue;
         const c = state.calls.find(c => c.id === u.callId); if (!c) continue;
-        const ux = u.x * M, uz = u.y * M, px = c.x * M + 7 * s, pz = c.y * M + 3 * s; // подозреваемый стоит чуть в стороне
-        const dx = px - ux, dz = pz - uz, d = Math.hypot(dx, dz) || 1, fx = dx / d, fz = dz / d;
-        const n = u.crew?.length ?? 2, near = Math.min(d * 0.55, 5 * s);
+        const sp = spot.get(c.id), ux = u.x * M, uz = u.y * M, px = sp?.x ?? c.x * M + 7 * s, pz = sp?.z ?? c.y * M + 3 * s;
+        const dx = px - ux, dz = pz - uz, d = Math.hypot(dx, dz) || 1, fx = dx / d, fz = dz / d, n = u.crew?.length ?? 2;
         for (let i = 0; i < n && no < MAX_FIG; i++) {
           const side = (i - (n - 1) / 2) * 1.8 * s, sway = Math.sin(time * 2 + u.id + i) * 0.12 * s;
-          figure(officers, no++, ux + fx * near - fz * side + sway, uz + fz * near + fx * side, Math.atan2(fx, fz), s, 1, copHeads);
+          let reach = Math.min(d * 0.55, 5 * s), sy = 1;
+          if (sp?.fight) { reach = -2.4 * s; sy = 0.72; if (Math.random() < dt * 3) emit(ux - fx * 2 * s - fz * side, uz - fz * 2 * s + fx * side, 'spark'); } // укрытие за машиной
+          else if (sp?.escort) reach = d - 1.4 * s; // конвой рядом с задержанным
+          else if (sp?.arrest && c.state === 'active') reach = Math.min(d - 1.5 * s, reach + (d - 1.5 * s - reach) * smooth(0, 0.35, sp.p)); // подходят к подозреваемому
+          figure(officers, no++, ux + fx * reach - fz * side + sway, uz + fz * reach + fx * side, Math.atan2(fx, fz), s, sy, copHeads);
         }
-      }
-      for (const c of state.calls) {
-        if (!['choice', 'standoff', 'active'].includes(c.state) || c.suspectId || !callType(c).suspect || c.reaction === 'flee' || np >= 60) continue;
-        const pace = c.state === 'standoff' ? Math.sin(time * (1 + (100 - c.standoff.stability) / 40) + c.id) * 2.2 * s : 0, kneel = c.reaction === 'surrender' && c.state === 'active';
-        figure(perps, np++, c.x * M + 7 * s + pace, c.y * M + 3 * s, time * (c.state === 'standoff' ? 0.6 : 0) + c.id, s, kneel ? 0.55 : 1, perpHeads);
       }
     }
     // оцепление: конусы вокруг места, где работает полиция
@@ -434,6 +528,28 @@ export function createRenderer(canvas, minimap) {
     cones.count = nc; cones.instanceMatrix.needsUpdate = true;
     officers.count = copHeads.count = no; perps.count = perpHeads.count = np;
     for (const m of [officers, perps, copHeads, perpHeads]) m.instanceMatrix.needsUpdate = true;
+  }
+
+  // след погони
+  const TRAIL_MAX = 3000, trailHist = new Map(), trailPos = new Float32Array(TRAIL_MAX * 3), trailCol = new Float32Array(TRAIL_MAX * 3);
+  const trailGeo = new THREE.BufferGeometry(); trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3)); trailGeo.setAttribute('color', new THREE.BufferAttribute(trailCol, 3));
+  const trailMat = new THREE.PointsMaterial({size: 5, map: GLOW, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true});
+  const trail = new THREE.Points(trailGeo, trailMat); trail.frustumCulled = false; trail.renderOrder = -4; scene.add(trail);
+  function trailPush(key, x, z) { let h = trailHist.get(key); if (!h) trailHist.set(key, h = []); const last = h[h.length - 1]; if (!last || Math.hypot(last[0] - x, last[1] - z) > 4) { h.push([x, z]); if (h.length > 45) h.shift(); } h.seen = true; }
+  function drawTrails(boost) {
+    let n = 0;
+    for (const [key, h] of trailHist) {
+      if (!h.seen) { h.splice(0, Math.max(1, Math.ceil(h.length * 0.08))); if (!h.length) { trailHist.delete(key); continue; } } // след тает
+      h.seen = false;
+      const red = key[0] === 's', len = h.length;
+      for (let i = 0; i < len && n < TRAIL_MAX; i++, n++) {
+        const k = (i + 1) / len, f = k * k;
+        trailPos.set([h[i][0], 0.6, h[i][1]], n * 3);
+        trailCol.set(red ? [1.6 * f, 0.25 * f, 0.15 * f] : [0.2 * f, 0.5 * f, 1.6 * f], n * 3);
+      }
+    }
+    trailGeo.setDrawRange(0, n); trailGeo.attributes.position.needsUpdate = true; trailGeo.attributes.color.needsUpdate = true;
+    trailMat.size = 4.5 * Math.min(boost, 10);
   }
 
   // полицейские машины и вертолёты — по объекту на экипаж
@@ -455,7 +571,7 @@ export function createRenderer(canvas, minimap) {
       const stripe = new THREE.Mesh(new THREE.BoxGeometry(4.42, 0.22, 1.87).translate(0, 0.7, 0), new THREE.MeshStandardMaterial({color: v.stripe ?? '#1d4fa3', roughness: 0.5}));
       const glow = new THREE.Mesh(new THREE.PlaneGeometry(26, 26).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({map: GLOW, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false}));
       const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({map: SOFT, color: new THREE.Color(1, 0.95, 0.8), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false}));
-      glow.renderOrder = beam.renderOrder = -6; g.add(body, stripe, l1, l2, beam); scene.add(glow);
+      glow.renderOrder = beam.renderOrder = -6; g.add(body, stripe, l1, l2, beam, new THREE.Mesh(lightGeo, lightMat)); scene.add(glow);
       Object.assign(g.userData, {red, blue, glow, beam});
     }
     const ring = new THREE.Mesh(new THREE.RingGeometry(4.2, 5, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({color: '#7ef0e0', transparent: true, opacity: 0, depthWrite: false}));
@@ -540,11 +656,15 @@ export function createRenderer(canvas, minimap) {
   const target = new THREE.WebGLRenderTarget(1, 1, {type: THREE.HalfFloatType, samples: 4});
   const composer = new EffectComposer(renderer, target), bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.6, 0.55, 0.82), fxaa = new FXAAPass();
   const grade = new ShaderPass({
-    uniforms: {tDiffuse: {value: null}, uVig: {value: 0.32}, uSat: {value: 1.05}, uWarm: {value: 0}},
+    uniforms: {tDiffuse: {value: null}, uVig: {value: 0.32}, uSat: {value: 1.05}, uWarm: {value: 0}, uTexel: {value: new THREE.Vector2(1, 1)}, uSharp: {value: 0}},
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform sampler2D tDiffuse; uniform float uVig; uniform float uSat; uniform float uWarm; varying vec2 vUv;
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float uVig; uniform float uSat; uniform float uWarm; uniform vec2 uTexel; uniform float uSharp; varying vec2 vUv;
       void main() {
         vec4 c = texture2D(tDiffuse, vUv);
+        if (uSharp > 0.001) { // повышение резкости при пониженном разрешении
+          vec3 n = texture2D(tDiffuse, vUv + vec2(uTexel.x, 0.0)).rgb + texture2D(tDiffuse, vUv - vec2(uTexel.x, 0.0)).rgb + texture2D(tDiffuse, vUv + vec2(0.0, uTexel.y)).rgb + texture2D(tDiffuse, vUv - vec2(0.0, uTexel.y)).rgb;
+          c.rgb = clamp(c.rgb + (c.rgb - n * 0.25) * uSharp, 0.0, 1.0);
+        }
         float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
         c.rgb = mix(vec3(l), c.rgb, uSat);
         c.rgb = (c.rgb - 0.5) * 1.05 + 0.5;
@@ -573,13 +693,13 @@ export function createRenderer(canvas, minimap) {
     frameEma += (dt * 1000 - frameEma) * 0.08; scaleClock += dt;
     if (scaleClock < 1) return; scaleClock = 0;
     const max = Math.min(window.devicePixelRatio || 1, PRESETS[effective()].maxScale);
-    if (frameEma > 24 && renderScale > 0.55) { renderScale = Math.max(0.55, renderScale * 0.88); goodSeconds = 0; resize(); }
-    else if (frameEma < 17.6 && renderScale < max) { if (++goodSeconds >= 3) { renderScale = Math.min(max, renderScale * 1.07); goodSeconds = 0; resize(); } }
+    if (frameEma > 23 && renderScale > 0.55) { renderScale = Math.max(0.55, renderScale * 0.93); goodSeconds = 0; resize(); }
+    else if (frameEma < 18.5 && renderScale < max) { if (++goodSeconds >= 4) { renderScale = Math.min(max, renderScale * 1.07); goodSeconds = 0; resize(); } }
     else goodSeconds = 0;
   }
   function resize() {
     W = canvas.clientWidth || 1; H = canvas.clientHeight || 1; dpr = renderScale;
-    renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); composer.setPixelRatio(dpr); composer.setSize(W, H);
+    renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); composer.setPixelRatio(dpr); composer.setSize(W, H); grade.uniforms.uTexel.value.set(1 / (W * dpr), 1 / (H * dpr)); grade.uniforms.uSharp.value = clamp((1 - dpr) * 1.4, 0, 0.55);
     camera.aspect = W / H; camera.updateProjectionMatrix(); pMat.uniforms.scale.value = H * dpr * 0.9;
   }
   new ResizeObserver(resize).observe(canvas);
@@ -633,6 +753,11 @@ export function createRenderer(canvas, minimap) {
     const skyDay = lin('#a9c6dc').lerp(lin('#8a96a3'), wet * 0.8), skyDusk = lin('#d99a6c'), skyNight = lin('#0a1222');
     const sky = skyDay.clone().lerp(skyDusk, dusk * 0.7).lerp(skyNight, night);
     renderer.setClearColor(sky); scene.fog.color.copy(sky);
+    skyUni.uHorizon.value.copy(sky); skyUni.uTop.value.copy(lin('#4f86c2').lerp(lin('#6f7a86'), wet * 0.8).lerp(lin('#5d5a86'), dusk * 0.5).lerp(lin('#02040b'), night)); skyUni.uNight.value = night;
+    skyDome.position.copy(camera.position);
+    uniforms.uCloud.value += ((weather === 'cloudy' ? 1 : weather === 'rain' ? 0.7 : 0.45) - uniforms.uCloud.value) * Math.min(1, dt * 0.3);
+    cloudLayer.material.uniforms.uAlpha.value = smooth(4500, 11000, cam.dist) * (weather === 'clear' ? 0.2 : 0.34) * (1 - night * 0.7);
+    cloudLayer.material.uniforms.uTint.value.copy(lin('#ffffff').lerp(lin('#ffd2b0'), dusk * 0.6).lerp(lin('#3a4252'), night));
     scene.fog.near = cam.dist * (weather === 'rain' ? 0.9 : 1.6); scene.fog.far = cam.dist * (weather === 'rain' ? 3 : 5.5) + 2500;
     hemi.color.copy(lin('#dfeaf5').lerp(lin('#3a4c74'), night)); hemi.groundColor.copy(lin('#6a6250').lerp(lin('#14181f'), night));
     hemi.intensity = (1.05 - 0.5 * night) * (1 - wet * 0.15);
@@ -640,7 +765,7 @@ export function createRenderer(canvas, minimap) {
     sun.color.copy(lin('#fff1dc').lerp(lin('#ffb27a'), dusk).lerp(lin('#8ea6ff'), night));
     sun.intensity = (2.7 * (1 - night) + 0.35 * night) * (1 - wet * 0.55);
     const shadowSize = clamp(cam.dist * 0.95, 220, 2600);
-    sun.position.set(cam.tx + sunDir.x * 3000, sunDir.y * 3000, cam.tz + sunDir.z * 3000); sun.target.position.set(cam.tx, 0, cam.tz);
+    sun.position.set(cam.tx + sunDir.x * 3000, sunDir.y * 3000, cam.tz + sunDir.z * 3000); skyUni.uSun.value.copy(sunDir); skyUni.uSunCol.value.copy(night > 0.5 ? lin('#c9d6ff') : lin('#fff0d0').lerp(lin('#ff9a50'), dusk)); sun.target.position.set(cam.tx, 0, cam.tz);
     Object.assign(sun.shadow.camera, {left: -shadowSize, right: shadowSize, top: shadowSize, bottom: -shadowSize, near: 100, far: 7000}); sun.shadow.camera.updateProjectionMatrix();
     const preset = PRESETS[effective()]; sun.castShadow = preset.shadow > 0 && cam.dist < 6000;
     if (preset.shadowEvery && frameNo++ % preset.shadowEvery === 0) renderer.shadowMap.needsUpdate = true;
@@ -652,15 +777,16 @@ export function createRenderer(canvas, minimap) {
 
     const ppm = H / (2 * cam.dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)), carBoost = clamp(16 / (4.4 * ppm), 1, 45), trafficBoost = clamp(9 / (4.4 * ppm), 1, 3);
     trees.visible = cam.dist < 6500; setLamps(cam.dist < 2600, night > 0.02 && cam.dist < 5000);
-    traffic.visible = trafficBeams.visible = cam.dist < 5000;
+    traffic.visible = trafficBeams.visible = trafficLights.visible = cam.dist < 5000; parkedCars.visible = cam.dist < 2600;
+    lightMat.color.setScalar(0.45 + night * 2.6);
     // фоновый трафик
     if (view.traffic) {
-      traffic.count = Math.min(MAX_TRAFFIC, view.traffic.length); trafficBeams.count = night > 0.05 ? traffic.count : 0;
+      traffic.count = trafficLights.count = Math.min(MAX_TRAFFIC, view.traffic.length); trafficBeams.count = night > 0.05 ? traffic.count : 0;
       for (let i = 0; i < traffic.count; i++) {
         const c = view.traffic[i]; tmpQ.setFromAxisAngle(up, -c.heading); tmpM.compose(tmpV.set(c.x * M, 0, c.y * M), tmpQ, tmpScale.setScalar(trafficBoost));
-        traffic.setMatrixAt(i, tmpM); traffic.setColorAt(i, carColors[i % carColors.length]); if (trafficBeams.count) trafficBeams.setMatrixAt(i, tmpM);
+        traffic.setMatrixAt(i, tmpM); traffic.setColorAt(i, carColors[i % carColors.length]); trafficLights.setMatrixAt(i, tmpM); if (trafficBeams.count) trafficBeams.setMatrixAt(i, tmpM);
       }
-      traffic.instanceMatrix.needsUpdate = true; if (traffic.instanceColor) traffic.instanceColor.needsUpdate = true; trafficBeams.instanceMatrix.needsUpdate = true;
+      traffic.instanceMatrix.needsUpdate = true; trafficLights.instanceMatrix.needsUpdate = true; if (traffic.instanceColor) traffic.instanceColor.needsUpdate = true; trafficBeams.instanceMatrix.needsUpdate = true;
     }
     // пешеходы — только вблизи
     people.visible = heads.visible = cam.dist < 1800;
@@ -717,14 +843,18 @@ export function createRenderer(canvas, minimap) {
     }
     for (const id of [...unitObjs.keys()]) if (!seenUnits.has(id)) removeUnit(id);
 
-    drawFigures(state, carBoost);
+    drawFigures(state, carBoost, dt);
     // подозреваемые
     const seenSus = new Set();
     for (const x of state.suspects) {
       seenSus.add(x.id); let o = suspectObjs.get(x.id); if (!o) { o = makeSuspectObj(); suspectObjs.set(x.id, o); }
       o.position.set(x.x * M, 0, x.y * M); o.rotation.y = -x.heading; o.scale.setScalar(carBoost); o.userData.mark.position.set(x.x * M, 0.25, x.y * M); o.userData.mark.scale.setScalar(1 + Math.sin(time * 8) * 0.15);
       if (Math.random() < dt * 8) emit(x.x * M - Math.cos(x.heading) * 3, x.y * M - Math.sin(x.heading) * 3, 'smoke');
+      trailPush('s' + x.id, x.x * M, x.y * M);
+      for (const sp of state.spikes ?? []) if (Math.hypot(sp.x - x.x, sp.y - x.y) * M < 18 && Math.random() < dt * 30) emit(x.x * M, x.y * M, 'spark'); // шипы рвут шины
     }
+    for (const u of state.units) if (u.status === 'pursuit' && !u.fly) trailPush('u' + u.id, u.x * M, u.y * M);
+    drawTrails(carBoost);
     for (const [id, o] of suspectObjs) if (!seenSus.has(id)) { scene.remove(o, o.userData.mark); suspectObjs.delete(id); }
 
     // вызовы
@@ -842,6 +972,6 @@ export function createRenderer(canvas, minimap) {
     popup(x, y, text, good) { const el = document.createElement('div'); el.className = 'lbl pop ' + (good ? 'good' : 'bad'); el.textContent = text; layer.append(el); popups.push({x: x * M, z: y * M, el, at: time}); },
     quality(value) { if (!['auto', 'high', 'medium', 'low'].includes(value)) return quality; quality = value; try { localStorage.setItem('mercury-graphics', value); } catch {} applyQuality(); return quality; },
     camera: () => ({...cam}), _debug: {scene, renderer, composer, bloom, target, trees, people, lampPost, lampHead, lampPool, traffic, sun, buildingMeshes, applyQuality},
-    stats: () => ({calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, buildings: buildings.length, trees: trees.count, lamps: lampCount, walkers: walkers.length, quality, effective: effective(), gpu, renderScale: Math.round(renderScale * 100) / 100, frameMs: Math.round(frameEma * 10) / 10}),
+    stats: () => ({calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, buildings: buildings.length, trees: trees.count, lamps: lampCount, walkers: walkers.length, parked: parkedCars.count, trail: trailGeo.drawRange.count, quality, effective: effective(), gpu, renderScale: Math.round(renderScale * 100) / 100, frameMs: Math.round(frameEma * 10) / 10}),
   };
 }
