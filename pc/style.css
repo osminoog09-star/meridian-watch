@@ -184,3 +184,8 @@ body.spike-mode #map{cursor:crosshair}
 .lbl.unit .rl{font-size:9px;opacity:.8}
 .lbl.casezone{color:#e3d2ff;background:rgba(40,20,70,.75);border:1px solid rgba(197,155,255,.45);padding:3px 9px;border-radius:10px;font-size:11px}
 #top button{white-space:nowrap}
+
+@media(max-width:1600px){#top{gap:12px;padding:0 12px}.brand>div{display:none}.stat{min-width:78px}.stat.wide{min-width:150px}#top button{padding:7px 9px}.speed button{min-width:34px}}
+@media(max-width:1400px){.stat strong{font-size:16px}.stat.wide{display:none}#heatBtn{display:none}.wave{max-width:130px;overflow:hidden;text-overflow:ellipsis}}
+.rankup .unlocks{display:flex;flex-direction:column;gap:6px;margin:12px 0}.rankup .unlocks div{background:rgba(110,231,216,.08);border:1px solid rgba(110,231,216,.3);border-radius:9px;padding:9px 12px;font-size:14px}
+.rankup .stars{font-size:28px;color:#ffd166;letter-spacing:6px}

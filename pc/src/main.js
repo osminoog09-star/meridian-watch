@@ -35,7 +35,7 @@ let saveWarned = false;
 function save() { if (!state) return; try { localStorage.setItem(SAVE_KEY, sim.serialize(state)); saveWarned = false; } catch { if (!saveWarned) { saveWarned = true; toast('Не удалось сохранить игру: нет доступа к хранилищу', 'bad'); } } }
 function loadSaved() { try { const raw = localStorage.getItem(SAVE_KEY) ?? localStorage.getItem('mercury-dispatch-pc-v2'); return raw ? sim.deserialize(raw) : null; } catch { return null; } }
 function startGame(saved = null, opts = {}) {
-  state = saved ?? sim.createGame(undefined, opts.name ?? '', opts); speed = 1; paused = false; view.unit = sim.playerUnit(state)?.id ?? state.units[0]?.id ?? null; view.call = null; view.spike = false;
+  state = saved ?? sim.createGame(undefined, opts.name ?? '', opts); view.rankSeen = state.rank; speed = 1; paused = false; view.unit = sim.playerUnit(state)?.id ?? state.units[0]?.id ?? null; view.call = null; view.spike = false;
   document.body.classList.remove('title'); closeOverlay(); renderer.focus(STATION, 1300); audio.unlock(); save(); refresh(true);
   if (state.phase === 'summary') showSummary(); else if (state.phase === 'over') showOver(); else if (state.phase === 'won') showWon();
 }
@@ -189,6 +189,20 @@ function showSandbox() {
 }
 function showChallenges() {
   openOverlay('challenges', `<span class="eyebrow">ИСПЫТАНИЯ</span><h2>Сценарии с целью</h2><div class="grid">${Object.entries(CHALLENGES).map(([k, c]) => `<div class="item"><b>${c.name}</b><small>${c.goal}<br><br>Смен: ${c.shifts} · звание: ${RANKS[c.rank].title} · экипажей: ${c.units.length}</small><button class="primary" data-act="startChallenge" data-id="${k}">Начать</button></div>`).join('')}</div><div class="menu"><button data-act="title">Назад</button></div>`);
+}
+const UNLOCKS = {
+  1: ['Свой район и маршрут патруля: выбор в карточке экипажа, точки — Shift+ПКМ', 'Шипы для остановки беглецов: клавиша K во время погони', 'Начались волны преступности — следите за сводками'],
+  2: ['Подкрепление на свой вызов из других экипажей', 'Расследования: зона поиска, улики и ордер на арест в панели справа', 'Информатор в одном районе — вкладка «Агентура» (B)', 'В смену пришёл экипаж детективов'],
+  3: ['Командование всеми экипажами смены, их районами и маршрутами', 'Автодиспетчер (кнопка сверху) — включён, отключите, чтобы командовать самому', 'Агент под прикрытием — вкладка «Агентура»', 'В смену пришёл перехватчик ДПС'],
+  4: ['Бюджет отделения и найм экипажей всех подразделений', 'Снаряжение экипажей и директивы политики', 'Улучшения отделения, обучение в академии'],
+  5: ['Спецназ и полицейский вертолёт', 'Второй агент под прикрытием, дорогие улучшения'],
+  6: ['Высшее звание. Город целиком под вашей ответственностью'],
+};
+function showRankUp() {
+  const s = state, r = RANKS[s.rank];
+  openOverlay('rankup', `<div class="rankup"><span class="eyebrow">ПОВЫШЕНИЕ</span><div class="stars">${'★'.repeat(s.rank)}</div><h2>${r.title} ${esc(s.player.name)}</h2><p>${r.perk}</p>
+  <h3>Что открылось</h3><div class="unlocks">${Array.from({length: s.rank - (view.rankSeen ?? s.rank - 1)}, (_, i) => (view.rankSeen ?? s.rank - 1) + 1 + i).flatMap(k => UNLOCKS[k] ?? []).map(x => `<div>${x}</div>`).join('')}</div>
+  <p class="fine">Получено очко навыка — потратьте его в личном деле (B).</p>${(view.rankSeen = s.rank, '')}<div class="menu"><button class="primary" data-act="close">К службе</button><button data-act="shop">Открыть ${sim.canManage(s) ? 'отделение' : 'личное дело'}</button></div></div>`);
 }
 function showMenu() {
   openOverlay('menu', `<span class="eyebrow">ПАУЗА</span><h2>Меню</h2><div class="menu"><button class="primary" data-act="close">Вернуться в игру</button><button data-act="shop">${sim.canManage(state) ? 'Отделение' : 'Личное дело'}</button><button data-act="help">Как играть</button><button data-act="toTitle">Сохранить и выйти в главное меню</button></div>
@@ -389,7 +403,7 @@ function handleEvents(s) {
     else if (e.type === 'wave') { audio.alert(); toast('Оперативная сводка: волна преступности', 'bad'); }
     else if (e.type === 'pursuit') { audio.alert(); view.call = e.id; toast('Подозреваемый уходит! Погоня' + (s.spikesLeft && (s.rank >= 1 || s.mode !== 'career') ? ' — шипы: K' : ''), 'bad'); }
     else if (e.type === 'arrest' && e.spike) toast('Беглец налетел на шипы!', 'good');
-    else if (e.type === 'rank') { audio.rank(); toast('Повышение: ' + RANKS[s.rank].title + '! Откройте личное дело (B)', 'good'); }
+    else if (e.type === 'rank') { audio.rank(); if (s.mode === 'career' && !overlay) showRankUp(); else toast('Повышение: ' + RANKS[s.rank].title + '!', 'good'); }
     else if (e.type === 'shiftEnd') { audio.rank(); save(); showSummary(); }
     else if (e.type === 'won') { audio.rank(); save(); showWon(); }
     else if (e.type === 'over') { audio.bad(); save(); showOver(); }

@@ -390,7 +390,7 @@ export function createRenderer(canvas, minimap) {
     const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({color: new THREE.Color(0.55, 0.35, 1.2), transparent: true, opacity: 0.05, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending}));
     const wire = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({color: new THREE.Color(0.7, 0.5, 1.6), wireframe: true, transparent: true, opacity: 0.07, depthWrite: false}));
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.97, 1, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({color: new THREE.Color(0.8, 0.55, 1.8), transparent: true, opacity: 0.6, depthWrite: false}));
-    ring.position.y = 0.3; g.add(dome, wire, ring); scene.add(g); return g;
+    ring.position.y = 0.3; g.add(dome, ring); g.userData = {dome, ring}; scene.add(g); return g;
   }
   // шипы на дороге
   const spikeObjs = new Map();
@@ -459,7 +459,7 @@ export function createRenderer(canvas, minimap) {
 
   // ---------- кадр ----------
   let time = 0, hits = [], weather = 'clear', lastNight = -1;
-  const tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), tmpV = new THREE.Vector3();
+  const tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), tmpV = new THREE.Vector3(), tmpScale = new THREE.Vector3(1, 1, 1);
   const carColors = ['#9aa7ad', '#c9c2b2', '#7d8f9b', '#a38f86', '#8b9a8c', '#d8dcde', '#5d6b78', '#b33a3a', '#2f4f8f', '#e0c27a', '#3c3f44'].map(lin);
   traffic.count = 0;
 
@@ -498,12 +498,14 @@ export function createRenderer(canvas, minimap) {
     bloom.strength = 0.25 + night * 0.65; renderer.toneMappingExposure = 1.0 + night * 0.25;
     station.userData.ring.material.opacity = 0.55 + Math.sin(time * 2.5) * 0.3;
 
+    const ppm = H / (2 * cam.dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)), carBoost = clamp(16 / (4.4 * ppm), 1, 45), trafficBoost = clamp(9 / (4.4 * ppm), 1, 3);
     trees.visible = cam.dist < 6500; setLamps(cam.dist < 2600, night > 0.02 && cam.dist < 5000);
+    traffic.visible = trafficBeams.visible = cam.dist < 5000;
     // фоновый трафик
     if (view.traffic) {
       traffic.count = Math.min(MAX_TRAFFIC, view.traffic.length); trafficBeams.count = night > 0.05 ? traffic.count : 0;
       for (let i = 0; i < traffic.count; i++) {
-        const c = view.traffic[i]; tmpQ.setFromAxisAngle(up, -c.heading); tmpM.compose(tmpV.set(c.x * M, 0, c.y * M), tmpQ, one);
+        const c = view.traffic[i]; tmpQ.setFromAxisAngle(up, -c.heading); tmpM.compose(tmpV.set(c.x * M, 0, c.y * M), tmpQ, tmpScale.setScalar(trafficBoost));
         traffic.setMatrixAt(i, tmpM); traffic.setColorAt(i, carColors[i % carColors.length]); if (trafficBeams.count) trafficBeams.setMatrixAt(i, tmpM);
       }
       traffic.instanceMatrix.needsUpdate = true; if (traffic.instanceColor) traffic.instanceColor.needsUpdate = true; trafficBeams.instanceMatrix.needsUpdate = true;
@@ -533,9 +535,9 @@ export function createRenderer(canvas, minimap) {
       seenUnits.add(u.id);
       let o = unitObjs.get(u.id); if (!o || o.userData.type !== u.type) { if (o) removeUnit(u.id); o = makePoliceObj(u); o.userData.type = u.type; unitObjs.set(u.id, o); }
       const parked = u.speed === 0 && !u.path.length, ux = u.x * M, uz = u.y * M, heli = o.userData.heli;
-      o.position.set(ux, heli ? 70 : 0, uz); o.rotation.y = -u.heading;
+      o.position.set(ux, heli ? 70 + 20 * (carBoost - 1) : 0, uz); o.rotation.y = -u.heading; o.scale.setScalar(carBoost);
       const sel = u.id === view.unit, ring = o.userData.ring;
-      ring.position.set(ux, 0.2, uz); ring.material.opacity = sel ? 0.95 : u.player ? 0.7 : 0; ring.material.color.set(u.player && !sel ? '#ffd166' : '#7ef0e0'); ring.scale.setScalar(sel ? 1 + Math.sin(time * 4) * 0.08 : 1);
+      ring.position.set(ux, 0.2, uz); ring.material.opacity = sel ? 0.95 : u.player ? 0.7 : 0; ring.material.color.set(u.player && !sel ? '#ffd166' : '#7ef0e0'); ring.scale.setScalar(carBoost * (sel ? 1 + Math.sin(time * 4) * 0.08 : 1));
       if (heli) { o.userData.rotor.rotation.y += dt * 40; o.userData.spot.position.set(ux, 0.3, uz); o.userData.spot.material.opacity = 0.25 + night * 0.6; }
       else {
         const urgent = ['enroute', 'pursuit', 'onscene'].includes(u.status);
@@ -567,7 +569,7 @@ export function createRenderer(canvas, minimap) {
     const seenSus = new Set();
     for (const x of state.suspects) {
       seenSus.add(x.id); let o = suspectObjs.get(x.id); if (!o) { o = makeSuspectObj(); suspectObjs.set(x.id, o); }
-      o.position.set(x.x * M, 0, x.y * M); o.rotation.y = -x.heading; o.userData.mark.position.set(x.x * M, 0.25, x.y * M); o.userData.mark.scale.setScalar(1 + Math.sin(time * 8) * 0.15);
+      o.position.set(x.x * M, 0, x.y * M); o.rotation.y = -x.heading; o.scale.setScalar(carBoost); o.userData.mark.position.set(x.x * M, 0.25, x.y * M); o.userData.mark.scale.setScalar(1 + Math.sin(time * 8) * 0.15);
       if (Math.random() < dt * 8) emit(x.x * M - Math.cos(x.heading) * 3, x.y * M - Math.sin(x.heading) * 3, 'smoke');
     }
     for (const [id, o] of suspectObjs) if (!seenSus.has(id)) { scene.remove(o, o.userData.mark); suspectObjs.delete(id); }
@@ -605,7 +607,7 @@ export function createRenderer(canvas, minimap) {
     for (const k of state.cases ?? []) {
       if (k.state !== 'open' || !k.search) continue;
       seenZones.add(k.id); let o = zoneObjs.get(k.id); if (!o) { o = makeZone(); zoneObjs.set(k.id, o); }
-      const r = k.search.r, pulse = 1 + Math.sin(time * 1.5 + k.id) * 0.015; o.position.set(k.search.x * M, 0, k.search.y * M); o.scale.set(r * pulse, r * 0.22, r * pulse);
+      const r = k.search.r, pulse = 1 + Math.sin(time * 1.5 + k.id) * 0.015; o.position.set(k.search.x * M, 0, k.search.y * M); o.scale.set(r * pulse, r * 0.22, r * pulse); const near = smooth(r * 0.8, r * 3, Math.hypot(camera.position.x - k.search.x * M, camera.position.z - k.search.y * M) + cam.dist * 0.4); o.userData.dome.material.opacity = 0.05 * near; o.userData.ring.material.opacity = 0.35 + 0.3 * near;
       const s = toScreen(k.search.x * M, r * 0.4, k.search.y * M); place(label('case' + k.id, 'casezone', `⌕ Дело №${k.id} · улики ${Math.round(k.evidence)}%`), s);
     }
     for (const [id, o] of zoneObjs) if (!seenZones.has(id)) { scene.remove(o); zoneObjs.delete(id); }
