@@ -231,3 +231,41 @@ test('city: mayor demands, complaints and internal affairs, programs, operations
   for (let n = 0; n < 9000 && t.phase === 'shift'; n++) tick(t, 4);
   assert.ok(t.crisis === null || t.crisis.progress >= 0);
 });
+
+test('escalation grows with service and trust; mayor demands get stricter', () => {
+  const s = createGame(101, 'Тест');
+  assert.equal(sim.escalation(s), 1);
+  s.career.shifts = 12; s.trust = 90;
+  const e = sim.escalation(s); assert.ok(e > 1.4 && e <= 1.6, 'escalation ' + e);
+  const c = createGame(102, 'Тест', {mode: 'challenge', challenge: 'budget'}); c.career.shifts = 20; assert.equal(sim.escalation(c), 1);
+});
+
+test('first crisis comes on shift 4, the next one 3-5 shifts after it ends; new crisis kinds work', () => {
+  const s = createGame(103, 'Тест', {mode: 'sandbox'}); s.auto = true;
+  const seen = [];
+  for (let shift = 0; shift < 14 && s.phase !== 'over'; shift++) {
+    for (let n = 0; n < 9000 && s.phase === 'shift'; n++) tick(s, 4);
+    if (s.phase !== 'summary') break;
+    startNextShift(s); if (s.crisis && !seen.some(x => x.at === s.shift - 0 && x.kind === s.crisis.kind)) seen.push({at: s.shift, kind: s.crisis.kind});
+  }
+  assert.ok(seen.length >= 2, 'crises: ' + JSON.stringify(seen));
+  assert.ok(seen[0].at <= 4, 'first crisis by shift 4: ' + seen[0].at);
+  for (const k of Object.keys(sim.CRISES)) assert.ok(sim.CRISES[k].name && sim.CRISES[k].shifts > 0);
+  // скандал засчитывает чистые смены
+  const t = createGame(104, 'Тест', {mode: 'sandbox'}); t.auto = true; t.crisis = {kind: 'scandal', district: 0, progress: 2, shiftsLeft: 4}; sim.setPolicy(t, 'force', 'soft');
+  for (let n = 0; n < 9000 && t.phase === 'shift'; n++) tick(t, 4);
+  assert.ok(t.crisis === null || t.crisis.progress === 2, 'scandal resolved or failed on a dirty shift');
+});
+
+test('routine delegation: minor calls are decided by the partner', () => {
+  const s = createGame(105, 'Тест');
+  const me = playerUnit(s);
+  for (let k = 0; k < 50 && !me.node; k++) tick(s, 1);
+  const c = sim._trafficStop(s, me);
+  for (let k = 0; k < 400 && c.state !== 'choice'; k++) tick(s, 1);
+  assert.equal(c.state, 'choice'); assert.ok(sim.playerDecides(s, c));
+  sim.setRoutine(s, true); assert.equal(sim.playerDecides(s, c), false);
+  for (let k = 0; k < 4000 && c.state !== 'done'; k++) tick(s, 2);
+  assert.equal(c.state, 'done');
+  assert.equal(deserialize(serialize(s)).player.routine, true);
+});

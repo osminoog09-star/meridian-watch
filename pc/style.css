@@ -76,7 +76,7 @@ h2 span{color:var(--text)}
 #coach{position:absolute;left:50%;top:88px;transform:translateX(-50%);max-width:560px;padding:11px 16px;border-color:rgba(110,231,216,.45);font-size:13px;text-align:center;animation:rise .3s ease-out}
 #coach b{color:var(--accent)}
 @keyframes rise{from{opacity:0;transform:translate(-50%,-8px)}}
-#pausedBanner{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);font-size:44px;font-weight:800;letter-spacing:18px;color:rgba(255,255,255,.55);text-shadow:0 4px 30px #000;pointer-events:none!important}
+#pausedBanner{position:absolute;left:50%;top:96px;transform:translateX(-50%);padding:5px 16px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:4px;color:#ffd166;background:rgba(10,16,22,.78);border:1px solid rgba(255,209,102,.45);box-shadow:0 6px 20px rgba(0,0,0,.35);pointer-events:none!important;z-index:5}
 #toasts{position:absolute;left:50%;bottom:132px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none!important}
 .toast{background:rgba(13,21,27,.95);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:9px;padding:8px 14px;font-size:13px;animation:toast 3.6s forwards}
 .toast.bad{border-left-color:var(--bad)}.toast.good{border-left-color:var(--good)}
@@ -219,3 +219,8 @@ table.staff td small{color:var(--muted);font-size:10px}table.staff select{max-wi
 .complaints{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}.complaints .item.sustained{border-color:rgba(255,77,94,.45)}.complaints .item.dismissed{opacity:.7}
 .oprow{display:flex;gap:6px;margin-top:6px}.oprow select{flex:1;min-width:0}
 .citynote{color:#bfe9df;background:rgba(110,231,216,.06);border:1px solid rgba(110,231,216,.25);border-radius:8px;padding:8px 10px}
+
+/* слоты сохранений */
+.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 4px}
+.slots button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:9px 12px;text-align:left}
+.slots button small{color:var(--muted);font-size:11px;font-weight:500}.slots button.on{border-color:#6ee7d8;background:rgba(110,231,216,.12)}

@@ -31,9 +31,34 @@ function createTraffic(count) {
 function makeDemo() { const d = sim.createGame(20261114, 'Демо', {mode: 'sandbox'}); d.auto = true; d.t = 21.5 * 3600; d.shiftEnd = d.t + 1e9; return d; }
 
 // ---------- сохранения ----------
-let saveWarned = false;
-function save() { if (!state) return; try { localStorage.setItem(SAVE_KEY, sim.serialize(state)); saveWarned = false; } catch { if (!saveWarned) { saveWarned = true; toast('Не удалось сохранить игру: нет доступа к хранилищу', 'bad'); } } }
-function loadSaved() { try { const raw = localStorage.getItem(SAVE_KEY) ?? localStorage.getItem('mercury-dispatch-pc-v2'); return raw ? sim.deserialize(raw) : null; } catch { return null; } }
+// три слота; к каждому — резервная копия предыдущего сохранения (не чаще раза в 2 минуты)
+let saveWarned = false, lastBackup = 0, slot = 1;
+const slotKey = n => 'mercury-pc-slot-' + n, store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { localStorage.setItem(k, v); },
+};
+try { slot = Math.min(3, Math.max(1, +(localStorage.getItem('mercury-pc-slot') || 1))); } catch {}
+try { // перенос старого сохранения в слот 1
+  if (!localStorage.getItem(slotKey(1))) { const old = localStorage.getItem(SAVE_KEY) ?? localStorage.getItem('mercury-dispatch-pc-v2'); if (old) localStorage.setItem(slotKey(1), old); }
+} catch {}
+function save() {
+  if (!state) return;
+  try {
+    const raw = sim.serialize(state), prev = store.get(slotKey(slot));
+    if (prev && prev !== raw && Date.now() - lastBackup > 120000) { store.set(slotKey(slot) + '-bak', prev); lastBackup = Date.now(); }
+    store.set(slotKey(slot), raw); store.set('mercury-pc-slot', String(slot)); saveWarned = false;
+  } catch { if (!saveWarned) { saveWarned = true; toast('Не удалось сохранить игру: нет доступа к хранилищу или нет места', 'bad'); } }
+}
+// чтение слота: основное сохранение, при повреждении — резервная копия
+function readSlot(n) {
+  const main = store.get(slotKey(n)), bak = store.get(slotKey(n) + '-bak');
+  if (!main && !bak) return {state: null, empty: true};
+  try { if (main) return {state: sim.deserialize(main), from: 'main'}; } catch {}
+  try { if (bak) return {state: sim.deserialize(bak), from: 'backup', broken: !!main}; } catch {}
+  return {state: null, broken: true};
+}
+function loadSaved() { return readSlot(slot).state; }
+function slotLabel(s) { return s.mode === 'career' ? `${RANKS[s.rank].title.toLowerCase()} ${esc(s.player.name)}` : s.challenge ? 'испытание «' + CHALLENGES[s.challenge.id].name + '»' : 'песочница'; }
 function startGame(saved = null, opts = {}) {
   state = saved ?? sim.createGame(undefined, opts.name ?? '', opts); view.rankSeen = state.rank; speed = 1; paused = false; view.unit = sim.playerUnit(state)?.id ?? state.units[0]?.id ?? null; view.call = null; view.spike = false;
   document.body.classList.remove('title'); closeOverlay(); renderer.focus(STATION, 1300); audio.unlock(); save(); refresh(true);
@@ -76,7 +101,7 @@ function refresh(force = false) {
   $('heatBtn').classList.toggle('on', view.heat);
   $('spikeBtn').hidden = s.mode === 'career' && s.rank < 1; $('spikeBtn').textContent = `▲ Шипы ${s.spikesLeft}`; $('spikeBtn').classList.toggle('on', view.spike);
   $('wave').hidden = !s.wave; if (s.wave) $('wave').textContent = '⚠ Волна: ' + DISTRICTS[s.wave.district].name;
-  $('crisis').hidden = !s.crisis; if (s.crisis) { const k = sim.CRISES[s.crisis.kind]; $('crisis').textContent = `☠ ${k.name}: ${s.crisis.progress}/${k.need} · ${DISTRICTS[s.crisis.district].name}`; $('crisis').title = `${k.goal}. Осталось смен: ${s.crisis.shiftsLeft}.`; }
+  $('crisis').hidden = !s.crisis; if (s.crisis) { const k = sim.CRISES[s.crisis.kind]; $('crisis').textContent = `☠ ${k.name}: ${s.crisis.progress}/${k.need}${k.anywhere || k.clean ? '' : ' · ' + DISTRICTS[s.crisis.district].name}`; $('crisis').title = `${k.goal}. Осталось смен: ${s.crisis.shiftsLeft}.`; }
   $('pausedBanner').hidden = !paused || !!overlay;
   document.body.classList.toggle('spike-mode', view.spike);
 
@@ -179,14 +204,16 @@ const helpHtml = `<h3>Как играть</h3><p>Вы начинаете ста�
 <p>Город живёт сам: часть преступлений никто не видит. Их замечают патрули, ДПС с радаром, вертолёт, информаторы и агенты под прикрытием. Подозреваемые сдаются, бегут или отстреливаются — бронежилет и спецназ спасают людей. Успехи повышают доверие, провалы, ранения, аварии в погонях и ошибочные аресты — роняют. Упадёт доверие до нуля — вас отстранят.</p>
 <div class="keys"><kbd>ЛКМ</kbd><span>выбрать экипаж или вызов; тянуть — двигать карту</span><kbd>ПКМ</kbd><span>отправить выбранный экипаж на вызов или в точку карты</span><kbd>Shift+ПКМ</kbd><span>добавить точку маршрута патрулирования</span><kbd>Колесо</kbd><span>масштаб к курсору</span><kbd>Средняя кнопка</kbd><span>поворот и наклон камеры</span>
 <kbd>W A S D</kbd><span>двигать карту</span><kbd>Z X</kbd><span>повернуть камеру</span><kbd>Пробел</kbd><span>пауза</span><kbd>1 2 3</kbd><span>скорость ×1 ×2 ×4</span><kbd>G</kbd><span>направить подходящий экипаж на выбранный вызов</span><kbd>Q E</kbd><span>выбрать действие на месте</span>
-<kbd>K</kbd><span>поставить шипы (клик по дороге во время погони)</span><kbd>Tab</kbd><span>следующий экипаж</span><kbd>C</kbd><span>следующий вызов</span><kbd>F</kbd><span>следить за экипажем</span><kbd>R / P</kbd><span>на отдых / в патруль</span><kbd>V</kbd><span>карта преступности по районам</span><kbd>B</kbd><span>личное дело / отделение</span><kbd>Home</kbd><span>весь город</span><kbd>M</kbd><span>звук</span></div>`;
+<kbd>K</kbd><span>поставить шипы (клик по дороге во время погони)</span><kbd>Tab</kbd><span>следующий экипаж</span><kbd>C</kbd><span>следующий вызов</span><kbd>F</kbd><span>следить за экипажем</span><kbd>R / P</kbd><span>на отдых / в патруль</span><kbd>V</kbd><span>карта преступности по районам</span><kbd>N</kbd><span>рутину решает напарник</span><kbd>B</kbd><span>личное дело / отделение</span><kbd>Home</kbd><span>весь город</span><kbd>M</kbd><span>звук</span></div>`;
 function showTitle() {
   document.body.classList.add('title'); state = null; audio.siren(false);
-  const saved = loadSaved();
-  const label = saved ? (saved.mode === 'career' ? `${RANKS[saved.rank].title.toLowerCase()} ${esc(saved.player.name)}` : saved.challenge ? 'испытание «' + CHALLENGES[saved.challenge.id].name + '»' : 'песочница') + `, смена ${saved.shift}` : '';
-  openOverlay('title', `<span class="eyebrow">ПОЛИЦЕЙСКАЯ СТРАТЕГИЯ · ПК-ВЕРСИЯ 2.0</span><h1><b>MERCURY</b> RESPONSE</h1>
+  const slots = [1, 2, 3].map(readSlot), cur = slots[slot - 1], saved = cur.state;
+  const label = saved ? slotLabel(saved) + `, смена ${saved.shift}` : '';
+  const slotsHtml = `<div class="slots">${slots.map((r, i) => `<button data-act="slot" data-id="${i + 1}" class="${slot === i + 1 ? 'on' : ''}"><b>Слот ${i + 1}</b><small>${r.state ? slotLabel(r.state) + ' · смена ' + r.state.shift + (['over', 'won'].includes(r.state.phase) ? ' · завершена' : '') : r.broken ? 'повреждён' : 'пусто'}</small></button>`).join('')}</div>
+    ${cur.broken && !saved ? `<p class="notice-bad">Сохранение в слоте ${slot} повреждено и не читается, резервной копии нет. Новая игра в этом слоте его перезапишет.</p>` : cur.from === 'backup' ? `<p class="notice-bad">Основное сохранение в слоте ${slot} повреждено — будет загружена резервная копия (прогресс может откатиться на пару минут).</p>` : ''}`;
+  openOverlay('title', `<span class="eyebrow">ПОЛИЦЕЙСКАЯ СТРАТЕГИЯ · ПК-ВЕРСИЯ 3.2</span><h1><b>MERCURY</b> RESPONSE</h1>
   <p>Вчера — академия. Сегодня — первая смена в патруле. Дослужитесь от стажёра до комиссара — или сразу возглавьте отделение.</p>
-  <div class="menu">${saved && !['over', 'won'].includes(saved.phase) ? `<button class="primary" data-act="continue">Продолжить · ${label}</button>` : ''}
+  ${slotsHtml}<div class="menu">${saved && !['over', 'won'].includes(saved.phase) ? `<button class="primary" data-act="continue">Продолжить · ${label}</button>` : ''}
   <label class="name">Имя офицера<input id="playerName" maxlength="24" placeholder="Например: Денис" autocomplete="off"></label>
   <button class="${saved ? '' : 'primary'}" data-act="newGame">Новая карьера · от стажёра</button>
   <div class="split"><button data-act="sandbox">Песочница · сразу начальник</button><button data-act="challenges">Испытания</button></div>
@@ -206,11 +233,23 @@ function showSandbox() {
 function showChallenges() {
   openOverlay('challenges', `<span class="eyebrow">ИСПЫТАНИЯ</span><h2>Сценарии с целью</h2><div class="grid">${Object.entries(CHALLENGES).map(([k, c]) => `<div class="item"><b>${c.name}</b><small>${c.goal}<br><br>Смен: ${c.shifts} · звание: ${RANKS[c.rank].title} · экипажей: ${c.units.length}</small><button class="primary" data-act="startChallenge" data-id="${k}">Начать</button></div>`).join('')}</div><div class="menu"><button data-act="title">Назад</button></div>`);
 }
+const SYSTEMS = [
+  ['Переговоры', 'если подозреваемый не подчиняется, начинается противостояние. Синяя шкала — послушание, цветная — стабильность. «Переговоры» поднимают послушание, «Тянуть время» — стабильность, «Наладить контакт» ломает волю. На нуле стабильности подозреваемый нападёт или сбежит; можно и пойти на силовое задержание.'],
+  ['Офицеры и кадры', 'у каждого сотрудника навыки, уровень, специализация, стресс и мораль. Новичок рядом со старшим учится быстрее. Уставшие от стресса уходят со службы. Вкладка «Кадры» (B): найм, резерв, академия.'],
+  ['Приоритет патруля', 'в карточке экипажа: реагирование (быстрее на вызовы), профилактика (сильнее снижает преступность), дорожный надзор (останавливает машины), работа с жителями (доверие и подсказки о скрытых преступлениях).'],
+  ['Остановки ТС', 'экипаж на дорожном надзоре сам останавливает машины. Водитель может сдаться, а может и сбежать — начнётся погоня.'],
+  ['Город и мэр', 'вкладка «Город»: мэр каждую смену даёт поручение. Выполните — премия и рост отношений; провалите — при плохих отношениях мэр урежет бюджет.'],
+  ['Жалобы и проверки', 'силовые действия рождают жалобы. В конце смены служебная проверка решает, подтвердилась ли жалоба; подтверждённые бьют по доверию и иногда заканчиваются иском.'],
+  ['Дозор и операции', 'соседский дозор по районам и одна операция на смену: облава, пост проверки водителей, контрольная закупка.'],
+  ['Кризисы', 'примерно раз в 3–5 смен: серийный убийца, новая банда, беспорядки, волна угонов, коррупционный скандал. Цель и прогресс — сверху экрана и во вкладке «Город».'],
+  ['Карта преступности', 'клавиша V подкрашивает дома по уровню преступности района.'],
+  ['Рутину решает напарник', 'клавиша N: мелкие вызовы и остановки ваш экипаж решает сам.'],
+];
 const UNLOCKS = {
-  1: ['Свой район и маршрут патруля: выбор в карточке экипажа, точки — Shift+ПКМ', 'Шипы для остановки беглецов: клавиша K во время погони', 'Начались волны преступности — следите за сводками'],
+  1: ['Приоритет патруля своего экипажа: профилактика, ДПС, работа с жителями', 'Свой район и маршрут патруля: выбор в карточке экипажа, точки — Shift+ПКМ', 'Шипы для остановки беглецов: клавиша K во время погони', 'Начались волны преступности — следите за сводками'],
   2: ['Подкрепление на свой вызов из других экипажей', 'Расследования: зона поиска, улики и ордер на арест в панели справа', 'Информатор в одном районе — вкладка «Агентура» (B)', 'В смену пришёл экипаж детективов'],
   3: ['Командование всеми экипажами смены, их районами и маршрутами', 'Автодиспетчер (кнопка сверху) — включён, отключите, чтобы командовать самому', 'Агент под прикрытием — вкладка «Агентура»', 'В смену пришёл перехватчик ДПС'],
-  4: ['Бюджет отделения и найм экипажей всех подразделений', 'Снаряжение экипажей и директивы политики', 'Улучшения отделения, обучение в академии'],
+  4: ['Вкладка «Город»: поручения мэра, соседский дозор, операции на смену', 'Найм сотрудников, резерв и академия во вкладке «Кадры»', 'Бюджет отделения и найм экипажей всех подразделений', 'Снаряжение экипажей и директивы политики', 'Улучшения отделения, обучение в академии'],
   5: ['Спецназ и полицейский вертолёт', 'Второй агент под прикрытием, дорогие улучшения'],
   6: ['Высшее звание. Город целиком под вашей ответственностью'],
 };
@@ -222,11 +261,12 @@ function showRankUp() {
 }
 function showMenu() {
   openOverlay('menu', `<span class="eyebrow">ПАУЗА</span><h2>Меню</h2><div class="menu"><button class="primary" data-act="close">Вернуться в игру</button><button data-act="shop">${sim.canManage(state) ? 'Отделение' : 'Личное дело'}</button><button data-act="help">Как играть</button><button data-act="toTitle">Сохранить и выйти в главное меню</button></div>
+  <h3>Игра</h3><div class="seg"><button data-act="routine" class="${state?.player.routine ? 'on' : ''}" ${state ? '' : 'disabled'}>Рутину решает напарник: ${state?.player.routine ? 'вкл' : 'выкл'}</button></div><p class="fine">Мелкие вызовы и остановки ТС ваш экипаж решает сам, лучшим вариантом. Опыт начисляется как обычно; серьёзные вызовы и переговоры остаются за вами. Клавиша <kbd>N</kbd>.</p>
   <h3>Графика</h3><div class="seg">${[['auto', 'Авто'], ['high', 'Высокая'], ['medium', 'Средняя'], ['low', 'Низкая']].map(([k, n]) => `<button data-act="gfx" data-id="${k}" class="${renderer.quality() === k ? 'on' : ''}">${n}</button>`).join('')}</div><p class="fine">Сейчас: ${({high: 'высокая', medium: 'средняя', low: 'низкая'})[renderer.stats().effective]} · внутреннее разрешение ${Math.round(renderer.stats().renderScale * 100)}%. «Авто» подбирает качество по видеокарте, а разрешение игра подстраивает сама, чтобы держать плавность.</p>
   <h3>Громкость</h3><input type="range" id="volume" min="0" max="100" value="${Math.round(audio.volume * 100)}"><p class="fine">Игра сохраняется автоматически.</p>`);
   $('volume').oninput = e => { audio.setVolume(e.target.value / 100); audio.click(); };
 }
-function showHelp() { openOverlay('help', `<span class="eyebrow">ИНСТРУКТАЖ</span><h2>Добро пожаловать на службу</h2>${helpHtml}<h3>Подразделения</h3>${Object.values(ROLES).map(r => `<p><b style="color:${r.color}">${r.name}</b> — ${r.desc}</p>`).join('')}<h3>Советы</h3>${TIPS.map(t => `<p>• ${t}</p>`).join('')}<div class="menu"><button class="primary" data-act="${state ? 'close' : 'title'}">Понятно</button></div>`); }
+function showHelp() { openOverlay('help', `<span class="eyebrow">ИНСТРУКТАЖ</span><h2>Добро пожаловать на службу</h2>${helpHtml}<h3>Системы службы</h3>${SYSTEMS.map(([n, d]) => `<p><b>${n}</b> — ${d}</p>`).join('')}<h3>Подразделения</h3>${Object.values(ROLES).map(r => `<p><b style="color:${r.color}">${r.name}</b> — ${r.desc}</p>`).join('')}<h3>Советы</h3>${TIPS.map(t => `<p>• ${t}</p>`).join('')}<div class="menu"><button class="primary" data-act="${state ? 'close' : 'title'}">Понятно</button></div>`); }
 function careerHtml() {
   const s = state, c = s.career, next = RANKS[s.rank + 1];
   return `${s.mode === 'career' ? `<h3>Карьера</h3><div class="ladder">${RANKS.map((r, k) => `<div class="${k === s.rank ? 'now' : k < s.rank ? 'done' : ''}"><b>${k < s.rank ? '✓' : k === s.rank ? '●' : '○'} ${r.title}</b><small>${r.perk}${k > s.rank ? ' · ' + r.xp + ' опыта' : ''}</small></div>`).join('')}</div>
@@ -257,7 +297,7 @@ function cityHtml() {
   const label = {sustained: 'подтвердилась', dismissed: 'не подтвердилась'};
   let html = `<div class="mayor"><div><span class="eyebrow">МЭР</span><b>${Math.round(c.mayor)}%</b><small>${mood}${c.cut ? ` · бюджет урезан ещё на ${c.cut} смен${c.cut === 1 ? 'у' : 'ы'}` : ''}</small><div class="sk mo wide"><i style="width:${c.mayor}%"></i></div></div>
     <div><span class="eyebrow">ПОРУЧЕНИЕ НА СМЕНУ</span><p>${c.demand ? esc(sim.demandText(s)) : 'Мэрия пока присматривается к новому отделению.'}</p>${c.demand ? `<small>${sim.demandMet(s) ? '✔ сейчас выполняется' : '… пока не выполнено'} · выполнено: мэр +10 и 250 € премии, провал: мэр −12</small>` : ''}</div></div>`;
-  if (s.crisis) { const k = sim.CRISES[s.crisis.kind]; html += `<div class="crisisbox"><b>☠ ${k.name} — ${dname(s.crisis.district)}</b><p>${k.goal}. Прогресс ${s.crisis.progress} из ${k.need}, осталось смен: ${s.crisis.shiftsLeft}. Провал ударит по доверию и отношениям с мэром.</p></div>`; }
+  if (s.crisis) { const k = sim.CRISES[s.crisis.kind]; html += `<div class="crisisbox"><b>☠ ${k.name}${k.anywhere || k.clean ? '' : ' — ' + dname(s.crisis.district)}</b><p>${k.goal}. Прогресс ${s.crisis.progress} из ${k.need}, осталось смен: ${s.crisis.shiftsLeft}. Провал ударит по доверию и отношениям с мэром.</p></div>`; }
   html += `<h3>Жалобы и служебные проверки</h3><p class="fine">Силовые действия и перестрелки рождают жалобы. В конце смены служебная проверка решает, подтвердилась ли жалоба; подтверждённая бьёт по доверию и морали сотрудника и может закончиться иском. Жёсткая политика силы — больше жалоб.</p>
     ${open.length ? `<div class="complaints">${open.map(k => `<div class="item"><b>${esc(k.officer)}</b><small>${esc(k.call)} · смена ${k.shift} · проверка идёт</small></div>`).join('')}</div>` : '<p class="fine">Открытых жалоб нет.</p>'}
     ${past.length ? `<div class="complaints">${past.map(k => `<div class="item ${k.state}"><b>${esc(k.officer)}</b><small>${esc(k.call)} · ${label[k.state]}${k.lawsuit ? ` · иск ${money(k.lawsuit)}` : ''}</small></div>`).join('')}</div>` : ''}`;
@@ -348,7 +388,8 @@ const actions = {
   shop: () => showShop(), menu: showMenu, help: showHelp, close: closeOverlay, title: showTitle, summary: showSummary, sandbox: showSandbox, challenges: showChallenges,
   tab(d) { showShop(d.id); }, spike: toggleSpike,
   toTitle() { save(); showTitle(); }, quit() { window.close(); },
-  continue() { const saved = loadSaved(); if (saved) startGame(saved); else showTitle(); },
+  continue() { const r = readSlot(slot); if (r.state) { startGame(r.state); if (r.from === 'backup') toast('Основное сохранение повреждено — загружена резервная копия', 'bad'); } else showTitle(); },
+  slot(d) { slot = +d.id; try { localStorage.setItem('mercury-pc-slot', String(slot)); } catch {} showTitle(); },
   newGame() { startGame(null, {mode: 'career', name: $('playerName')?.value ?? ''}); },
   setup(d) { view.setup[d.g] = d.g === 'waves' ? d.v === 'true' : d.g === 'difficulty' ? d.v : +d.v; showSandbox(); },
   startSandbox() { startGame(null, {mode: 'sandbox', ...view.setup}); },
@@ -359,6 +400,7 @@ const actions = {
   undercover(d) { if (result(sim.toggleUndercover(state, +d.id))) showShop('intel'); },
   heat() { view.heat = !view.heat; refresh(true); },
   gfx(d) { renderer.quality(d.id); showMenu(); },
+  routine() { if (!state) return; sim.setRoutine(state, !state.player.routine); toast(state.player.routine ? 'Рутину решает напарник' : 'Все решения снова за вами'); if (overlay === 'menu') showMenu(); refresh(true); },
   nextShift() { sim.startNextShift(state); closeOverlay(); renderer.focus(STATION, 1300); save(); },
   selUnit(d) { const id = +d.id; if (view.unit === id) renderer.focus(selectedUnit()); view.unit = id; refresh(true); },
   selCall(d) { const id = +d.id; const c = state.calls.find(c => c.id === id); if (view.call === id && c) { const sus = state.suspects.find(x => x.id === c.suspectId); renderer.focus(sus ?? c); } view.call = id; refresh(true); },
@@ -431,7 +473,7 @@ const keys = {
   Tab: e => { view.unit = cycle(state.units, view.unit, e.shiftKey ? -1 : 1); const u = selectedUnit(); if (u) renderer.focus(u); refresh(true); },
   KeyC: () => { const live = sim.liveCalls(state); view.call = cycle(live, view.call); const c = selectedCall(); if (c) renderer.focus(state.suspects.find(x => x.id === c.suspectId) ?? c); refresh(true); },
   KeyZ: () => renderer.rotate(-Math.PI / 8), KeyX: () => renderer.rotate(Math.PI / 8),
-  Home: () => renderer.overview(), KeyV: () => actions.heat(), KeyM: () => toast(audio.toggleMute() ? 'Звук выключен' : 'Звук включён'),
+  Home: () => renderer.overview(), KeyV: () => actions.heat(), KeyN: () => actions.routine(), KeyM: () => toast(audio.toggleMute() ? 'Звук выключен' : 'Звук включён'),
   Equal: () => renderer.zoom(1.35), NumpadAdd: () => renderer.zoom(1.35), Minus: () => renderer.zoom(1 / 1.35), NumpadSubtract: () => renderer.zoom(1 / 1.35),
 };
 document.addEventListener('keyup', e => held.delete(e.code)); window.addEventListener('blur', () => held.clear());

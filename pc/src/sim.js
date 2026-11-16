@@ -87,6 +87,8 @@ export const isNight = t => { const h = (t / 3600) % 24; return h >= 21 || h < 6
 export const playerUnit = s => s.units.find(u => u.player) ?? null;
 export const cityCrime = s => { const live = s.districts.filter(d => d.crime >= 0); return live.reduce((n, d) => n + d.crime, 0) / Math.max(1, live.length); };
 const diff = s => DIFFICULTY[s.settings.difficulty] ?? DIFFICULTY.normal;
+// эскалация: чем дольше вы служите и чем выше доверие, тем больше вызовов и строже ожидания
+export const escalation = s => s.challenge ? 1 : Math.min(1.6, 1 + 0.05 * Math.max(0, (s.career?.shifts ?? 0) - 2) + Math.max(0, s.trust - 70) / 120);
 
 // ---------- полномочия по званию ----------
 export const canCommand = (s, u) => !!u && (u.player || s.rank >= 3);
@@ -276,7 +278,10 @@ export function addWaypoint(s, unitId, node) {
 }
 export function clearWaypoints(s, unitId) { const u = s.units.find(u => u.id === unitId); if (!u || !canZone(s, u)) return {ok: false}; u.waypoints = []; return {ok: true}; }
 // Игрок выбирает действие, если на месте его машина или экипаж под его командой (без автодиспетчера).
-export const playerDecides = (s, c) => { const on = unitsOn(s, c); return on.some(u => u.player) || (!s.auto && on.some(u => canCommand(s, u))); };
+// «рутину решает напарник»: мелкие вызовы и остановки ТС экипаж игрока решает сам
+export const isRoutine = c => { const t = callType(c); return c.state !== 'standoff' && (t.minor || t.sev === 1 || c.type === 'stop'); };
+export const playerDecides = (s, c) => { if (s.player.routine && isRoutine(c)) return false; const on = unitsOn(s, c); return on.some(u => u.player) || (!s.auto && on.some(u => canCommand(s, u))); };
+export function setRoutine(s, on) { s.player.routine = !!on; return {ok: true}; }
 export function chooseApproach(s, callId, index, by = 'player') {
   const c = s.calls.find(c => c.id === callId), a = c && callType(c).approaches[index];
   if (!c || !a || c.state !== 'choice') return {ok: false};
@@ -758,30 +763,36 @@ export const OPERATIONS = {
 };
 export const PROGRAM_COST = 120;
 const DEMANDS = {
-  district: d => `снизить преступность в районе ${DISTRICTS[d.district].name} хотя бы на 8 пунктов`,
-  response: () => 'среднее время прибытия — не дольше 9 минут',
+  district: d => `снизить преступность в районе ${DISTRICTS[d.district].name} хотя бы на ${d.need ?? 8} пунктов`,
+  response: d => `среднее время прибытия — не дольше ${d.need ?? 9} минут`,
   clean: () => 'ни одной жалобы на полицию за смену',
-  arrests: () => 'не меньше 6 задержаний за смену',
+  arrests: d => `не меньше ${d.need ?? 6} задержаний за смену`,
 };
 export const demandText = s => s.city?.demand ? DEMANDS[s.city.demand.kind](s.city.demand) : '';
 export const CRISES = {
-  serial: {name: 'Серийный убийца', goal: 'Раскрыть два убийства в районе', need: 2, shifts: 4},
-  gang: {name: 'Новая банда', goal: 'Три успешных выезда на бандитов, стрельбу или наркоторговлю в районе', need: 3, shifts: 4},
+  serial: {name: 'Серийный убийца', goal: 'Раскрыть два убийства в районе', need: 2, shifts: 4, types: ['homicide'], rate: 0.004},
+  gang: {name: 'Новая банда', goal: 'Три успешных выезда на бандитов, стрельбу или наркоторговлю в районе', need: 3, shifts: 4, types: ['gang', 'shooting', 'drugs'], rate: 0.008, crime: 15},
+  riot: {name: 'Беспорядки', goal: 'Два успешных выезда на беспорядки или драки в районе', need: 2, shifts: 2, types: ['riot', 'fight', 'vandalism'], rate: 0.012, crime: 10, minRank: 2},
+  carwave: {name: 'Волна угонов', goal: 'Четыре задержания угонщиков или гонщиков по всему городу', need: 4, shifts: 3, types: ['carjack', 'race'], rate: 0.01, anywhere: true},
+  scandal: {name: 'Коррупционный скандал', goal: 'Три смены подряд без подтверждённых жалоб и ошибочных арестов', need: 3, shifts: 4, clean: true},
 };
+export const crisisGoal = k => CRISES[k.kind].anywhere ? CRISES[k.kind].goal : `${CRISES[k.kind].goal} ${DISTRICTS[k.district].name}`;
 const newCity = () => ({mayor: 60, demand: null, cut: 0, complaints: [], nextComplaint: 1});
 const liveDistricts = s => s.districts.map((d, k) => k).filter(k => districtNodes[k].length);
 function worstDistrict(s) { return liveDistricts(s).sort((a, b) => s.districts[b].crime - s.districts[a].crime)[0] ?? 0; }
 function newDemand(s) {
-  const kind = pick(s, Object.keys(DEMANDS)), d = {kind};
-  if (kind === 'district') { d.district = worstDistrict(s); d.start = s.districts[d.district].crime; }
+  const kind = pick(s, Object.keys(DEMANDS)), d = {kind}, e = escalation(s) - 1;
+  if (kind === 'district') { d.district = worstDistrict(s); d.start = s.districts[d.district].crime; d.need = 8 + Math.round(e * 6); }
+  if (kind === 'response') d.need = Math.max(6, 9 - Math.round(e * 3));
+  if (kind === 'arrests') d.need = 6 + Math.round(e * 5);
   s.city.demand = d; say(s, `Мэрия поручает: ${DEMANDS[kind](d)}.`, 'info');
 }
 export function demandMet(s) {
   const d = s.city.demand, st = s.stats; if (!d) return null;
-  if (d.kind === 'district') return s.districts[d.district].crime <= d.start - 8;
-  if (d.kind === 'response') return st.responseN > 0 && st.responseSum / st.responseN <= 9 * MIN;
+  if (d.kind === 'district') return s.districts[d.district].crime <= d.start - (d.need ?? 8);
+  if (d.kind === 'response') return st.responseN > 0 && st.responseSum / st.responseN <= (d.need ?? 9) * MIN;
   if (d.kind === 'clean') return (st.complaints ?? 0) === 0;
-  return st.arrests >= 6;
+  return st.arrests >= (d.need ?? 6);
 }
 export const grantFactor = s => s.city.cut > 0 ? 0.7 : s.city.mayor >= 80 ? 1.15 : 1;
 function maybeComplaint(s, c, on) {
@@ -797,24 +808,27 @@ function maybeComplaint(s, c, on) {
   emit(s, {type: 'complaint'});
 }
 function crisisProgress(s, c) {
-  const k = s.crisis; if (!k || c.district !== k.district) return;
-  if (!(k.kind === 'serial' ? c.type === 'homicide' : ['gang', 'shooting', 'drugs'].includes(c.type))) return;
-  const def = CRISES[k.kind]; k.progress++;
-  if (k.progress >= def.need) { say(s, `Кризис «${def.name}» преодолён!`, 'good'); trustGain(s, 8); s.city.mayor = clamp(s.city.mayor + 15, 0, 100); note(s, 'crisisWon', def.name); emit(s, {type: 'crisisWon'}); s.crisis = null; }
+  const k = s.crisis; if (!k) return;
+  const def = CRISES[k.kind]; if (!def.types?.includes(c.type) || (!def.anywhere && c.district !== k.district)) return;
+  k.progress++;
+  if (k.progress >= def.need) { say(s, `Кризис «${def.name}» преодолён!`, 'good'); trustGain(s, 8); s.city.mayor = clamp(s.city.mayor + 15, 0, 100); note(s, 'crisisWon', def.name); emit(s, {type: 'crisisWon'}); s.crisis = null; s.city.nextCrisis = s.shift + 3 + Math.floor(rnd(s) * 3); }
   else say(s, `${def.name}: прогресс ${k.progress} из ${def.need}.`, 'good');
 }
 function tickCity(s, dt) {
   for (const k of Object.keys(s.programs)) if (s.districts[k]?.crime >= 0) crimeShift(s, +k, -3 * dt / 3600);
   if (s.op?.kind === 'crackdown') { crimeShift(s, s.op.district, -22 * dt / 3600); s.trust = clamp(s.trust - 0.8 * dt / 3600, 0, 100); }
-  const k = s.crisis;
-  if (k && rnd(s) < perMinute(k.kind === 'serial' ? 0.004 : 0.008, dt)) spawnCall(s, k.kind === 'serial' ? 'homicide' : pick(s, ['gang', 'shooting', 'drugs']), pick(s, districtNodes[k.district]));
+  const k = s.crisis, def = k && CRISES[k.kind];
+  if (def?.types && rnd(s) < perMinute(def.rate, dt)) spawnCall(s, pick(s, def.types), pick(s, districtNodes[def.anywhere ? pick(s, liveDistricts(s)) : k.district]));
 }
 function startCrisis(s) {
-  if (s.crisis || s.shift < 3 || (s.mode === 'career' && s.rank < 2) || s.challenge || rnd(s) >= 0.3) return;
-  const kind = rnd(s) < 0.45 ? 'serial' : 'gang', district = kind === 'gang' ? worstDistrict(s) : pick(s, liveDistricts(s));
-  s.crisis = {kind, district, progress: 0, shiftsLeft: CRISES[kind].shifts};
-  if (kind === 'gang') crimeShift(s, district, 15);
-  say(s, `Кризис: ${CRISES[kind].name} — район ${DISTRICTS[district].name}. ${CRISES[kind].goal} за ${CRISES[kind].shifts} смены.`, 'alert');
+  // первый кризис — на 4-й смене, дальше раз в 3–5 смен
+  s.city.nextCrisis ??= s.mode === 'career' ? 4 : 3;
+  if (s.crisis || s.challenge || s.shift < s.city.nextCrisis) return;
+  const kinds = Object.keys(CRISES).filter(k => (CRISES[k].minRank ?? 0) <= s.rank && k !== s.city.lastCrisis);
+  const kind = pick(s, kinds), def = CRISES[kind], district = def.crime ? worstDistrict(s) : pick(s, liveDistricts(s));
+  s.crisis = {kind, district, progress: 0, shiftsLeft: def.shifts}; s.city.lastCrisis = kind;
+  if (def.crime) crimeShift(s, district, def.crime);
+  say(s, `Кризис: ${def.name}${def.anywhere || def.clean ? '' : ' — район ' + DISTRICTS[district].name}. ${def.goal} за ${def.shifts} смены.`, 'alert');
   emit(s, {type: 'crisis'});
 }
 export function toggleProgram(s, district) {
@@ -850,10 +864,16 @@ function cityEndShift(s, manage) {
   if (manage) s.money = Math.max(0, s.money - out.paid - out.programs);
   if (out.sustained) note(s, 'ia', `${out.sustained}`);
   if (out.lawsuits) note(s, 'lawsuit', `${out.paid}`);
+  if (s.crisis && CRISES[s.crisis.kind].clean) { // скандал: считаем чистые смены
+    const def = CRISES[s.crisis.kind];
+    if (out.sustained || s.stats.wrongful) { s.crisis.shiftsLeft = 0; }
+    else if (++s.crisis.progress >= def.need) { say(s, `Кризис «${def.name}» преодолён!`, 'good'); trustGain(s, 8); s.city.mayor = clamp(s.city.mayor + 15, 0, 100); note(s, 'crisisWon', def.name); emit(s, {type: 'crisisWon'}); s.crisis = null; s.city.nextCrisis = s.shift + 3 + Math.floor(rnd(s) * 3); }
+    if (s.crisis) s.crisis.shiftsLeft++; // общий счётчик ниже уменьшит его обратно
+  }
   if (s.crisis && --s.crisis.shiftsLeft <= 0) {
     const def = CRISES[s.crisis.kind]; out.crisis = {name: def.name, failed: true};
     trustLoss(s, 10); s.city.mayor = clamp(s.city.mayor - 15, 0, 100); if (s.crisis.kind === 'gang') crimeShift(s, s.crisis.district, 20);
-    note(s, 'crisisLost', def.name); say(s, `Кризис «${def.name}» не преодолён. Город разочарован.`, 'bad'); s.crisis = null;
+    note(s, 'crisisLost', def.name); say(s, `Кризис «${def.name}» не преодолён. Город разочарован.`, 'bad'); s.crisis = null; s.city.nextCrisis = s.shift + 3 + Math.floor(rnd(s) * 3);
   }
   if (s.city.cut > 0) s.city.cut--;
   if (s.city.mayor < 30 && !s.city.cut) { s.city.cut = 2; note(s, 'cut', ''); say(s, 'Мэр урезает финансирование полиции на две смены.', 'bad'); }
@@ -993,7 +1013,7 @@ const cityGrowth = s => Math.min(1.5, 1 + 0.03 * (s.shift - 1));
 function callInterval(s) {
   const pressure = 1.25 - cityCrime(s) / 200; // спокойный город — реже вызовы
   const base = Math.max(7, 12.5 - s.rank * 0.8) / (1 + Math.max(0, s.units.length - 3) * 0.13) * (isNight(s.t) ? 0.85 : 1) * pressure;
-  return base / cityGrowth(s) / diff(s).calls / s.settings.crime / (s.wave ? 1.3 : 1) * MIN * (0.55 + rnd(s) * 0.9);
+  return base / cityGrowth(s) / diff(s).calls / s.settings.crime / (1 + (escalation(s) - 1) * 0.6) / (s.wave ? 1.3 : 1) * MIN * (0.55 + rnd(s) * 0.9);
 }
 function tickWave(s) {
   if (s.wave && s.t >= s.wave.until) { say(s, `Волна в районе ${DISTRICTS[s.wave.district].name} пошла на спад.`, 'info'); s.wave = null; }
@@ -1014,7 +1034,7 @@ export function tick(s, dt) {
       if (s.tutorial < 2) s.tutorial++;
       s.nextCallAt = s.t + callInterval(s) * (s.tutorial < 2 ? 0.5 : 1);
     }
-    const growth = (2 * (1 + 0.12 * Math.max(0, s.units.length - 3)) + 0.15 * s.rank) * s.settings.crime * step / 3600; // большой город сложнее удержать
+    const growth = (2 * (1 + 0.12 * Math.max(0, s.units.length - 3)) + 0.15 * s.rank) * s.settings.crime * (1 + (escalation(s) - 1) * 0.35) * step / 3600; // большой город сложнее удержать
     s.districts.forEach((d, k) => { if (d.crime >= 0) d.crime = Math.min(100, d.crime + growth * (s.informants[k] ? 0.7 : 1)); });
     for (const u of s.units) tickUnit(s, u, step);
     for (const sus of [...s.suspects]) tickSuspect(s, sus, step);
@@ -1063,7 +1083,7 @@ function endShift(s) {
   const grade = shiftGrade(s.stats), ch = s.challenge && CHALLENGES[s.challenge.id], crime = cityCrime(s);
   const grant = Math.round((200 + s.trust * 5) * (ch?.grant ?? 1) * grantFactor(s)), salaries = Math.round(allOfficers(s).filter(o => !o.player).reduce((n, o) => n + officerSalary(o), 0)), upkeep = s.units.length * 60 + (s.units.some(isHeli) ? 400 : 0);
   const agents = districtsUsed(s.informants) * 150 + districtsUsed(s.undercover) * 250;
-  const mood = Math.round((42 - crime) / 9), point = ['A', 'B'].includes(grade.grade) && s.stats.own >= 3 ? 1 : 0, manage = canManage(s);
+  const rawMood = Math.round((42 - crime) / 9) - (s.trust > 80 ? 1 : 0) - (s.trust > 92 ? 1 : 0), mood = s.trust > 70 ? Math.min(2, rawMood) : rawMood, point = ['A', 'B'].includes(grade.grade) && s.stats.own >= 3 ? 1 : 0, manage = canManage(s);
   s.summary = {shift: s.shift, stats: {...s.stats, events: [...s.stats.events]}, grade, grant, salaries, upkeep, agents: manage ? agents : 0, bonus: grade.bonus, before: s.money, crime, mood, point,
     response: s.stats.responseN ? s.stats.responseSum / s.stats.responseN : 0, weather: s.weather};
   if (manage) s.money = Math.max(0, s.money + grant + grade.bonus - salaries - upkeep - agents);
