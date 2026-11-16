@@ -7,6 +7,7 @@ import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
 import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {FXAAPass} from 'three/addons/postprocessing/FXAAPass.js';
+import {ShaderPass} from 'three/addons/postprocessing/ShaderPass.js';
 import {BOUNDS, METRES, STATION, DISTRICTS, roads, buildings, areas, nearestNode} from './world.js';
 import {VEHICLES} from './content.js';
 import {callType} from './sim.js';
@@ -71,6 +72,35 @@ function flatPolygon(builder, pts, y, col, extra) { // pts в метрах: [x0,
 const toMetres = pts => { const out = new Float32Array(pts.length); for (let i = 0; i < pts.length; i++) out[i] = pts[i] * M; return out; };
 
 // ---------- окна: встраиваем в стандартный материал ----------
+// фактура поверхностей: шум по мировым координатам ломает однотонные плоскости; вода рябит
+const NOISE_GLSL = `
+  float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash2(i), hash2(i + vec2(1, 0)), u.x), mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), u.x), u.y); }`;
+function textured(mat, kind, uniforms) {
+  mat.onBeforeCompile = shader => {
+    shader.uniforms.uTime = uniforms.uTime; shader.uniforms.uNight = uniforms.uNight; shader.uniforms.uWet = uniforms.uWet;
+    shader.vertexShader = 'varying vec2 vGW;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vGW = (modelMatrix * vec4(transformed, 1.0)).xz;');
+    const body = kind === 'water' ? `
+        float w1 = vnoise(vGW * 0.045 + vec2(uTime * 0.25, uTime * 0.11)), w2 = vnoise(vGW * 0.11 - vec2(uTime * 0.18, -uTime * 0.07));
+        float wave = w1 * 0.6 + w2 * 0.4;
+        diffuseColor.rgb *= 0.86 + 0.26 * wave;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.75, 0.86, 0.95), smoothstep(0.78, 0.95, wave) * 0.35 * (1.0 - uNight));`
+      : kind === 'road' ? `
+        float n = vnoise(vGW * 0.35) * 0.5 + vnoise(vGW * 0.04) * 0.5;
+        diffuseColor.rgb *= 0.9 + 0.16 * n;
+        float pud = smoothstep(0.6, 0.72, vnoise(vGW * 0.07 + 3.1));
+        diffuseColor.rgb *= 1.0 - uWet * (0.2 + 0.25 * pud);`
+      : `
+        float n = vnoise(vGW * 0.11) * 0.45 + vnoise(vGW * 0.023) * 0.35 + vnoise(vGW * 0.9) * 0.2;
+        diffuseColor.rgb *= 0.84 + 0.3 * n;`;
+    let frag = shader.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>' + body);
+    if (kind === 'road') frag = frag.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n roughnessFactor = mix(roughnessFactor, 0.12, uWet * (0.35 + 0.65 * pud));');
+    shader.fragmentShader = 'uniform float uTime;\nuniform float uNight;\nuniform float uWet;\nvarying vec2 vGW;\n' + NOISE_GLSL + '\n' + frag;
+  };
+  mat.customProgramCacheKey = () => 'tex-' + kind;
+  return mat;
+}
 function windowMaterial(uniforms) {
   const mat = new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.86, metalness: 0.02, flatShading: true});
   mat.onBeforeCompile = shader => {
@@ -87,6 +117,12 @@ function windowMaterial(uniforms) {
           winLit = winMask * step(h, 0.3 + 0.35 * vMeta.y);
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.13, 0.17, 0.22), winMask * 0.72);
         }
+        if (vMeta.x > 0.5) {
+          diffuseColor.rgb *= mix(0.55, 1.0, smoothstep(0.0, 4.5, vY)); // контактная тень у земли
+          float floorLine = step(3.8, vMeta.z) * step(0.93, fract((vY - 0.25) / 3.1)) * step(1.0, vY);
+          diffuseColor.rgb *= 1.0 - 0.1 * floorLine; // междуэтажные карнизы
+          diffuseColor.rgb *= 1.0 + 0.12 * step(vMeta.z - 0.45, vY); // парапет
+        }
         if (uHeatOn > 0.001) {
           float heat = uHeat[int(vDist + 0.5)];
           if (heat >= 0.0) {
@@ -95,14 +131,14 @@ function windowMaterial(uniforms) {
           }
         }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance += vec3(1.0, 0.7, 0.38) * winLit * uNight * 2.4;`);
+        totalEmissiveRadiance += vec3(1.0, 0.7, 0.38) * winLit * uNight * 1.35;`);
   };
   return mat;
 }
 
 const WALL = {home: ['#e8dfcf', '#dcd2c0', '#f1e9da', '#d2cabb'], civic: ['#f2efe7', '#e9e5dc', '#f6f3ec', '#e3dfd6'], shop: ['#eadfcb', '#e2d5bf', '#f0e6d4', '#ddd0bb'], ind: ['#b9bcbc', '#aaaeae', '#c5c7c5', '#a0a4a5']};
-const ROOF = {home: ['#b5573c', '#6d7680', '#c9764b', '#8a6a5a'], civic: ['#5d7397', '#647b9e', '#566c8f', '#6b82a6'], shop: ['#7a6e86', '#857894', '#6f6380', '#8f82a0'], ind: ['#7c8487', '#858d90', '#737b7e', '#8b9295']};
-const GROUND = {land: '#93a383', residential: '#b9bcb0', industrial: '#b3afa8', commercial: '#bdb6ad', grass: '#86ad6a', scrub: '#7ea263', park: '#77b062', forest: '#558f4d', pitch: '#79bd67', beach: '#e5d6a4', water: '#3f80b2'};
+const ROOF = {home: ['#b5573c', '#6d7680', '#c9764b', '#8a6a5a'], civic: ['#6a7a90', '#71819a', '#63738a', '#7788a0'], shop: ['#8a7f76', '#7d746d', '#958a80', '#6f6862'], ind: ['#7c8487', '#858d90', '#737b7e', '#8b9295']};
+const GROUND = {land: '#93a383', residential: '#aeb5a3', industrial: '#b3afa8', commercial: '#bdb6ad', grass: '#86ad6a', scrub: '#7ea263', park: '#77b062', forest: '#558f4d', pitch: '#79bd67', beach: '#e5d6a4', water: '#3f80b2'};
 const ROAD_COLOR = ['#7b7f82', '#696e72', '#62676b', '#585d62', '#53585d', '#4d5257'];
 
 export function createRenderer(canvas, minimap) {
@@ -112,7 +148,7 @@ export function createRenderer(canvas, minimap) {
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(38, 1, 2, 60000);
   scene.fog = new THREE.Fog(0xa9c3d6, 3000, 20000);
-  const uniforms = {uNight: {value: 0}, uHeat: {value: new Array(16).fill(-1)}, uHeatOn: {value: 0}};
+  const uniforms = {uTime: {value: 0}, uWet: {value: 0}, uNight: {value: 0}, uHeat: {value: new Array(16).fill(-1)}, uHeatOn: {value: 0}};
   // качество: auto выбирает по видеокарте; поверх — динамическое разрешение
   const PRESETS = {
     high: {msaa: 4, fxaa: false, shadow: 4096, shadowEvery: 1, bloom: true, treeShadow: true, maxScale: 1.5},
@@ -134,7 +170,7 @@ export function createRenderer(canvas, minimap) {
 
   // ---------- статичный город ----------
   const city = new THREE.Group(); scene.add(city);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(BOUNDS.maxX * M * 3, BOUNDS.maxY * M * 3).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({color: GROUND.land, roughness: 1, depthWrite: false}));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(BOUNDS.maxX * M * 3, BOUNDS.maxY * M * 3).rotateX(-Math.PI / 2), textured(new THREE.MeshStandardMaterial({color: GROUND.land, roughness: 1, depthWrite: false}), 'ground', uniforms));
   ground.position.set(BOUNDS.maxX * M / 2, -0.5, BOUNDS.maxY * M / 2); ground.receiveShadow = true; ground.renderOrder = -20; city.add(ground);
 
   const AREA_ORDER = ['residential', 'industrial', 'commercial', 'grass', 'scrub', 'beach', 'park', 'forest', 'pitch', 'water'];
@@ -142,12 +178,12 @@ export function createRenderer(canvas, minimap) {
   for (const a of areas) flatPolygon(areaBuilders[a.style], toMetres(a.pts), 0, lin(GROUND[a.style]));
   AREA_ORDER.forEach((k, i) => {
     const b = areaBuilders[k]; if (!b.count) return;
-    const mat = new THREE.MeshStandardMaterial({vertexColors: true, roughness: k === 'water' ? 0.18 : 1, metalness: k === 'water' ? 0.15 : 0, depthWrite: false});
+    const mat = textured(new THREE.MeshStandardMaterial({vertexColors: true, roughness: k === 'water' ? 0.18 : 1, metalness: k === 'water' ? 0.15 : 0, depthWrite: false}), k === 'water' ? 'water' : 'ground', uniforms);
     const mesh = new THREE.Mesh(b.geometry(), mat); mesh.receiveShadow = true; mesh.renderOrder = -19 + i * 0.1; city.add(mesh);
   });
 
   // дороги: лента + скруглённые стыки, слоями по классу
-  const roadLayers = [[-1], [0], [1, 2], [3], [4, 5]], roadBuilders = roadLayers.map(() => new Builder()), marks = new Builder();
+  const roadLayers = [[-1], [0], [1, 2], [3], [4, 5]], roadBuilders = roadLayers.map(() => new Builder()), marks = new Builder(), walk = new Builder(), walkCol = lin('#c9c6be');
   const lampSpots = [];
   for (const r of roads) {
     const layer = roadLayers.findIndex(l => l.includes(r.rank)), b = roadBuilders[layer];
@@ -155,9 +191,12 @@ export function createRenderer(canvas, minimap) {
     let along = 0, nextLamp = 20;
     for (let i = 0; i < pts.length; i += 2) {
       const x = pts[i], z = pts[i + 1];
+      const sw = half + 2.3;
+      if (r.rank >= 2) for (let k = 0; k < 6; k++) { const a0 = k / 6 * Math.PI * 2, a1 = (k + 1) / 6 * Math.PI * 2; walk.vert(x, 0, z, 0, 1, 0, walkCol); walk.vert(x + Math.cos(a1) * sw, 0, z + Math.sin(a1) * sw, 0, 1, 0, walkCol); walk.vert(x + Math.cos(a0) * sw, 0, z + Math.sin(a0) * sw, 0, 1, 0, walkCol); }
       for (let k = 0; k < 6; k++) { const a0 = k / 6 * Math.PI * 2, a1 = (k + 1) / 6 * Math.PI * 2; b.vert(x, 0, z, 0, 1, 0, col); b.vert(x + Math.cos(a1) * half, 0, z + Math.sin(a1) * half, 0, 1, 0, col); b.vert(x + Math.cos(a0) * half, 0, z + Math.sin(a0) * half, 0, 1, 0, col); }
       if (i + 3 >= pts.length) continue;
       const x2 = pts[i + 2], z2 = pts[i + 3], dx = x2 - x, dz = z2 - z, len = Math.hypot(dx, dz) || 1, nx = -dz / len * half, nz = dx / len * half;
+      if (r.rank >= 2) { const sx = nx / half * sw, sz = nz / half * sw; walk.vert(x + sx, 0, z + sz, 0, 1, 0, walkCol); walk.vert(x2 + sx, 0, z2 + sz, 0, 1, 0, walkCol); walk.vert(x2 - sx, 0, z2 - sz, 0, 1, 0, walkCol); walk.vert(x + sx, 0, z + sz, 0, 1, 0, walkCol); walk.vert(x2 - sx, 0, z2 - sz, 0, 1, 0, walkCol); walk.vert(x - sx, 0, z - sz, 0, 1, 0, walkCol); }
       b.vert(x + nx, 0, z + nz, 0, 1, 0, col); b.vert(x2 + nx, 0, z2 + nz, 0, 1, 0, col); b.vert(x2 - nx, 0, z2 - nz, 0, 1, 0, col);
       b.vert(x + nx, 0, z + nz, 0, 1, 0, col); b.vert(x2 - nx, 0, z2 - nz, 0, 1, 0, col); b.vert(x - nx, 0, z - nz, 0, 1, 0, col);
       if (r.rank >= 3) { // пунктир разметки
@@ -172,11 +211,13 @@ export function createRenderer(canvas, minimap) {
       along += len;
     }
   }
-  roadBuilders.forEach((b, i) => { if (!b.count) return; const mesh = new THREE.Mesh(b.geometry(), new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.92, depthWrite: false})); mesh.receiveShadow = true; mesh.renderOrder = -15 + i; city.add(mesh); });
+  if (walk.count) { const mesh = new THREE.Mesh(walk.geometry(), textured(new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.95, depthWrite: false}), 'road', uniforms)); mesh.receiveShadow = true; mesh.renderOrder = -15.5; city.add(mesh); }
+  const roadMat = textured(new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.92, depthWrite: false}), 'road', uniforms);
+  roadBuilders.forEach((b, i) => { if (!b.count) return; const mesh = new THREE.Mesh(b.geometry(), roadMat); mesh.receiveShadow = true; mesh.renderOrder = -15 + i; city.add(mesh); });
   { const mesh = new THREE.Mesh(marks.geometry(), new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.7, depthWrite: false})); mesh.renderOrder = -9; mesh.receiveShadow = true; city.add(mesh); }
 
   // здания по участкам 700 м для отсечения
-  const TILE = 700, tiles = new Map(), bmat = windowMaterial(uniforms);
+  const TILE = 700, tiles = new Map(), bmat = windowMaterial(uniforms), roofUnits = [];
   for (const bd of buildings) {
     const pts = toMetres(bd.pts), n = pts.length / 2, key = Math.floor(pts[0] / TILE) + ':' + Math.floor(pts[1] / TILE);
     let b = tiles.get(key); if (!b) { b = new Builder({aMeta: 3, aU: 1, aDist: 1}); tiles.set(key, b); }
@@ -195,7 +236,15 @@ export function createRenderer(canvas, minimap) {
       v(x1, 0, z1, u); v(x2, h, z2, u + len); v(x1, h, z1, u);
       u += len;
     }
-    if (!gableRoof(b, pts, h, roof, walls, seed)) flatPolygon(b, pts, h, roof, {aMeta: [0, seed, h], aU: 0});
+    if (!gableRoof(b, pts, h, roof, walls, seed)) {
+      flatPolygon(b, pts, h, roof, {aMeta: [0, seed, h], aU: 0});
+      const area = Math.abs(a2) / 2;
+      if (area > 160 && h > 5) {
+        let cx = 0, cz = 0; for (let k = 0; k < n; k++) { cx += pts[k * 2]; cz += pts[k * 2 + 1]; } cx /= n; cz /= n;
+        const r = Math.sqrt(area) * 0.22, count = 1 + (area > 600 ? 2 : area > 300 ? 1 : 0);
+        for (let k = 0; k < count; k++) { const a = (seed * 13 + k * 2.1) % 6.28, d = r * (0.3 + ((k * 0.37 + seed) % 0.7)); roofUnits.push(cx + Math.cos(a) * d, h, cz + Math.sin(a) * d, 1.4 + (k % 2) * 1.2); }
+      }
+    }
   }
   const buildingMeshes = [];
   // двускатная крыша: 4 угла, небольшая площадь, невысокий дом
@@ -220,13 +269,40 @@ export function createRenderer(canvas, minimap) {
     return true;
   }
   for (const b of tiles.values()) { const mesh = new THREE.Mesh(b.geometry(), bmat); mesh.castShadow = mesh.receiveShadow = true; city.add(mesh); buildingMeshes.push(mesh); }
+  if (roofUnits.length) { // крышные установки — один инстанс-меш на весь город
+    const units = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({color: '#a7adb0', roughness: 0.6, metalness: 0.3}), roofUnits.length / 4), m4 = new THREE.Matrix4();
+    for (let i = 0; i < roofUnits.length / 4; i++) { const [x, y, z, s] = roofUnits.slice(i * 4, i * 4 + 4); m4.makeScale(s * 1.6, s * 0.8, s); m4.setPosition(x, y, z); units.setMatrixAt(i, m4); }
+    units.castShadow = true; units.receiveShadow = true; city.add(units);
+  }
 
-  // деревья в парках и лесах
+  // деревья в парках и лесах + во дворах
   const treeSpots = [];
+  {
+    const CELL = 4, GW = Math.ceil(BOUNDS.maxX * M / CELL) + 1, GH = Math.ceil(BOUNDS.maxY * M / CELL) + 1, busy = new Uint8Array(GW * GH);
+    const mark = (x, z, r) => { const c0 = Math.max(0, Math.floor((x - r) / CELL)), c1 = Math.min(GW - 1, Math.floor((x + r) / CELL)), r0 = Math.max(0, Math.floor((z - r) / CELL)), r1 = Math.min(GH - 1, Math.floor((z + r) / CELL)); for (let rz = r0; rz <= r1; rz++) busy.fill(1, rz * GW + c0, rz * GW + c1 + 1); };
+    for (const r of roads) { const p = toMetres(r.pts), half = (r.rank < 0 ? 1.4 : r.w * 0.55) + (r.rank >= 2 ? 4.5 : 2.5); for (let i = 0; i + 3 < p.length; i += 2) { const dx = p[i + 2] - p[i], dz = p[i + 3] - p[i + 1], len = Math.hypot(dx, dz), k = Math.ceil(len / 2.5); for (let s = 0; s <= k; s++) mark(p[i] + dx * s / k, p[i + 1] + dz * s / k, half); } }
+    for (const bd of buildings) { const p = toMetres(bd.pts); let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity; for (let i = 0; i < p.length; i += 2) { x0 = Math.min(x0, p[i]); x1 = Math.max(x1, p[i]); z0 = Math.min(z0, p[i + 1]); z1 = Math.max(z1, p[i + 1]); } const pad = 3.5; for (let x = x0 - pad; x <= x1 + pad; x += CELL) for (let z = z0 - pad; z <= z1 + pad; z += CELL) mark(x, z, 0.1); }
+    const yard = new Set(['residential', 'grass', 'commercial']), frac = v => v - Math.floor(v);
+    for (const a of areas) {
+      if (!yard.has(a.style)) continue;
+      const step = a.style === 'commercial' ? 30 : 19, p = toMetres(a.pts), n = p.length;
+      const x0 = Math.max(a.box[0] * M, 0), z0 = Math.max(a.box[1] * M, 0), x1 = Math.min(a.box[2] * M, BOUNDS.maxX * M), z1 = Math.min(a.box[3] * M, BOUNDS.maxY * M);
+      for (let iz = Math.ceil(z0 / step); iz * step <= z1; iz++) for (let ix = Math.ceil(x0 / step); ix * step <= x1; ix++) {
+        if (treeSpots.length > 3 * 22000) break;
+        const h = frac(Math.sin(ix * 91.3 + iz * 47.9) * 24634.6345); if (h < 0.35) continue;
+        const px = (ix + (h - 0.5) * 0.9) * step, pz = (iz + (frac(h * 5.71) - 0.5) * 0.9) * step;
+        const c = Math.floor(px / CELL), rr = Math.floor(pz / CELL); if (c < 1 || rr < 1 || c >= GW - 1 || rr >= GH - 1) continue;
+        if (busy[rr * GW + c] || busy[rr * GW + c - 1] || busy[rr * GW + c + 1] || busy[(rr - 1) * GW + c] || busy[(rr + 1) * GW + c]) continue;
+        let inside = false;
+        for (let i = 0, j = n - 2; i < n; j = i, i += 2) if ((p[i + 1] > pz) !== (p[j + 1] > pz) && px < (p[j] - p[i]) * (pz - p[i + 1]) / (p[j + 1] - p[i + 1]) + p[i]) inside = !inside;
+        if (inside) treeSpots.push(px, pz, 0.6 + h * 0.5);
+      }
+    }
+  }
   {
     const frac = v => v - Math.floor(v);
     for (const a of areas) {
-      if ((a.style !== 'park' && a.style !== 'forest') || treeSpots.length > 3 * 32000) continue;
+      if ((a.style !== 'park' && a.style !== 'forest') || treeSpots.length > 3 * 52000) continue;
       const step = a.style === 'forest' ? 11 : 17, p = toMetres(a.pts), n = p.length;
       const x0 = Math.max(a.box[0] * M, 0), z0 = Math.max(a.box[1] * M, 0), x1 = Math.min(a.box[2] * M, BOUNDS.maxX * M), z1 = Math.min(a.box[3] * M, BOUNDS.maxY * M);
       for (let iz = Math.ceil(z0 / step); iz * step <= z1; iz++) for (let ix = Math.ceil(x0 / step); ix * step <= x1; ix++) {
@@ -303,17 +379,26 @@ export function createRenderer(canvas, minimap) {
   const footways = roads.filter(r => r.rank < 0 && r.pts.length >= 4);
   const WALKERS = 900, walkers = [];
   for (let i = 0; i < WALKERS && footways.length; i++) { const r = footways[(i * 7919) % footways.length]; walkers.push({r, seg: (i * 3) % (r.pts.length / 2 - 1), t: (i % 10) / 10, dir: i % 2 ? 1 : -1, v: 1.1 + (i % 7) * 0.08}); }
-  const people = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.28, 1.15, 3, 6).translate(0, 0.86, 0), new THREE.MeshStandardMaterial({roughness: 0.8}), walkers.length);
+  const people = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.27, 0.85, 3, 6).translate(0, 0.72, 0), new THREE.MeshStandardMaterial({roughness: 0.8}), walkers.length);
+  const heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.21, 8, 6).translate(0, 1.62, 0), new THREE.MeshStandardMaterial({roughness: 0.7}), walkers.length);
+  { const c = new THREE.Color(), skin = ['#f1c9a5', '#e0ac85', '#c68863', '#8d5a3b', '#f5d7bd']; for (let i = 0; i < walkers.length; i++) heads.setColorAt(i, c.set(skin[(i * 7) % skin.length])); }
+  heads.castShadow = false; heads.frustumCulled = false; scene.add(heads);
   { const c = new THREE.Color(); const palette = ['#c0392b', '#2c3e50', '#27ae60', '#8e44ad', '#f39c12', '#16a085', '#d35400', '#34495e', '#e8e3d9']; for (let i = 0; i < walkers.length; i++) people.setColorAt(i, c.set(palette[i % palette.length])); }
   people.castShadow = true; people.frustumCulled = false; scene.add(people);
 
   // люди на месте: офицеры у машин и подозреваемые
-  const MAX_FIG = 160, figGeo = new THREE.CapsuleGeometry(0.3, 1.1, 3, 6).translate(0, 0.85, 0);
+  const MAX_FIG = 160, figGeo = new THREE.CapsuleGeometry(0.3, 0.9, 3, 6).translate(0, 0.75, 0);
+  const tint = (g, hex) => { const c = lin(hex), n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b], i * 3); g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
+  const copHeadGeo = mergeGeometries([tint(new THREE.SphereGeometry(0.24, 10, 8).translate(0, 1.72, 0), '#e8b996'), tint(new THREE.CylinderGeometry(0.25, 0.27, 0.14, 12).translate(0, 1.9, 0), '#101c33'), tint(new THREE.CylinderGeometry(0.33, 0.33, 0.03, 12).translate(0.08, 1.84, 0), '#0b1426')]);
+  const copHeads = new THREE.InstancedMesh(copHeadGeo, new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.6}), MAX_FIG);
+  const perpHeads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.24, 10, 8).translate(0, 1.72, 0), new THREE.MeshStandardMaterial({color: '#d9a07c', roughness: 0.7}), 60);
+  const MAX_CONES = 320, cones = new THREE.InstancedMesh(mergeGeometries([tint(new THREE.ConeGeometry(0.3, 0.8, 10).translate(0, 0.4, 0), '#ff6a1a'), tint(new THREE.CylinderGeometry(0.17, 0.21, 0.12, 10).translate(0, 0.48, 0), '#f4f4f4'), tint(new THREE.BoxGeometry(0.7, 0.05, 0.7).translate(0, 0.025, 0), '#1b1b1b')]), new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.5, emissive: '#3a1400'}), MAX_CONES);
+  for (const m of [copHeads, perpHeads, cones]) { m.castShadow = true; m.frustumCulled = false; m.count = 0; scene.add(m); }
   const officers = new THREE.InstancedMesh(figGeo, new THREE.MeshStandardMaterial({color: '#2d63c8', roughness: 0.55, emissive: '#10285a'}), MAX_FIG);
   const perps = new THREE.InstancedMesh(figGeo, new THREE.MeshStandardMaterial({color: '#e76f51', roughness: 0.7, emissive: '#3a1208'}), 60);
   for (const m of [officers, perps]) { m.castShadow = true; m.frustumCulled = false; m.count = 0; scene.add(m); }
   const figM = new THREE.Matrix4(), figQ = new THREE.Quaternion(), figS = new THREE.Vector3(), figP = new THREE.Vector3(), figUp = new THREE.Vector3(0, 1, 0);
-  function figure(mesh, n, x, z, yaw, s, sy = 1) { figQ.setFromAxisAngle(figUp, yaw); figS.set(s, s * sy, s); figP.set(x, 0, z); figM.compose(figP, figQ, figS); mesh.setMatrixAt(n, figM); }
+  function figure(mesh, n, x, z, yaw, s, sy = 1, head = null) { figQ.setFromAxisAngle(figUp, yaw); figS.set(s, s * sy, s); figP.set(x, 0, z); figM.compose(figP, figQ, figS); mesh.setMatrixAt(n, figM); if (head) head.setMatrixAt(n, figM); }
   function drawFigures(state, boost) {
     let no = 0, np = 0;
     if (boost <= 4) {
@@ -326,16 +411,29 @@ export function createRenderer(canvas, minimap) {
         const n = u.crew?.length ?? 2, near = Math.min(d * 0.55, 5 * s);
         for (let i = 0; i < n && no < MAX_FIG; i++) {
           const side = (i - (n - 1) / 2) * 1.8 * s, sway = Math.sin(time * 2 + u.id + i) * 0.12 * s;
-          figure(officers, no++, ux + fx * near - fz * side + sway, uz + fz * near + fx * side, Math.atan2(fx, fz), s);
+          figure(officers, no++, ux + fx * near - fz * side + sway, uz + fz * near + fx * side, Math.atan2(fx, fz), s, 1, copHeads);
         }
       }
       for (const c of state.calls) {
         if (!['choice', 'standoff', 'active'].includes(c.state) || c.suspectId || !callType(c).suspect || c.reaction === 'flee' || np >= 60) continue;
         const pace = c.state === 'standoff' ? Math.sin(time * (1 + (100 - c.standoff.stability) / 40) + c.id) * 2.2 * s : 0, kneel = c.reaction === 'surrender' && c.state === 'active';
-        figure(perps, np++, c.x * M + 7 * s + pace, c.y * M + 3 * s, time * (c.state === 'standoff' ? 0.6 : 0) + c.id, s, kneel ? 0.55 : 1);
+        figure(perps, np++, c.x * M + 7 * s + pace, c.y * M + 3 * s, time * (c.state === 'standoff' ? 0.6 : 0) + c.id, s, kneel ? 0.55 : 1, perpHeads);
       }
     }
-    officers.count = no; perps.count = np; officers.instanceMatrix.needsUpdate = true; perps.instanceMatrix.needsUpdate = true;
+    // оцепление: конусы вокруг места, где работает полиция
+    let nc = 0;
+    if (boost <= 4) {
+      const s = Math.min(boost, 2.2) * 1.25;
+      for (const c of state.calls) {
+        if (!['choice', 'standoff', 'active'].includes(c.state) || c.suspectId || nc + 10 > MAX_CONES) continue;
+        if (!state.units.some(u => u.callId === c.id && u.status === 'onscene')) continue;
+        const cx = c.x * M + 3.5 * s, cz = c.y * M + 1.5 * s, r = (c.state === 'standoff' ? 15 : 11) * s, k = c.state === 'standoff' ? 12 : 8;
+        for (let i = 0; i < k; i++) { const a = i / k * Math.PI * 2 + c.id; figQ.setFromAxisAngle(figUp, a); figS.setScalar(s); figP.set(cx + Math.cos(a) * r, 0, cz + Math.sin(a) * r); figM.compose(figP, figQ, figS); cones.setMatrixAt(nc++, figM); }
+      }
+    }
+    cones.count = nc; cones.instanceMatrix.needsUpdate = true;
+    officers.count = copHeads.count = no; perps.count = perpHeads.count = np;
+    for (const m of [officers, perps, copHeads, perpHeads]) m.instanceMatrix.needsUpdate = true;
   }
 
   // полицейские машины и вертолёты — по объекту на экипаж
@@ -441,7 +539,21 @@ export function createRenderer(canvas, minimap) {
   // ---------- пост-обработка ----------
   const target = new THREE.WebGLRenderTarget(1, 1, {type: THREE.HalfFloatType, samples: 4});
   const composer = new EffectComposer(renderer, target), bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.6, 0.55, 0.82), fxaa = new FXAAPass();
-  composer.addPass(new RenderPass(scene, camera)); composer.addPass(bloom); composer.addPass(new OutputPass()); composer.addPass(fxaa);
+  const grade = new ShaderPass({
+    uniforms: {tDiffuse: {value: null}, uVig: {value: 0.32}, uSat: {value: 1.05}, uWarm: {value: 0}},
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float uVig; uniform float uSat; uniform float uWarm; varying vec2 vUv;
+      void main() {
+        vec4 c = texture2D(tDiffuse, vUv);
+        float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+        c.rgb = mix(vec3(l), c.rgb, uSat);
+        c.rgb = (c.rgb - 0.5) * 1.05 + 0.5;
+        c.rgb *= mix(vec3(1.0), vec3(1.06, 1.0, 0.92), uWarm);
+        vec2 d = vUv - 0.5; c.rgb *= 1.0 - uVig * dot(d, d) * 1.7;
+        gl_FragColor = c;
+      }`,
+  });
+  composer.addPass(new RenderPass(scene, camera)); composer.addPass(bloom); composer.addPass(new OutputPass()); composer.addPass(grade); composer.addPass(fxaa);
 
   // ---------- камера ----------
   const cam = {tx: STATION.x * M, tz: STATION.y * M, dist: 1600, goal: 1600, yaw: 0, tilt: 0, follow: null, anchor: null};
@@ -533,7 +645,8 @@ export function createRenderer(canvas, minimap) {
     const preset = PRESETS[effective()]; sun.castShadow = preset.shadow > 0 && cam.dist < 6000;
     if (preset.shadowEvery && frameNo++ % preset.shadowEvery === 0) renderer.shadowMap.needsUpdate = true;
     uniforms.uNight.value = night;
-    if (Math.abs(lastNight - night) > 0.01) { lastNight = night; poolMat.opacity = night * 0.2; lampHeadMat.color.setRGB(1 + night * 3, 0.85 + night * 2.4, 0.6 + night * 1.6); beamMat.opacity = night * 0.5; }
+    if (Math.abs(lastNight - night) > 0.01) { lastNight = night; poolMat.opacity = night * 0.2; lampHeadMat.color.setRGB(1 + night * 3, 0.85 + night * 2.4, 0.6 + night * 1.6); beamMat.opacity = night * 0.32; }
+    grade.uniforms.uVig.value = 0.3 + night * 0.3; grade.uniforms.uWarm.value = dusk * (1 - night); grade.uniforms.uSat.value = 1.05 - night * 0.08 - wet * 0.12; uniforms.uTime.value = time; uniforms.uWet.value += ((weather === 'rain' ? 1 : 0) - uniforms.uWet.value) * Math.min(1, dt * 0.5);
     bloom.strength = 0.25 + night * 0.65; renderer.toneMappingExposure = 1.0 + night * 0.25;
     station.userData.ring.material.opacity = 0.55 + Math.sin(time * 2.5) * 0.3;
 
@@ -550,7 +663,7 @@ export function createRenderer(canvas, minimap) {
       traffic.instanceMatrix.needsUpdate = true; if (traffic.instanceColor) traffic.instanceColor.needsUpdate = true; trafficBeams.instanceMatrix.needsUpdate = true;
     }
     // пешеходы — только вблизи
-    people.visible = cam.dist < 1800;
+    people.visible = heads.visible = cam.dist < 1800;
     if (people.visible) {
       for (let i = 0; i < walkers.length; i++) {
         const w = walkers[i], p = w.r.pts, segs = p.length / 2 - 1;
@@ -559,9 +672,9 @@ export function createRenderer(canvas, minimap) {
         if (w.t > 1) { w.t = 0; w.seg++; if (w.seg >= segs) { w.seg = segs - 1; w.t = 1; w.dir = -1; } }
         if (w.t < 0) { w.t = 1; w.seg--; if (w.seg < 0) { w.seg = 0; w.t = 0; w.dir = 1; } }
         const side = (i % 2 ? 1 : -1) * 0.7, nx = -(bz - az) / len * side, nz = (bx - ax) / len * side;
-        tmpM.makeTranslation(ax + (bx - ax) * w.t + nx, 0, az + (bz - az) * w.t + nz); people.setMatrixAt(i, tmpM);
+        const bob = Math.abs(Math.sin(time * 7 * w.v + i)) * 0.06; tmpM.makeRotationY(Math.atan2((bx - ax) * w.dir, (bz - az) * w.dir)); tmpM.setPosition(ax + (bx - ax) * w.t + nx, bob, az + (bz - az) * w.t + nz); people.setMatrixAt(i, tmpM); heads.setMatrixAt(i, tmpM);
       }
-      people.instanceMatrix.needsUpdate = true;
+      people.instanceMatrix.needsUpdate = true; heads.instanceMatrix.needsUpdate = true;
     }
 
     hits = [];
@@ -582,7 +695,7 @@ export function createRenderer(canvas, minimap) {
         const urgent = ['enroute', 'pursuit', 'onscene'].includes(u.status);
         o.userData.red.color.setRGB(urgent && flash ? 6 : 0.5, 0.1, 0.1); o.userData.blue.color.setRGB(0.1, 0.25, urgent && !flash ? 7 : 0.6);
         const glow = o.userData.glow; glow.position.set(ux, 0.25, uz); glow.material.opacity = urgent ? 0.5 + night * 0.4 : 0; glow.material.color.setRGB(flash ? 1.6 : 0.2, 0.15, flash ? 0.2 : 1.8);
-        o.userData.beam.material.opacity = night * (parked ? 0.2 : 0.55);
+        o.userData.beam.material.opacity = night * (parked ? 0.12 : 0.34);
       }
       const s = toScreen(ux, heli ? 74 : 4, uz);
       const tag = u.player ? 'ВЫ · ' + u.callsign.replace('Экипаж ', '') : u.callsign.replace('Экипаж ', '');
@@ -626,7 +739,7 @@ export function createRenderer(canvas, minimap) {
       const scale = clamp(cam.dist / 900, 0.6, 9);
       o.userData.ring.scale.setScalar(scale * (0.6 + k * 1.6)); o.userData.ring.material.opacity = (1 - k) * 0.9;
       o.userData.pad.scale.setScalar(scale); o.userData.beam.scale.set(scale * 0.8, Math.max(1, scale * 0.9), scale * 0.8);
-      o.userData.beam.visible = !sus;
+      o.userData.beam.visible = !sus; { const far = smooth(120, 700, cam.dist); o.userData.beam.material.opacity = 0.08 + 0.47 * far; o.userData.pad.material.opacity = 0.18 + 0.27 * far; }
       // дым и огонь на месте
       if (!sus && t.fx && Math.random() < dt * (t.fx === 'fire' ? 22 : 10)) { emit(cx, cz, t.fx === 'fire' ? (Math.random() < 0.5 ? 'fire' : 'smoke') : t.fx === 'spark' ? 'spark' : 'smoke'); }
       const s = toScreen(cx, sus ? 6 : 12, cz), sel = c.id === view.call;
