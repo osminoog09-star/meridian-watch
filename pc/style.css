@@ -189,3 +189,33 @@ body.spike-mode #map{cursor:crosshair}
 @media(max-width:1400px){.stat strong{font-size:16px}.stat.wide{display:none}#heatBtn{display:none}.wave{max-width:130px;overflow:hidden;text-overflow:ellipsis}}
 .rankup .unlocks{display:flex;flex-direction:column;gap:6px;margin:12px 0}.rankup .unlocks div{background:rgba(110,231,216,.08);border:1px solid rgba(110,231,216,.3);border-radius:9px;padding:9px 12px;font-size:14px}
 .rankup .stars{font-size:28px;color:#ffd166;letter-spacing:6px}
+
+/* 3.0: противостояние */
+.standoff{border:1px solid rgba(90,168,255,.35);background:rgba(90,168,255,.06);border-radius:10px;padding:10px;margin-top:8px}
+.sbar{display:grid;grid-template-columns:96px 1fr 38px;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin:3px 0}.sbar b{color:var(--text);text-align:right}
+.bar.comp i{background:#5aa8ff}.bar.stab i{background:hsl(var(--h),80%,55%)}
+#callDetail button.on{border-color:#5aa8ff;background:rgba(90,168,255,.15)}#callDetail button.danger{border-color:rgba(255,77,94,.5)}#callDetail button.danger em{color:#ff8a94}
+.lbl.call s.sb{width:28px;height:3px;margin:1px 0}.lbl.call em.neg{background:#5aa8ff;color:#06182b;animation:none}
+
+/* 3.0: офицеры и кадры */
+.lv{font-size:9px;color:#9fb3bf;background:rgba(255,255,255,.08);border-radius:4px;padding:0 4px}
+.crew{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.om{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;padding:5px 7px;font-size:11px}.om.hurt{border-color:rgba(255,77,94,.5)}
+.om b{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.om span{color:var(--muted);font-size:10px}
+.mm{display:grid;gap:2px;margin-top:4px}.mm i{display:block;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--c) var(--w),rgba(255,255,255,.08) var(--w))}
+table.staff{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px}table.staff th{text-align:left;color:var(--muted);font-weight:600;font-size:9px;letter-spacing:.8px;text-transform:uppercase;padding:5px 4px}
+table.staff td{padding:6px 4px;border-top:1px solid var(--line);vertical-align:middle}table.staff tr.hurt td{background:rgba(255,77,94,.06)}
+table.staff td small{color:var(--muted);font-size:10px}table.staff select{max-width:150px;font-size:11px}table.staff button{padding:4px 8px;font-size:11px;margin-left:4px}
+.sk{width:46px;height:5px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden}.sk i{display:block;height:100%;background:#6ee7d8}.sk.st i{background:#ff8a5c}.sk.mo i{background:#6ee7b0}
+.notice-bad{color:#ffb0b6!important;background:rgba(255,77,94,.08);border:1px solid rgba(255,77,94,.3);border-radius:8px;padding:8px 10px}
+
+.focus{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px}.focus button{padding:4px 6px;font-size:10.5px}.focus button.on{background:rgba(110,231,216,.18);border-color:#6ee7d8;color:#e6fffb}
+
+/* 3.0: город */
+.wave.crisis{background:rgba(160,60,255,.16);border-color:rgba(190,120,255,.5);color:#e3c9ff}
+.mayor{display:grid;grid-template-columns:200px 1fr;gap:16px;background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.mayor b{font-size:26px;display:block}.mayor small{color:var(--muted);font-size:11px}.mayor p{margin:4px 0}.sk.wide{width:100%;margin-top:6px}
+.crisisbox{border:1px solid rgba(190,120,255,.45);background:rgba(160,60,255,.08);border-radius:12px;padding:10px 14px;margin-bottom:10px}.crisisbox p{margin:4px 0 0}
+.complaints{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}.complaints .item.sustained{border-color:rgba(255,77,94,.45)}.complaints .item.dismissed{opacity:.7}
+.oprow{display:flex;gap:6px;margin-top:6px}.oprow select{flex:1;min-width:0}
+.citynote{color:#bfe9df;background:rgba(110,231,216,.06);border:1px solid rgba(110,231,216,.25);border-radius:8px;padding:8px 10px}

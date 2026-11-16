@@ -7,7 +7,7 @@ import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
 import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {FXAAPass} from 'three/addons/postprocessing/FXAAPass.js';
-import {BOUNDS, METRES, STATION, DISTRICTS, roads, buildings, areas} from './world.js';
+import {BOUNDS, METRES, STATION, DISTRICTS, roads, buildings, areas, nearestNode} from './world.js';
 import {VEHICLES} from './content.js';
 import {callType} from './sim.js';
 import {AREA, poly} from './basemap.js';
@@ -46,10 +46,10 @@ function beamTexture() {
 
 // ---------- построитель геометрии ----------
 class Builder {
-  constructor(extra = {}) { this.p = []; this.n = []; this.c = []; this.extra = Object.fromEntries(Object.entries(extra).map(([k, size]) => [k, {size, data: []}])); }
+  constructor(extra = {}) { this.cur = {}; this.p = []; this.n = []; this.c = []; this.extra = Object.fromEntries(Object.entries(extra).map(([k, size]) => [k, {size, data: []}])); }
   vert(x, y, z, nx, ny, nz, col, extra = {}) {
     this.p.push(x, y, z); this.n.push(nx, ny, nz); this.c.push(col.r, col.g, col.b);
-    for (const [k, a] of Object.entries(this.extra)) { const v = extra[k] ?? 0; if (a.size === 1) a.data.push(v); else a.data.push(...v); }
+    for (const [k, a] of Object.entries(this.extra)) { const v = extra[k] ?? this.cur[k] ?? 0; if (a.size === 1) a.data.push(v); else a.data.push(...v); }
   }
   get count() { return this.p.length / 3; }
   geometry() {
@@ -74,9 +74,9 @@ const toMetres = pts => { const out = new Float32Array(pts.length); for (let i =
 function windowMaterial(uniforms) {
   const mat = new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.86, metalness: 0.02, flatShading: true});
   mat.onBeforeCompile = shader => {
-    shader.uniforms.uNight = uniforms.uNight;
-    shader.vertexShader = 'attribute vec3 aMeta;\nattribute float aU;\nvarying vec3 vMeta;\nvarying float vU;\nvarying float vY;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vMeta = aMeta; vU = aU; vY = transformed.y;');
-    shader.fragmentShader = 'uniform float uNight;\nvarying vec3 vMeta;\nvarying float vU;\nvarying float vY;\n' + shader.fragmentShader
+    shader.uniforms.uNight = uniforms.uNight; shader.uniforms.uHeat = uniforms.uHeat; shader.uniforms.uHeatOn = uniforms.uHeatOn;
+    shader.vertexShader = 'attribute vec3 aMeta;\nattribute float aU;\nattribute float aDist;\nvarying vec3 vMeta;\nvarying float vU;\nvarying float vY;\nvarying float vDist;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vMeta = aMeta; vU = aU; vY = transformed.y; vDist = aDist;');
+    shader.fragmentShader = 'uniform float uNight;\nuniform float uHeat[16];\nuniform float uHeatOn;\nvarying vec3 vMeta;\nvarying float vU;\nvarying float vY;\nvarying float vDist;\n' + shader.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
         float winMask = 0.0, winLit = 0.0;
         if (vMeta.x > 0.5 && vMeta.z > 3.8) {
@@ -86,6 +86,13 @@ function windowMaterial(uniforms) {
           float h = fract(sin(dot(vec3(floor(cell), vMeta.y * 91.7), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
           winLit = winMask * step(h, 0.3 + 0.35 * vMeta.y);
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.13, 0.17, 0.22), winMask * 0.72);
+        }
+        if (uHeatOn > 0.001) {
+          float heat = uHeat[int(vDist + 0.5)];
+          if (heat >= 0.0) {
+            vec3 hc = heat < 0.5 ? mix(vec3(0.22, 0.78, 0.38), vec3(0.98, 0.82, 0.25), heat * 2.0) : mix(vec3(0.98, 0.82, 0.25), vec3(0.95, 0.2, 0.18), heat * 2.0 - 1.0);
+            diffuseColor.rgb = mix(diffuseColor.rgb, hc * (0.75 + 0.25 * step(0.5, vMeta.x)), uHeatOn * 0.62);
+          }
         }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += vec3(1.0, 0.7, 0.38) * winLit * uNight * 2.4;`);
@@ -105,7 +112,7 @@ export function createRenderer(canvas, minimap) {
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(38, 1, 2, 60000);
   scene.fog = new THREE.Fog(0xa9c3d6, 3000, 20000);
-  const uniforms = {uNight: {value: 0}};
+  const uniforms = {uNight: {value: 0}, uHeat: {value: new Array(16).fill(-1)}, uHeatOn: {value: 0}};
   // качество: auto выбирает по видеокарте; поверх — динамическое разрешение
   const PRESETS = {
     high: {msaa: 4, fxaa: false, shadow: 4096, shadowEvery: 1, bloom: true, treeShadow: true, maxScale: 1.5},
@@ -172,7 +179,8 @@ export function createRenderer(canvas, minimap) {
   const TILE = 700, tiles = new Map(), bmat = windowMaterial(uniforms);
   for (const bd of buildings) {
     const pts = toMetres(bd.pts), n = pts.length / 2, key = Math.floor(pts[0] / TILE) + ':' + Math.floor(pts[1] / TILE);
-    let b = tiles.get(key); if (!b) { b = new Builder({aMeta: 3, aU: 1}); tiles.set(key, b); }
+    let b = tiles.get(key); if (!b) { b = new Builder({aMeta: 3, aU: 1, aDist: 1}); tiles.set(key, b); }
+    b.cur.aDist = nearestNode(bd.pts[0], bd.pts[1])?.district ?? 15;
     let a2 = 0; for (let i = 0; i < n; i++) { const j = (i + 1) % n; a2 += pts[i * 2] * pts[j * 2 + 1] - pts[j * 2] * pts[i * 2 + 1]; }
     const ccw = a2 > 0, wall = lin(WALL[bd.style][bd.tone]), roof = lin(ROOF[bd.style][bd.tone]), h = bd.h, seed = bd.lit ? 0.9 : 0.25 + (bd.tone * 0.13);
     const walls = wall.clone().multiplyScalar(0.92);
@@ -298,6 +306,37 @@ export function createRenderer(canvas, minimap) {
   const people = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.28, 1.15, 3, 6).translate(0, 0.86, 0), new THREE.MeshStandardMaterial({roughness: 0.8}), walkers.length);
   { const c = new THREE.Color(); const palette = ['#c0392b', '#2c3e50', '#27ae60', '#8e44ad', '#f39c12', '#16a085', '#d35400', '#34495e', '#e8e3d9']; for (let i = 0; i < walkers.length; i++) people.setColorAt(i, c.set(palette[i % palette.length])); }
   people.castShadow = true; people.frustumCulled = false; scene.add(people);
+
+  // люди на месте: офицеры у машин и подозреваемые
+  const MAX_FIG = 160, figGeo = new THREE.CapsuleGeometry(0.3, 1.1, 3, 6).translate(0, 0.85, 0);
+  const officers = new THREE.InstancedMesh(figGeo, new THREE.MeshStandardMaterial({color: '#2d63c8', roughness: 0.55, emissive: '#10285a'}), MAX_FIG);
+  const perps = new THREE.InstancedMesh(figGeo, new THREE.MeshStandardMaterial({color: '#e76f51', roughness: 0.7, emissive: '#3a1208'}), 60);
+  for (const m of [officers, perps]) { m.castShadow = true; m.frustumCulled = false; m.count = 0; scene.add(m); }
+  const figM = new THREE.Matrix4(), figQ = new THREE.Quaternion(), figS = new THREE.Vector3(), figP = new THREE.Vector3(), figUp = new THREE.Vector3(0, 1, 0);
+  function figure(mesh, n, x, z, yaw, s, sy = 1) { figQ.setFromAxisAngle(figUp, yaw); figS.set(s, s * sy, s); figP.set(x, 0, z); figM.compose(figP, figQ, figS); mesh.setMatrixAt(n, figM); }
+  function drawFigures(state, boost) {
+    let no = 0, np = 0;
+    if (boost <= 4) {
+      const s = Math.min(boost, 2.2) * 1.25;
+      for (const u of state.units) {
+        if (u.status !== 'onscene' || u.fly) continue;
+        const c = state.calls.find(c => c.id === u.callId); if (!c) continue;
+        const ux = u.x * M, uz = u.y * M, px = c.x * M + 7 * s, pz = c.y * M + 3 * s; // подозреваемый стоит чуть в стороне
+        const dx = px - ux, dz = pz - uz, d = Math.hypot(dx, dz) || 1, fx = dx / d, fz = dz / d;
+        const n = u.crew?.length ?? 2, near = Math.min(d * 0.55, 5 * s);
+        for (let i = 0; i < n && no < MAX_FIG; i++) {
+          const side = (i - (n - 1) / 2) * 1.8 * s, sway = Math.sin(time * 2 + u.id + i) * 0.12 * s;
+          figure(officers, no++, ux + fx * near - fz * side + sway, uz + fz * near + fx * side, Math.atan2(fx, fz), s);
+        }
+      }
+      for (const c of state.calls) {
+        if (!['choice', 'standoff', 'active'].includes(c.state) || c.suspectId || !callType(c).suspect || c.reaction === 'flee' || np >= 60) continue;
+        const pace = c.state === 'standoff' ? Math.sin(time * (1 + (100 - c.standoff.stability) / 40) + c.id) * 2.2 * s : 0, kneel = c.reaction === 'surrender' && c.state === 'active';
+        figure(perps, np++, c.x * M + 7 * s + pace, c.y * M + 3 * s, time * (c.state === 'standoff' ? 0.6 : 0) + c.id, s, kneel ? 0.55 : 1);
+      }
+    }
+    officers.count = no; perps.count = np; officers.instanceMatrix.needsUpdate = true; perps.instanceMatrix.needsUpdate = true;
+  }
 
   // полицейские машины и вертолёты — по объекту на экипаж
   const unitObjs = new Map();
@@ -565,6 +604,7 @@ export function createRenderer(canvas, minimap) {
     }
     for (const id of [...unitObjs.keys()]) if (!seenUnits.has(id)) removeUnit(id);
 
+    drawFigures(state, carBoost);
     // подозреваемые
     const seenSus = new Set();
     for (const x of state.suspects) {
@@ -592,7 +632,8 @@ export function createRenderer(canvas, minimap) {
       const s = toScreen(cx, sus ? 6 : 12, cz), sel = c.id === view.call;
       const active = c.state === 'active', part = active ? c.progress / Math.max(1, c.work) : Math.max(0, (c.deadline - state.t) / c.wait);
       const decide = c.state === 'choice' && view.decides?.(c);
-      const html = `<b style="--c:${SEV[t.sev]}">${t.icon}</b>${sel || cam.dist < 900 ? `<span>${t.name}</span>` : ''}<s><u style="width:${Math.round(clamp(part, 0, 1) * 100)}%;background:${active ? '#6ee7d8' : SEV[t.sev]}"></u></s>${decide ? '<em>ЖДЁТ РЕШЕНИЯ</em>' : sus ? '<em class="red">ПОГОНЯ</em>' : ''}`;
+      const so = c.standoff, bars = so ? `<s class="sb"><u style="width:${Math.round(so.compliance)}%;background:#5aa8ff"></u></s><s class="sb"><u style="width:${Math.round(so.stability)}%;background:hsl(${Math.round(so.stability * 1.2)},80%,55%)"></u></s>` : `<s><u style="width:${Math.round(clamp(part, 0, 1) * 100)}%;background:${active ? '#6ee7d8' : SEV[t.sev]}"></u></s>`;
+      const html = `<b style="--c:${SEV[t.sev]}">${t.icon}</b>${sel || cam.dist < 900 ? `<span>${t.name}</span>` : ''}${bars}${so ? '<em class="neg">ПЕРЕГОВОРЫ</em>' : decide ? '<em>ЖДЁТ РЕШЕНИЯ</em>' : sus ? '<em class="red">ПОГОНЯ</em>' : ''}`;
       const el = label('c' + c.id, 'call' + (sel ? ' sel' : '') + (decide ? ' decide' : ''), html);
       if (place(el, s, -22)) hits.push({kind: 'call', id: c.id, x: s.x, y: s.y, r: 28});
     }
@@ -614,10 +655,12 @@ export function createRenderer(canvas, minimap) {
 
     // районы
     const showDistricts = view.heat || cam.dist > 5200;
+    uniforms.uHeatOn.value += ((view.heat ? 1 : 0) - uniforms.uHeatOn.value) * Math.min(1, dt * 5);
+    for (let k = 0; k < 16; k++) { const cr = state.districts?.[k]?.crime ?? -1; uniforms.uHeat.value[k] = cr < 0 ? -1 : Math.min(1, cr / 80); }
     DISTRICTS.forEach((d, k) => {
       const crime = state.districts?.[k]?.crime ?? -1, disc = districtDiscs[k];
       if (crime < 0) { disc.material.opacity = 0; return; }
-      const hue = (130 - Math.min(100, crime) * 1.3) / 360; disc.material.color.setHSL(hue, 0.85, 0.5, THREE.SRGBColorSpace); disc.material.opacity = view.heat ? 0.35 + crime / 250 : 0;
+      const hue = (130 - Math.min(100, crime) * 1.3) / 360; disc.material.color.setHSL(hue, 0.85, 0.5, THREE.SRGBColorSpace); disc.material.opacity = view.heat ? 0.12 + crime / 500 : 0;
       if (showDistricts) { const s = toScreen(d.x * M, 0, d.y * M); place(label('d' + k, 'district', `<i style="background:hsl(${hue * 360},80%,58%)"></i>${d.name} <b>${Math.round(crime)}%</b>${state.informants?.[k] ? ' · <span>информатор</span>' : ''}${state.undercover?.[k] ? ' · <span>агент</span>' : ''}`), s); }
     });
     { const s = toScreen(STATION.x * M, 8, STATION.y * M); if (cam.dist < 4000) place(label('station', 'station', '★ УЧАСТОК'), s, -20); }

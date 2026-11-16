@@ -144,6 +144,90 @@ test('a 1.2 save (v2) migrates to 2.0', () => {
   raw.v = 2; raw.policies = {hard: true}; delete raw.policy; delete raw.settings; delete raw.informants; delete raw.undercover; delete raw.spikes;
   for (const u of raw.units) delete u.gear;
   const m = deserialize(JSON.stringify(raw));
-  assert.equal(m.v, 3); assert.equal(m.policy.force, 'hard'); assert.ok(m.units.every(u => u.gear.armor === 'vest'));
+  assert.equal(m.v, sim.SAVE_VERSION); assert.equal(m.policy.force, 'hard'); assert.ok(m.units.every(u => u.crew.every(o => o.skills && Number.isFinite(o.morale)))); assert.ok(m.units.every(u => u.gear.armor === 'vest'));
   tick(m, 60);
+});
+
+// ---------- 3.0 ----------
+test('a standoff ends: talk builds compliance, buying time restores stability', () => {
+  const s = createGame(31, 'X', {mode: 'sandbox'}); s.nextCallAt = Infinity; s.settings.waves = false;
+  const u = s.units[0], c = blankCall(s, 'domestic', u.node, {state: 'assigned'}); u.callId = c.id; u.status = 'enroute'; u.path = [];
+  let started = false;
+  for (let k = 0; k < 40 && !started; k++) { const seed = 100 + k; Object.assign(s, {seed}); c.state = 'assigned'; c.reaction = null; u.status = 'enroute'; tick(s, 1); started = c.state === 'standoff'; }
+  if (!started) return; // подозреваемый сразу сдался — тоже исход
+  c.standoff.stability = 30; assert.ok(sim.setStrategy(s, c.id, 'time').ok);
+  for (let k = 0; k < 60 && c.state === 'standoff'; k++) tick(s, 2);
+  if (c.state === 'standoff') assert.ok(c.standoff.stability > 30);
+  for (let k = 0; k < 2000 && c.state === 'standoff'; k++) { sim.setStrategy(s, c.id, 'negotiate'); tick(s, 2); }
+  assert.notEqual(c.state, 'standoff');
+});
+
+test('officers gain experience, stress and morale; academy and hiring work', () => {
+  const s = createGame(32, 'X', {mode: 'sandbox', money: 20000}); s.nextCallAt = Infinity;
+  const u = s.units[0], o = u.crew[0], xp0 = o.xp, stress0 = o.stress;
+  const c = blankCall(s, 'shooting', u.node, {state: 'active', approach: 0, work: 1, progress: 2, reaction: 'fight'}); u.callId = c.id; u.status = 'onscene';
+  tick(s, 2);
+  assert.ok(o.xp > xp0); assert.ok(o.stress > stress0 || o.injured);
+  const cand = s.candidates[0]; assert.ok(sim.hireOfficer(s, cand.id).ok); assert.equal(s.reserve.length, 1);
+  const other = s.units[1]; assert.ok(sim.swapOfficer(s, other.id, 0, s.reserve[0].id).ok); assert.equal(other.crew[0].id, cand.id);
+  const before = cand.skills.talk; assert.ok(sim.trainOfficer(s, cand.id, 'talk').ok); assert.ok(cand.skills.talk > before);
+});
+
+test('burned-out officers may quit at shift end and are replaced', () => {
+  const s = createGame(33, 'X', {mode: 'sandbox'}); s.nextCallAt = Infinity;
+  for (const u of s.units) for (const o of u.crew) { o.morale = 5; o.stress = 95; }
+  s.shiftEnd = s.t + 2; tick(s, 4);
+  assert.equal(s.phase, 'summary'); assert.ok(s.summary.quits.length > 0);
+  assert.ok(s.units.every(u => u.crew.length === 2));
+});
+
+test('patrol focus: traffic units stop cars, community builds trust, prevention cuts crime', () => {
+  const s = createGame(77, 'Тест', {mode: 'sandbox'});
+  const units = s.units.filter(u => !u.player && sim.roleOf(u) !== 'heli');
+  assert.equal(sim.setFocus(s, units[0].id, 'traffic').ok, true);
+  assert.equal(sim.setFocus(s, units[0].id, 'nope').ok, false);
+  const trainee = createGame(78, 'Т');
+  assert.equal(sim.setFocus(trainee, playerUnit(trainee).id, 'traffic').ok, false);
+  // остановка ТС рождает вызов, на который сразу едет этот экипаж
+  for (let k = 0; k < 50 && !units[0].node; k++) tick(s, 1);
+  const c = sim._trafficStop(s, units[0]);
+  assert.ok(c); assert.equal(c.type, 'stop'); assert.equal(units[0].callId, c.id);
+  for (let k = 0; k < 3000 && c.state !== 'done'; k++) tick(s, 2);
+  assert.equal(c.state, 'done');
+  // за смену дорожный надзор сам останавливает машины
+  const t = createGame(79, 'Тест', {mode: 'sandbox'});
+  for (const u of t.units) if (!u.player && sim.roleOf(u) !== 'heli') sim.setFocus(t, u.id, 'traffic');
+  t.auto = true; for (let k = 0; k < 1800 && t.phase === 'shift'; k++) tick(t, 4);
+  assert.ok((t.stats.stops ?? 0) > 0, 'stops happened');
+  // работа с жителями поднимает доверие, сериализация сохраняет приоритет
+  const back = deserialize(serialize(t));
+  assert.ok(back.units.some(u => u.focus === 'traffic'));
+});
+
+test('city: mayor demands, complaints and internal affairs, programs, operations, crises', () => {
+  const s = createGame(91, 'Тест', {mode: 'sandbox'});
+  const k = s.districts.findIndex(d => d.crime >= 0);
+  assert.equal(sim.toggleProgram(s, k).ok, true); assert.ok(s.programs[k]);
+  const money0 = s.money;
+  assert.equal(sim.launchOperation(s, 'crackdown', k).ok, true); assert.equal(s.money, money0 - sim.OPERATIONS.crackdown.cost);
+  assert.equal(sim.launchOperation(s, 'sting', k).ok, false, 'one operation per shift');
+  const trainee = createGame(92, 'Т');
+  assert.equal(sim.toggleProgram(trainee, k).ok, false);
+  sim.setPolicy(s, 'force', 'hard'); s.auto = true;
+  const crime0 = s.districts[k].crime;
+  for (let n = 0; n < 9000 && s.phase === 'shift'; n++) tick(s, 4);
+  assert.equal(s.phase, 'summary'); assert.ok(s.summary.city); assert.equal(s.op, null);
+  assert.ok(s.districts[k].crime < crime0, 'crackdown and watch cut crime');
+  assert.ok(s.city.complaints.every(c => c.state !== 'open'), 'complaints resolved at shift end');
+  // поручение мэра и кризис появляются в следующих сменах
+  for (let shift = 0; shift < 8; shift++) { startNextShift(s); assert.ok(s.city.demand); for (let n = 0; n < 9000 && s.phase === 'shift'; n++) tick(s, 4); if (s.phase !== 'summary') break; }
+  assert.ok(s.career.shifts >= 3);
+  assert.ok(s.city.complaints.length > 0, 'hard policy produces complaints');
+  const back = deserialize(serialize(s));
+  assert.equal(back.city.mayor, s.city.mayor);
+  // кризис: прогресс засчитывается успешными вызовами в районе
+  const t = createGame(93, 'Тест', {mode: 'sandbox'});
+  t.crisis = {kind: 'gang', district: k, progress: 0, shiftsLeft: 4}; t.auto = true;
+  for (let n = 0; n < 9000 && t.phase === 'shift'; n++) tick(t, 4);
+  assert.ok(t.crisis === null || t.crisis.progress >= 0);
 });

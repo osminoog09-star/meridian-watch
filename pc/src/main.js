@@ -49,6 +49,12 @@ const TRAIT_NAME = {...TRAITS, you: 'вы'};
 const cacheHtml = new Map();
 function setHtml(id, html) { if (cacheHtml.get(id) !== html) { cacheHtml.set(id, html); $(id).innerHTML = html; } }
 const crimeColor = v => `hsl(${Math.round(130 - Math.min(100, v) * 1.3)} 70% 58%)`;
+const SKILL_SHORT = {talk: 'Пер', drive: 'Вжд', invest: 'Рсл', force: 'Сил', fitness: 'Физ'};
+function officerMini(o) {
+  const top = Object.entries(o.skills).sort((a, b) => b[1] - a[1])[0];
+  return `<div class="om ${o.injured ? 'hurt' : ''}"><b>${esc(o.name)}</b><span>${o.player ? 'вы' : 'ур.' + o.level}${o.spec ? ' · ' + sim.SPECS[o.spec].toLowerCase() : ''} · ${sim.SKILLS[top[0]].toLowerCase()} ${top[1].toFixed(1)}</span>
+    <div class="mm"><i title="Стресс" style="--w:${Math.round(o.stress)}%;--c:#ff8a5c"></i><i title="Мораль" style="--w:${Math.round(o.morale)}%;--c:#6ee7b0"></i></div></div>`;
+}
 function gearLine(u) { if (VEHICLES[u.type].role === 'heli') return ''; const g = u.gear; return [GEAR_ICON.weapon[g.weapon], GEAR_ICON.armor[g.armor], GEAR_ICON.kit[g.kit]].filter(Boolean).map(x => `<i class="gi">${x}</i>`).join(''); }
 function refresh(force = false) {
   if (!state || (pointerDown && !force) || (!force && document.activeElement?.tagName === 'SELECT')) return;
@@ -70,6 +76,7 @@ function refresh(force = false) {
   $('heatBtn').classList.toggle('on', view.heat);
   $('spikeBtn').hidden = s.mode === 'career' && s.rank < 1; $('spikeBtn').textContent = `▲ Шипы ${s.spikesLeft}`; $('spikeBtn').classList.toggle('on', view.spike);
   $('wave').hidden = !s.wave; if (s.wave) $('wave').textContent = '⚠ Волна: ' + DISTRICTS[s.wave.district].name;
+  $('crisis').hidden = !s.crisis; if (s.crisis) { const k = sim.CRISES[s.crisis.kind]; $('crisis').textContent = `☠ ${k.name}: ${s.crisis.progress}/${k.need} · ${DISTRICTS[s.crisis.district].name}`; $('crisis').title = `${k.goal}. Осталось смен: ${s.crisis.shiftsLeft}.`; }
   $('pausedBanner').hidden = !paused || !!overlay;
   document.body.classList.toggle('spike-mode', view.spike);
 
@@ -79,11 +86,13 @@ function refresh(force = false) {
     const selected = u.id === view.unit, fat = Math.round(u.fatigue), mine = sim.canCommand(s, u);
     return `<div class="unit ${selected ? 'sel' : ''} ${u.player ? 'me' : ''} ${mine ? '' : 'ai'} ${u.status === 'injured' ? 'hurt' : ''}" data-act="selUnit" data-id="${u.id}">
       <div class="row"><b>${esc(u.callsign)}${u.player ? ' <i class="you">ВЫ</i>' : ''}</b><span class="chip" style="--c:${STATUS_COLOR[u.status]}">${STATUS[u.status]}</span></div>
-      <small>${roleChip(u)} ${gearLine(u)} ${u.crew.map(o => esc(o.name) + (o.trait === 'you' ? '' : ' — ' + TRAIT_NAME[o.trait].toLowerCase())).join(', ')}</small>
+      <small>${roleChip(u)} ${gearLine(u)} ${u.crew.map(o => esc(o.name) + (o.player ? '' : ` <span class="lv">ур.${o.level}</span>`) + (o.injured ? ' ✚' : '')).join(', ')}</small>
+      ${selected ? `<div class="crew">${u.crew.map(officerMini).join('')}</div>` : ''}
       <div class="meters"><span>Усталость ${fat}%</span><div class="bar fat ${fat > 65 ? 'high' : ''}"><i style="width:${fat}%"></i></div><span>Навык ${Math.round(u.skill * 100)}%</span></div>
       ${!mine ? `<small class="lock">${u.zone >= 0 ? 'Район: ' + DISTRICTS[u.zone].name + ' · ' : ''}ведёт диспетчер</small>` : ''}
       ${selected && mine ? `<div class="acts"><button data-act="follow">${renderer.following() === u.id ? '● Слежу' : 'Следить'} <kbd>F</kbd></button><button data-act="patrol" ${['hold', 'returning', 'resting', 'enroute'].includes(u.status) ? '' : 'disabled'}>Патруль <kbd>P</kbd></button><button data-act="rest" ${['patrol', 'hold', 'enroute'].includes(u.status) ? '' : 'disabled'}>Отдых <kbd>R</kbd></button></div>` : ''}
       ${selected && sim.canZone(s, u) ? `<label class="zone">Район патруля<select data-zone="${u.id}"><option value="-1">Весь город</option>${zones.replace(`value="${u.zone}"`, `value="${u.zone}" selected`)}</select></label>
+        ${sim.roleOf(u) !== 'heli' ? `<div class="focus">${Object.entries(sim.PATROL_FOCUS).map(([k, f]) => `<button data-act="focus" data-id="${u.id}" data-f="${k}" class="${u.focus === k ? 'on' : ''}" title="${f.desc}">${f.name}</button>`).join('')}</div>` : ''}
         <div class="route">${u.waypoints.length ? `Маршрут: ${u.waypoints.length} точ. <button data-act="clearRoute">Сбросить</button>` : '<span>Свой маршрут: <kbd>Shift</kbd>+ПКМ по карте</span>'}</div>` : ''}
     </div>`; }).join(''));
 
@@ -92,9 +101,9 @@ function refresh(force = false) {
   if (!view.call && live.length) view.call = live[0].id;
   $('callCount').textContent = live.length;
   setHtml('calls', live.length ? live.map(c => {
-    const t = CALLS[c.type], waiting = c.state === 'pending' || c.state === 'assigned', on = sim.unitsFor(s, c).length, decide = c.state === 'choice' && sim.playerDecides(s, c);
+    const t = CALLS[c.type], waiting = c.state === 'pending' || c.state === 'assigned', on = sim.unitsFor(s, c).length, decide = (c.state === 'choice' || (c.state === 'standoff' && c.standoff.stability < 40)) && sim.playerDecides(s, c);
     const part = c.state === 'active' ? c.progress / Math.max(1, c.work) * 100 : Math.max(0, (c.deadline - s.t) / c.wait * 100);
-    const text = c.suspectId ? `Погоня · осталось ${minutes(c.deadline - s.t)}` : c.state === 'pending' ? `Ждёт экипаж · ${minutes(c.deadline - s.t)}` : c.state === 'assigned' ? `Экипаж в пути · ${minutes(c.deadline - s.t)}` : decide ? 'Нужно ваше решение' : 'Экипаж работает';
+    const text = c.state === 'standoff' ? `Переговоры · стабильность ${Math.round(c.standoff.stability)}%` : c.suspectId ? `Погоня · осталось ${minutes(c.deadline - s.t)}` : c.state === 'pending' ? `Ждёт экипаж · ${minutes(c.deadline - s.t)}` : c.state === 'assigned' ? `Экипаж в пути · ${minutes(c.deadline - s.t)}` : decide ? 'Нужно ваше решение' : 'Экипаж работает';
     const badges = (c.onView ? '<span class="chip" style="--c:#7fb8ff">замечено</span> ' : '') + (c.late ? '<span class="chip" style="--c:#8fa3af">поздний звонок</span> ' : '') + (c.caseId ? '<span class="chip" style="--c:#c59bff">дело</span> ' : '') + (c.own ? '<span class="chip" style="--c:#ffd166">ваш</span> ' : '') + (on ? `<span class="chip" style="--c:#9fb3bf">${on} эк.</span>` : '');
     return `<div class="call ${c.id === view.call ? 'sel' : ''} ${decide ? 'choice' : ''}" style="--c:${c.state === 'active' ? '#6ee7d8' : SEV_COLOR[t.sev]}" data-act="selCall" data-id="${c.id}">
       <div class="ico">${t.icon}</div><div><div class="row"><b>${t.name}</b><span>${badges}</span></div><small>${esc(c.place)} · ${text}</small><div class="bar"><i style="width:${waiting || c.state === 'active' ? part : 100}%"></i></div></div></div>`; }).join('')
@@ -126,7 +135,14 @@ function callDetail(c) {
   let html = `<h3>${t.name}</h3><span class="tag" style="--c:${SEV_COLOR[t.sev]}">${SEVERITY[t.sev]}</span>${(t.needs ?? 1) > 1 ? `<span class="tag" style="--c:#9fb3bf">нужно ${t.needs} экипажа</span>` : c.suspectId ? '<span class="tag" style="--c:#9fb3bf">лучше 2 экипажа</span>' : ''}${c.caseId ? `<span class="tag" style="--c:#c59bff">дело №${c.caseId}</span>` : ''}${t.armed ? '<span class="tag" style="--c:#ff6b6b">вооружён</span>' : ''}${c.reaction ? `<span class="tag" style="--c:${REACTION[c.reaction][1]}">${REACTION[c.reaction][0]}</span>` : ''}<p>${t.brief}</p>`;
   if (profile) html += `<p class="hint">Профиль: ${profile}${t.minor ? ' · спецназ и тяжёлое оружие здесь — перебор' : ''}${c.innocentRisk ? ` · риск задержать невиновного ${Math.round(c.innocentRisk * 100)}%` : ''}</p>`;
   if (assigned.length) html += `<p class="hint">Назначены: ${assigned.map(u => esc(u.callsign) + (u.player ? ' (вы)' : '') + ' — ' + STATUS[u.status].toLowerCase()).join(', ')}</p>`;
-  if (c.state === 'choice') {
+  if (c.state === 'standoff') {
+    const so = c.standoff, neg = on.reduce((b, u) => (!b || sim.negotiationSkill(s, u) > sim.negotiationSkill(s, b) ? u : b), null), mine = sim.playerDecides(s, c);
+    html += `<div class="standoff"><div class="sbar"><span>Послушание</span><div class="bar comp"><i style="width:${so.compliance}%"></i></div><b>${Math.round(so.compliance)}%</b></div>
+      <div class="sbar"><span>Стабильность</span><div class="bar stab" style="--h:${Math.round(so.stability * 1.2)}"><i style="width:${so.stability}%"></i></div><b>${Math.round(so.stability)}%</b></div>
+      <p class="hint">Воля подозреваемого <b>${so.willpower.toFixed(1)}</b> · возбуждение <b>${so.agitation + (so.angry ? 1 : 0)}</b>${so.angry ? ' (зол)' : ''}${t.armed ? ' · вооружён' : ''} · переговорщик ${neg ? esc(neg.callsign) + ' — навык <b>' + sim.negotiationSkill(s, neg).toFixed(1) + '</b>' : '—'}</p>
+      ${mine ? Object.entries(sim.STRATEGIES).map(([k, st]) => `<button data-act="strategy" data-id="${k}" class="${so.strategy === k ? 'on' : ''}"><span>${st.name} <span class="hint">· ${st.desc}</span></span>${so.strategy === k ? '<em>●</em>' : ''}</button>`).join('') + `<button data-act="forceEntry" class="danger"><span>Силовое задержание <span class="hint">· ${so.stability < 45 || t.armed ? 'с риском перестрелки' : 'пока подозреваемый спокоен'}</span></span><em>${Math.round(sim.standoffForceChance(s, c) * 100)}%</em></button>
+        <p class="hint">Любой разговор сбивает возбуждение. Если переговорщик слабее воли подозреваемого — тяните время и налаживайте контакт или вызовите опытного переговорщика. Больше экипажей вокруг — подозреваемому некуда бежать.</p>` : `<p class="hint">Экипажи ведут переговоры сами: ${sim.STRATEGIES[so.strategy]?.name.toLowerCase() ?? 'силовой вариант'}.</p>`}</div>`;
+  } else if (c.state === 'choice') {
     html += sim.playerDecides(s, c) ? '<p><b>Экипаж на месте. Ваше решение:</b></p>' + t.approaches.map((a, k) => `<button data-act="approach" data-i="${k}"><span>${a.label} <span class="hint">· ${TRAITS[a.trait].toLowerCase()}${a.hint ? ' · ' + a.hint : ''}</span></span><em>${Math.round(sim.successChance(s, c, k, on) * 100)}%</em></button>`).join('') + '<p class="hint">Клавиши <kbd>Q</kbd> и <kbd>E</kbd>. Процент учитывает навыки, подразделение, снаряжение, политику, погоду и усталость.</p>'
       : '<p class="hint">Экипаж на месте сам выбирает, как действовать.</p>';
   } else if (c.state === 'active') {
@@ -220,6 +236,38 @@ function careerHtml() {
   <h3>Послужной список</h3><div class="statgrid"><div><strong>${c.shifts}</strong>смен</div><div><strong>${c.own}</strong>ваших вызовов</div><div><strong>${c.arrests}</strong>задержаний отдела</div><div><strong>${c.solved}</strong>дел раскрыто</div></div>
   ${s.cases.length ? `<h3>Дела</h3>${s.cases.slice().reverse().map(k => `<div class="fin"><span>№${k.id} · ${esc(k.title)} · ${DISTRICTS[k.district].name}</span><b>${k.state === 'solved' ? 'раскрыто' : k.state === 'cold' ? 'в архиве' : 'улики ' + Math.round(k.evidence) + '%'}</b></div>`).join('')}` : ''}`;
 }
+function skillCells(o) { return Object.keys(sim.SKILLS).map(k => `<td><div class="sk"><i style="width:${o.skills[k] / 5 * 100}%"></i></div><small>${o.skills[k].toFixed(1)}</small></td>`).join(''); }
+function staffHtml() {
+  const s = state, manage = sim.canManage(s), slots = s.units.flatMap(u => u.crew.map((o, i) => o.player ? null : [u, i, o])).filter(Boolean);
+  const row = (o, where, extra = '') => `<tr class="${o.injured ? 'hurt' : ''}"><td><b>${esc(o.name)}</b><br><small>${where}</small></td><td>${o.player ? 'вы' : o.level}</td><td>${o.spec ? sim.SPECS[o.spec] : '—'}</td>${skillCells(o)}<td><div class="sk st"><i style="width:${o.stress}%"></i></div><small>${Math.round(o.stress)}</small></td><td><div class="sk mo"><i style="width:${o.morale}%"></i></div><small>${Math.round(o.morale)}</small></td><td>${extra}</td></tr>`;
+  const academy = o => manage && !o.player ? `<select data-academy="${o.id}">${Object.entries(sim.SKILLS).map(([k, n]) => `<option value="${k}">${n} · ${sim.academyCost(o, k)} €</option>`).join('')}</select><button data-act="academy" data-id="${o.id}">Курс</button>` : '';
+  const head = `<tr><th>Сотрудник</th><th>Ур.</th><th>Специализация</th>${Object.values(sim.SKILLS).map(n => `<th>${n}</th>`).join('')}<th>Стресс</th><th>Мораль</th><th>${manage ? 'Академия' : ''}</th></tr>`;
+  let html = `<p>Каждый сотрудник — отдельный человек: навыки растут в деле, младший рядом со старшим учится в полтора раза быстрее. С 3-го уровня — специализация. Перестрелки и тяжёлые вызовы копят стресс, отдых в участке его снимает. При морали ниже 25% сотрудник может уволиться в конце смены.${manage ? ` Зарплаты: ${Math.round(sim.allOfficers(s).filter(o => !o.player).reduce((n, o) => n + sim.officerSalary(o), 0))} € за смену.` : ''}</p>
+    <table class="staff">${head}${s.units.map(u => u.crew.map(o => row(o, esc(u.callsign) + ' · ' + ROLES[VEHICLES[u.type].role].name, academy(o))).join('')).join('')}</table>`;
+  if (manage) {
+    html += `<h3>Резерв · ${s.reserve.length} из 6</h3>${s.reserve.length ? `<table class="staff">${head}${s.reserve.map(o => row(o, 'резерв', `<select data-swap="${o.id}"><option value="">Поставить вместо…</option>${slots.map(([u, i, x]) => `<option value="${u.id}:${i}">${esc(u.callsign)} — ${esc(x.name)}</option>`).join('')}</select>${academy(o)}`)).join('')}</table>` : '<p class="fine">Резерв пуст. Нанятые сотрудники попадают сюда, а отсюда — в экипажи вместо уставших или раненых.</p>'}
+      <h3>Кандидаты</h3><div class="grid">${s.candidates.map(o => `<div class="item"><b>${esc(o.name)} · ур.${o.level}</b><small>${Object.entries(sim.SKILLS).map(([k, n]) => `${n}: ${o.skills[k].toFixed(1)}`).join(' · ')}<br>Зарплата ${sim.officerSalary(o)} € за смену</small><button data-act="hire" data-id="${o.id}" ${s.money < o.fee || s.reserve.length >= 6 ? 'disabled' : ''}>Нанять · ${money(o.fee)}</button></div>`).join('')}</div><p class="fine">Список кандидатов обновляется каждую смену.</p>`;
+  }
+  return html;
+}
+function cityHtml() {
+  const s = state, c = s.city, policy = sim.canPolicy(s), dname = k => DISTRICTS[k].name;
+  const mood = c.mayor >= 80 ? 'доволен — финансирование +15%' : c.mayor >= 50 ? 'спокоен' : c.mayor >= 30 ? 'недоволен' : 'в ярости';
+  const open = c.complaints.filter(k => k.state === 'open'), past = c.complaints.filter(k => k.state !== 'open').slice(-6).reverse();
+  const label = {sustained: 'подтвердилась', dismissed: 'не подтвердилась'};
+  let html = `<div class="mayor"><div><span class="eyebrow">МЭР</span><b>${Math.round(c.mayor)}%</b><small>${mood}${c.cut ? ` · бюджет урезан ещё на ${c.cut} смен${c.cut === 1 ? 'у' : 'ы'}` : ''}</small><div class="sk mo wide"><i style="width:${c.mayor}%"></i></div></div>
+    <div><span class="eyebrow">ПОРУЧЕНИЕ НА СМЕНУ</span><p>${c.demand ? esc(sim.demandText(s)) : 'Мэрия пока присматривается к новому отделению.'}</p>${c.demand ? `<small>${sim.demandMet(s) ? '✔ сейчас выполняется' : '… пока не выполнено'} · выполнено: мэр +10 и 250 € премии, провал: мэр −12</small>` : ''}</div></div>`;
+  if (s.crisis) { const k = sim.CRISES[s.crisis.kind]; html += `<div class="crisisbox"><b>☠ ${k.name} — ${dname(s.crisis.district)}</b><p>${k.goal}. Прогресс ${s.crisis.progress} из ${k.need}, осталось смен: ${s.crisis.shiftsLeft}. Провал ударит по доверию и отношениям с мэром.</p></div>`; }
+  html += `<h3>Жалобы и служебные проверки</h3><p class="fine">Силовые действия и перестрелки рождают жалобы. В конце смены служебная проверка решает, подтвердилась ли жалоба; подтверждённая бьёт по доверию и морали сотрудника и может закончиться иском. Жёсткая политика силы — больше жалоб.</p>
+    ${open.length ? `<div class="complaints">${open.map(k => `<div class="item"><b>${esc(k.officer)}</b><small>${esc(k.call)} · смена ${k.shift} · проверка идёт</small></div>`).join('')}</div>` : '<p class="fine">Открытых жалоб нет.</p>'}
+    ${past.length ? `<div class="complaints">${past.map(k => `<div class="item ${k.state}"><b>${esc(k.officer)}</b><small>${esc(k.call)} · ${label[k.state]}${k.lawsuit ? ` · иск ${money(k.lawsuit)}` : ''}</small></div>`).join('')}</div>` : ''}`;
+  const districts = DISTRICTS.map((d, k) => districtNodes[k].length ? k : -1).filter(k => k >= 0);
+  html += `<h3>Соседский дозор · ${sim.PROGRAM_COST} € за смену на район</h3><p class="fine">Жители сами сообщают о подозрительном: в районе чаще замечают скрытые преступления, преступность медленно снижается.${policy ? '' : ' Программы запускает начальник отделения.'}</p>
+    <div class="intel">${districts.map(k => `<div class="item"><b>${dname(k)}</b><small>Преступность ${Math.round(s.districts[k].crime)}%</small><button data-act="program" data-id="${k}" class="${s.programs[k] ? 'on' : ''}" ${policy ? '' : 'disabled'}>${s.programs[k] ? 'Дозор работает' : 'Запустить дозор'}</button></div>`).join('')}</div>`;
+  html += `<h3>Операция на смену</h3>${s.op ? `<p><b>Идёт: ${sim.OPERATIONS[s.op.kind].name} — ${dname(s.op.district)}.</b> Одна операция за смену.</p>` : ''}
+    <div class="grid">${Object.entries(sim.OPERATIONS).map(([k, o]) => `<div class="item"><b>${o.name} · ${money(o.cost)}</b><small>${o.desc}</small><div class="oprow"><select data-opdist="${k}">${districts.map(d => `<option value="${d}">${dname(d)}</option>`).join('')}</select><button data-act="operation" data-k="${k}" ${!policy || s.op || s.phase !== 'shift' || s.money < o.cost ? 'disabled' : ''}>Начать</button></div></div>`).join('')}</div>`;
+  return html;
+}
 function intelHtml() {
   const s = state, inf = sim.informantSlots(s), und = sim.undercoverSlots(s), used = o => Object.keys(o).length;
   if (!inf && !und) return '<p class="fine">Информаторов вербуют со звания «Старший патрульный», агентов внедряют с «Сержанта».</p>';
@@ -229,17 +277,19 @@ function intelHtml() {
 }
 function showShop(tab = view.tab) {
   const s = state; if (!s) return;
-  const manage = sim.canManage(s), tabs = [...(manage ? [['units', 'Экипажи'], ['gear', 'Снаряжение'], ['policy', 'Политика'], ['upgrades', 'Улучшения']] : []), ...(sim.informantSlots(s) ? [['intel', 'Агентура']] : []), ['career', manage ? 'Навыки и дела' : 'Личное дело']];
+  const manage = sim.canManage(s), tabs = [['city', 'Город'], ['staff', 'Кадры'], ...(manage ? [['units', 'Экипажи'], ['gear', 'Снаряжение'], ['policy', 'Политика'], ['upgrades', 'Улучшения']] : []), ...(sim.informantSlots(s) ? [['intel', 'Агентура']] : []), ['career', manage ? 'Навыки и дела' : 'Личное дело']];
   if (!tabs.some(([k]) => k === tab)) tab = tabs[0][0];
   view.tab = tab;
   const cap = s.units.length >= sim.unitCap(s);
   let body = '';
   if (tab === 'units') body = `<p>Экипажей ${s.units.length} из ${sim.unitCap(s)} (лимит растёт со званием) · за смену каждый стоит 280 €, вертолёт ещё 400 €.</p><div class="grid">${Object.entries(VEHICLES).map(([key, v]) => { const locked = s.rank < v.rank; return `<div class="item ${locked ? 'locked' : ''}"><b>${v.name}</b><span class="role" style="--c:${ROLES[v.role].color}">${ROLES[v.role].name}</span><small>${v.desc}</small><button data-act="buyUnit" data-id="${key}" ${locked || cap || s.money < v.cost ? 'disabled' : ''}>${locked ? 'Нужно звание: ' + RANKS[v.rank].title : cap ? 'Лимит экипажей' : 'Нанять · ' + money(v.cost)}</button></div>`; }).join('')}</div>
-    <h3>Обучение</h3><div class="grid">${s.units.map(u => `<div class="item"><b>${esc(u.callsign)}${u.player ? ' (вы)' : ''}</b>${roleChip(u)}<small>навык ${Math.round(u.skill * 100)}% · вызовов: ${u.handled}</small><button data-act="train" data-id="${u.id}" ${u.skill >= 0.95 || s.money < sim.trainCost(u) ? 'disabled' : ''}>${u.skill >= 0.95 ? 'Максимум' : 'Академия +6% · ' + money(sim.trainCost(u))}</button></div>`).join('')}</div>`;
+    <h3>Слаженность экипажей</h3><div class="grid">${s.units.map(u => `<div class="item"><b>${esc(u.callsign)}${u.player ? ' (вы)' : ''}</b>${roleChip(u)}<small>навык ${Math.round(u.skill * 100)}% · вызовов: ${u.handled}</small><button data-act="train" data-id="${u.id}" ${u.skill >= 0.95 || s.money < sim.trainCost(u) ? 'disabled' : ''}>${u.skill >= 0.95 ? 'Максимум' : 'Академия +6% · ' + money(sim.trainCost(u))}</button></div>`).join('')}</div>`;
   if (tab === 'gear') body = `<p>Снаряжение выдаётся экипажу со склада; более дорогое списывает бюджет. Тяжёлое оружие и спецназ на мелких вызовах раздражают жителей.</p><table class="gear"><tr><th>Экипаж</th><th>Оружие</th><th>Защита</th><th>Спецсредства</th></tr>${s.units.filter(u => VEHICLES[u.type].role !== 'heli').map(u => `<tr><td><b>${esc(u.callsign)}</b><br>${roleChip(u)}</td>${['weapon', 'armor', 'kit'].map(slot => `<td><select data-gear="${u.id}" data-slot="${slot}">${Object.entries(GEAR[slot]).map(([k, g]) => `<option value="${k}" ${u.gear[slot] === k ? 'selected' : ''}>${g.name}${g.cost ? ' · ' + g.cost + ' €' : ''}</option>`).join('')}</select><small>${GEAR[slot][u.gear[slot]].desc}</small></td>`).join('')}</tr>`).join('')}</table>`;
   if (tab === 'policy') body = `<p>Директивы отделения определяют, как экипажи действуют без вас.</p>${Object.entries(POLICY).map(([axis, p]) => `<h3>${p.name}</h3><div class="seg">${Object.entries(p.options).map(([k, n]) => `<button data-act="policy" data-id="${axis}" data-v="${k}" class="${s.policy[axis] === k ? 'on' : ''}">${n}</button>`).join('')}</div><p class="fine">${p.desc[s.policy[axis]]}</p>`).join('')}`;
   if (tab === 'upgrades') body = `<div class="grid">${UPGRADES.map(u => { const owned = s.upgrades[u.id], locked = s.rank < u.rank; return `<div class="item ${owned ? 'owned' : locked ? 'locked' : ''}"><b>${u.name}</b><small>${u.desc}</small><button data-act="buyUpgrade" data-id="${u.id}" ${owned || locked || s.money < u.cost ? 'disabled' : ''}>${owned ? '✓ Установлено' : locked ? 'Нужно звание: ' + RANKS[u.rank].title : 'Купить · ' + money(u.cost)}</button></div>`; }).join('')}</div>`;
   if (tab === 'intel') body = intelHtml();
+  if (tab === 'staff') body = staffHtml();
+  if (tab === 'city') body = cityHtml();
   if (tab === 'career') body = careerHtml();
   openOverlay('shop', `<span class="eyebrow">${manage ? 'ОТДЕЛЕНИЕ' : 'ЛИЧНОЕ ДЕЛО'}</span><h2>${RANKS[s.rank].title} ${esc(s.player.name)}${manage ? ` · бюджет ${money(s.money)}` : ''}</h2>
   <div class="tabs">${tabs.map(([k, n]) => `<button data-act="tab" data-id="${k}" class="${k === tab ? 'on' : ''}">${n}</button>`).join('')}</div>${body}
@@ -251,11 +301,23 @@ function paperHtml(x) {
     <div class="cols">${p.stories.map(([h, t]) => `<div><b>${esc(h)}</b><p>${esc(t)}</p></div>`).join('') || '<div><b>Будни полиции</b><p>Смена прошла без громких происшествий.</p></div>'}</div>
     <div class="poll"><span>Одобряют работу полиции <b>${p.poll.approve}%</b></span><span>Главная тревога: <b>${esc(p.poll.concern)}</b></span><span>Среднее прибытие: <b>${p.poll.response ? p.poll.response + ' мин' : '—'}</b></span><span>Преступность: <b>${p.poll.crime}%</b></span></div></div>`;
 }
+function cityLine(c) {
+  const parts = [];
+  if (c.demand) parts.push(`Поручение мэра «${esc(c.demand)}» — ${c.met ? '<b>выполнено</b>' : 'не выполнено'}.`);
+  if (c.sustained || c.dismissed) parts.push(`Служебные проверки: подтверждено ${c.sustained}, снято ${c.dismissed}.`);
+  if (c.lawsuits) parts.push(`Иски: ${c.lawsuits}, выплачено ${money(c.paid)}.`);
+  if (c.programs) parts.push(`Соседский дозор: −${money(c.programs)}.`);
+  if (c.crisis?.failed) parts.push(`Кризис «${esc(c.crisis.name)}» провален.`);
+  parts.push(`Отношение мэра: ${c.mayor}%.`);
+  return `<p class="${c.met === false || c.lawsuits || c.crisis ? 'notice-bad' : 'citynote'}">${parts.join(' ')}</p>`;
+}
 function showSummary() {
   const s = state, x = s.summary, g = x.grade, manage = sim.canManage(s);
   openOverlay('summary', `<span class="eyebrow">СМЕНА ${x.shift} ОКОНЧЕНА</span><div class="grade ${g.grade}"><b>${g.grade}</b><div><h2>${g.title}</h2><p>${RANKS[s.rank].title} ${esc(s.player.name)} · доверие города ${Math.round(s.trust)}%</p></div></div>
   ${paperHtml(x)}
   <div class="statgrid"><div><strong>${x.stats.own}</strong>ваших вызовов</div><div><strong>+${x.stats.xp}</strong>опыта</div><div><strong>${x.stats.resolved}</strong>решено отделом</div><div><strong>${x.stats.failed + x.stats.missed}</strong>неудач и пропусков</div><div><strong>${x.stats.arrests}</strong>задержаний</div><div><strong>${x.stats.spotted}</strong>замечено патрулями</div><div><strong>${x.stats.unseen}</strong>прошло незамеченным</div><div><strong>${x.stats.injuries}</strong>ранено сотрудников</div></div>
+  ${x.city ? cityLine(x.city) : ''}
+  ${x.quits?.length ? `<p class="notice-bad">Уволились: ${x.quits.map(esc).join(', ')} — их заменили новичками. Следите за моралью во вкладке «Кадры».</p>` : ''}
   <p>${x.mood > 0 ? `Город чувствует себя безопаснее: доверие +${x.mood}.` : x.mood < 0 ? `Преступность высока, жители недовольны: доверие ${x.mood}.` : 'Обстановка в городе без перемен.'}${x.point ? ' <b>Вы получили очко навыка.</b>' : ''}${s.player.points ? ` Свободных очков: ${s.player.points}.` : ''}</p>
   ${manage ? `<div class="fin"><span>Бюджет на конец смены</span><b>${money(x.before)}</b></div><div class="fin"><span>Финансирование города (зависит от доверия)</span><b>+${money(x.grant)}</b></div>${x.bonus ? `<div class="fin"><span>Премия за оценку ${g.grade}</span><b>+${money(x.bonus)}</b></div>` : ''}${x.stats.fines ? `<div class="fin"><span>в том числе штрафы за смену</span><b>${money(x.stats.fines)}</b></div>` : ''}
   <div class="fin"><span>Зарплаты экипажей</span><b>−${money(x.salaries)}</b></div><div class="fin"><span>Обслуживание техники</span><b>−${money(x.upkeep)}</b></div>${x.agents ? `<div class="fin"><span>Информаторы и агенты</span><b>−${money(x.agents)}</b></div>` : ''}<div class="fin"><span><b>Итого в бюджете</b></span><b>${money(x.after)}</b></div>` : ''}
@@ -308,13 +370,21 @@ const actions = {
   rest() { const u = selectedUnit(); if (u) result(sim.sendRest(state, u.id)); refresh(true); },
   dispatchBest, dispatchUnit(d) { const c = selectedCall(); if (c && result(sim.dispatch(state, +d.id, c.id))) view.unit = +d.id; refresh(true); },
   approach(d) { const c = selectedCall(); if (c && c.state === 'choice') result(sim.chooseApproach(state, c.id, +d.i)); refresh(true); },
+  strategy(d) { const c = selectedCall(); if (c) result(sim.setStrategy(state, c.id, d.id)); refresh(true); },
+  forceEntry() { const c = selectedCall(); if (c && result(sim.forceEntry(state, c.id))) audio.alert(); refresh(true); },
   buyUnit(d) { if (result(sim.buyUnit(state, d.id))) { audio.good(); showShop('units'); } }, buyUpgrade(d) { if (result(sim.buyUpgrade(state, d.id))) { audio.good(); showShop('upgrades'); } },
   train(d) { if (result(sim.trainUnit(state, +d.id))) { audio.good(); showShop('units'); } },
+  program(d) { if (result(sim.toggleProgram(state, +d.id))) showShop('city'); },
+  operation(d) { const sel = document.querySelector(`select[data-opdist="${d.k}"]`); if (sel && result(sim.launchOperation(state, d.k, +sel.value))) { audio.good(); showShop('city'); } },
+  focus(d) { if (result(sim.setFocus(state, +d.id, d.f))) refresh(true); },
+  hire(d) { if (result(sim.hireOfficer(state, +d.id))) { audio.good(); showShop('staff'); } },
+  academy(d) { const sel = document.querySelector(`select[data-academy="${d.id}"]`); if (sel && result(sim.trainOfficer(state, +d.id, sel.value))) { audio.good(); showShop('staff'); } },
 };
 document.addEventListener('click', e => { if (e.target.closest('.zone, input, select')) return; const el = e.target.closest('[data-act]'); if (!el) return; audio.unlock(); audio.click(); actions[el.dataset.act]?.(el.dataset); });
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset?.zone && state) { result(sim.setZone(state, +t.dataset.zone, +t.value)); t.blur(); refresh(true); }
+  if (t.dataset?.swap && state && t.value) { const [uid, slot] = t.value.split(':').map(Number); if (result(sim.swapOfficer(state, uid, slot, +t.dataset.swap))) audio.good(); showShop('staff'); }
   if (t.dataset?.gear && state) { if (result(sim.setGear(state, +t.dataset.gear, t.dataset.slot, t.value))) audio.good(); showShop('gear'); }
 });
 for (const type of ['pointerup', 'pointercancel']) document.addEventListener(type, () => { pointerDown = false; }, true);
@@ -390,7 +460,8 @@ function handleEvents(s) {
     if (s !== state) continue;
     if (e.type === 'call') { audio.call(e.sev); if (!view.call) view.call = e.id; }
     else if (e.type === 'dispatch') audio.ack();
-    else if (e.type === 'arrived') { const c = s.calls.find(c => c.id === e.id); if (c && sim.playerDecides(s, c)) { audio.click(); view.call = e.id; toast('Экипаж на месте — выберите действие', ''); } }
+    else if (e.type === 'arrived') { const c = s.calls.find(c => c.id === e.id); if (c && sim.playerDecides(s, c)) { audio.click(); view.call = e.id; toast(e.standoff ? 'Подозреваемый не подчиняется — идут переговоры' : 'Экипаж на месте — выберите действие', e.standoff ? 'bad' : ''); } }
+    else if (e.type === 'surrender') { audio.good(); toast('Подозреваемый сдался!', 'good'); }
     else if (e.type === 'spotted') { view.call = e.id; toast('Ваш экипаж заметил нарушение!', 'good'); }
     else if (e.type === 'resolved') { if (e.own || s.rank >= 3) audio.good(); renderer.popup(e.x, e.y, e.text, true); }
     else if (e.type === 'failed') { if (e.own || s.rank >= 3) audio.bad(); renderer.popup(e.x, e.y, e.text, false); }
@@ -401,6 +472,9 @@ function handleEvents(s) {
     else if (e.type === 'injured') { audio.alert(); renderer.popup(e.x, e.y, 'Сотрудник ранен', false); }
     else if (e.type === 'crash') { audio.bad(); renderer.popup(e.x, e.y, 'Авария в погоне', false); }
     else if (e.type === 'wave') { audio.alert(); toast('Оперативная сводка: волна преступности', 'bad'); }
+    else if (e.type === 'crisis') { audio.alert(); toast('Кризис в городе — подробности во вкладке «Город»', 'bad'); }
+    else if (e.type === 'crisisWon') { audio.rank(); toast('Кризис преодолён!', 'good'); }
+    else if (e.type === 'complaint') { audio.bad(); toast('На полицию подана жалоба', 'bad'); }
     else if (e.type === 'pursuit') { audio.alert(); view.call = e.id; toast('Подозреваемый уходит! Погоня' + (s.spikesLeft && (s.rank >= 1 || s.mode !== 'career') ? ' — шипы: K' : ''), 'bad'); }
     else if (e.type === 'arrest' && e.spike) toast('Беглец налетел на шипы!', 'good');
     else if (e.type === 'rank') { audio.rank(); if (s.mode === 'career' && !overlay) showRankUp(); else toast('Повышение: ' + RANKS[s.rank].title + '!', 'good'); }
