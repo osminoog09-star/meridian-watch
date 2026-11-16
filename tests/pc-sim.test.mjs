@@ -126,7 +126,7 @@ test('an early warrant carries a risk of arresting the wrong person', () => {
   const s = createGame(8, 'X', {mode: 'sandbox'});
   s.cases.push({id: 1, title: 'Убийство', district: 0, evidence: 40, fails: 0, state: 'open', nextAt: Infinity, opened: s.t, search: {x: 1, y: 1, r: 450}});
   assert.equal(sim.arrestNow(s, 1).ok, false);
-  s.cases[0].evidence = 55; assert.ok(sim.arrestNow(s, 1).ok);
+  s.cases[0].evidence = 55; let r; for (let i = 0; i < 30 && !(r = sim.arrestNow(s, 1)).ok; i++) { assert.ok(r.denied); assert.equal(sim.arrestNow(s, 1).ok, false); s.shift++; } assert.ok(r.ok); // судья может отказать — повтор в следующую смену
   const raid = s.calls.find(c => c.type === 'raid'); assert.ok(raid.innocentRisk > 0.25 && raid.innocentRisk < 0.35);
 });
 
@@ -268,4 +268,44 @@ test('routine delegation: minor calls are decided by the partner', () => {
   for (let k = 0; k < 4000 && c.state !== 'done'; k++) tick(s, 2);
   assert.equal(c.state, 'done');
   assert.equal(deserialize(serialize(s)).player.routine, true);
+});
+
+test('nine skills, personas and spec abilities; old saves migrate', () => {
+  const s = createGame(201, 'Тест', {mode: 'sandbox'});
+  const o = sim.allOfficers(s)[0];
+  assert.equal(Object.keys(o.skills).length, Object.keys(sim.SKILLS).length);
+  assert.ok(sim.allOfficers(s).some(x => x.persona && sim.PERSONAS[x.persona]));
+  for (const k of Object.keys(sim.SPEC_ABILITY)) assert.ok(sim.SPECS[k]);
+  const u = s.units[0]; u.crew[0].spec = 'patrol'; u.crew[0].level = 6; assert.ok(sim.hasAbility([u], 'patrol'));
+  // сохранение версии 4 без новых навыков
+  const old = JSON.parse(serialize(s)); old.v = 4; delete old.union; for (const x of old.units) for (const c of x.crew) { delete c.skills.shoot; delete c.skills.calm; delete c.persona; }
+  const back = deserialize(JSON.stringify(old));
+  assert.equal(back.v, sim.SAVE_VERSION); assert.ok(back.union); assert.equal(back.units[0].crew[0].skills.shoot, 2);
+});
+
+test('investigation: interrogation once per shift, court verdict at shift end', () => {
+  const s = createGame(202, 'Тест', {mode: 'sandbox'});
+  s.cases.push({id: 1, title: 'Кража', district: 0, evidence: 30, fails: 0, state: 'open', nextAt: Infinity, opened: s.t, search: {x: 1, y: 1, r: 450}});
+  assert.equal(sim.interrogate(s, 1).ok, false, 'needs 40% evidence');
+  s.cases[0].evidence = 45; const r = sim.interrogate(s, 1); assert.ok(r.ok);
+  assert.equal(sim.interrogate(s, 1).ok, false, 'once per shift');
+  s.cases[0].state = 'court'; s.cases[0].conviction = 1; s.auto = true;
+  for (let n = 0; n < 9000 && s.phase === 'shift'; n++) tick(s, 4);
+  assert.equal(s.cases[0].state, 'solved'); assert.ok(s.summary.court.some(v => v.id === 1 && v.guilty));
+});
+
+test('union demands a raise; refusing may lead to a strike; council sets the budget', () => {
+  const s = createGame(203, 'Тест', {mode: 'sandbox'}); s.auto = true;
+  s.union.nextTalks = 2; s.union.mood = 40;
+  for (let n = 0; n < 9000 && s.phase === 'shift'; n++) tick(s, 4);
+  startNextShift(s); assert.ok(s.union.pending?.ask > 0);
+  const ask = s.union.pending.ask;
+  assert.ok(sim.answerUnion(s, 'refuse').ok); assert.equal(s.union.raise, 0); assert.equal(s.union.strike, 1);
+  for (let n = 0; n < 9000 && s.phase === 'shift'; n++) tick(s, 4);
+  startNextShift(s); assert.ok(s.units.some(u => u.status === 'strike'));
+  s.union.pending = {ask}; sim.answerUnion(s, 'accept'); assert.equal(s.union.raise, ask); assert.ok(sim.wageFactor(s) > 1);
+  // бюджетный год
+  s.city.budgetAt = s.career.shifts + 1;
+  for (let n = 0; n < 9000 && s.phase === 'shift'; n++) tick(s, 4);
+  assert.ok(s.summary.council && [0.85, 1, 1.15].includes(s.summary.council.factor));
 });

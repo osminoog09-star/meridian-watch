@@ -14,7 +14,7 @@ import {callType} from './sim.js';
 import {AREA, poly} from './basemap.js';
 
 const M = METRES, SEV = ['#ffffff', '#ffd166', '#ff9f43', '#ff4d5e'];
-const STATUS_COLOR = {patrol: '#5fd3c4', hold: '#9fb3bf', enroute: '#ffb347', onscene: '#ffe08a', pursuit: '#ff4d5e', transport: '#c59bff', booking: '#c59bff', returning: '#8fa4b0', resting: '#6f8792', injured: '#ff8a94'};
+const STATUS_COLOR = {patrol: '#5fd3c4', hold: '#9fb3bf', enroute: '#ffb347', onscene: '#ffe08a', pursuit: '#ff4d5e', transport: '#c59bff', booking: '#c59bff', returning: '#8fa4b0', resting: '#6f8792', injured: '#ff8a94', strike: '#d39a5c'};
 const lin = hex => new THREE.Color(hex);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };

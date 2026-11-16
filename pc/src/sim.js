@@ -4,7 +4,7 @@
 import {CALLS, RANKS, VEHICLES, ROLES, GEAR, DEFAULT_GEAR, POLICY, DEFAULT_POLICY, UPGRADES, PERKS, CASE_TYPES, DIFFICULTY, CHALLENGES, SURNAMES, INITIALS, PAPER} from './content.js';
 import {METRES, STATION, DISTRICTS, callNodes, districtNodes, nodeById, nearestNode, route, routeSeconds, edgeBetween, placeName} from './world.js';
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const SHIFT_SECONDS = 8 * 3600;
 const MIN = 60;
 
@@ -17,15 +17,32 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) * METRES;
 
 // ---------- создание ----------
 const CREW_TRAITS = {patrol: ['talk', 'drive', 'invest', 'force'], traffic: ['drive', 'drive', 'talk'], detective: ['invest', 'invest', 'talk'], swat: ['force', 'force', 'drive'], heli: ['drive', 'invest']};
-export const SKILLS = {talk: 'Переговоры', drive: 'Вождение', invest: 'Расследование', force: 'Сила', fitness: 'Физподготовка'};
+export const SKILLS = {talk: 'Переговоры', drive: 'Вождение', invest: 'Расследование', force: 'Сила', fitness: 'Физподготовка', shoot: 'Стрельба', tactics: 'Тактика', observe: 'Наблюдательность', calm: 'Стрессоустойчивость'};
+export const SKILL_HELP = {talk: 'шансы мирных решений и переговоров', drive: 'погони и выезды', invest: 'улики и расследования', force: 'силовые задержания', fitness: 'выносливость',
+  shoot: 'перестрелки: меньше ранений, выше шанс', tactics: 'вооружённые вызовы и противостояния: стабильность падает медленнее', observe: 'замечает скрытые преступления издалека', calm: 'меньше копит стресс'};
+// черты характера: у большинства сотрудников есть одна
+export const PERSONAS = {
+  hothead: {name: 'Вспыльчивый', desc: 'Силовые задержания +4%, но чаще жалобы.'},
+  careful: {name: 'Осторожный', desc: 'Реже получает ранения.'},
+  sharp: {name: 'Внимательный', desc: 'Замечает скрытые преступления на 15% дальше.'},
+  empath: {name: 'Душевный', desc: 'Сильнее в переговорах.'},
+  steady: {name: 'Невозмутимый', desc: 'Стресс копится на 30% медленнее.'},
+};
+// умения специализаций с 6-го уровня
+export const SPEC_ABILITY = {patrol: 'Наставник: младшие в экипаже учатся вдвое быстрее', traffic: 'Перехватчик: выезды на 5% быстрее', detective: 'Криминалист: улики по делам на 25% быстрее',
+  swat: 'Штурмовик: экипаж реже ранят в перестрелках', medic: 'Медик: экипаж реже ранят и меньше копит стресс'};
+const crewOf = units => units.flatMap(u => u.crew.filter(o => !o.injured));
+const bestSkill = (units, k) => Math.max(1, ...crewOf(units).map(o => o.skills?.[k] ?? 2));
+const hasPersona = (units, p) => crewOf(units).some(o => o.persona === p);
+export const hasAbility = (units, spec) => crewOf(units).some(o => o.spec === spec && (o.level ?? 0) >= 6);
 export const SPECS = {patrol: 'Патрульный', traffic: 'Инспектор ДПС', detective: 'Следователь', swat: 'Тактик', medic: 'Медик'};
-const SPEC_FOR = {talk: 'patrol', drive: 'traffic', invest: 'detective', force: 'swat', fitness: 'medic'};
+const SPEC_FOR = {talk: 'patrol', drive: 'traffic', invest: 'detective', force: 'swat', fitness: 'medic', shoot: 'swat', tactics: 'swat', observe: 'patrol', calm: 'patrol'};
 const topSkill = o => Object.entries(o.skills).filter(([k]) => k !== 'fitness').sort((a, b) => b[1] - a[1])[0][0];
 // офицер — отдельный человек: навыки 1–5, опыт и уровень, специализация, стресс, мораль
 export function makeOfficer(s, focus = null, level = 0) {
   const skills = {}; for (const k of Object.keys(SKILLS)) skills[k] = Math.round((1.2 + rnd(s) * 1.6) * 10) / 10;
   const main = focus ?? pick(s, ['talk', 'drive', 'invest', 'force']); skills[main] = Math.min(5, skills[main] + 1 + rnd(s));
-  const o = {id: s.nextOfficer++, name: pick(s, INITIALS) + ' ' + pick(s, SURNAMES), skills, xp: level * 100, level, spec: null, morale: 70 + rnd(s) * 20, stress: 5 + rnd(s) * 10, injured: false, trait: main};
+  const o = {id: s.nextOfficer++, name: pick(s, INITIALS) + ' ' + pick(s, SURNAMES), skills, xp: level * 100, level, spec: null, morale: 70 + rnd(s) * 20, stress: 5 + rnd(s) * 10, injured: false, trait: main, persona: rnd(s) < 0.7 ? pick(s, Object.keys(PERSONAS)) : null};
   o.trait = topSkill(o); if (level >= 3) o.spec = SPEC_FOR[o.trait];
   return o;
 }
@@ -53,7 +70,7 @@ export function createGame(seed = (Date.now() & 0x7fffffff), name = 'Вы', opts
     weather: 'clear', wave: null, nextWaveAt: 0, challenge: challenge ? {id: opts.challenge, shiftsLeft: challenge.shifts} : null, challengeStats: {pursuitArrests: 0, injuries: 0},
     nextId: 1, nextUnit: 1, nextOfficer: 1, reserve: [], candidates: [], nextCallAt: 0, tutorial: mode === 'career' ? 0 : 2, events: [],
     stats: newStats(), career: {resolved: 0, failed: 0, arrests: 0, shifts: 0, solved: 0, own: 0},
-    city: newCity(), programs: {}, op: null, crisis: null};
+    city: newCity(), programs: {}, op: null, crisis: null, union: newUnion()};
   for (const d of s.districts) if (d.crime === 0) d.crime = 24 + rnd(s) * 30;
   if (mode === 'career') {
     s.units.push(makeUnit(s, 'sedan'), makeUnit(s, 'sedan'), makeUnit(s, 'sedan'));
@@ -147,7 +164,7 @@ export function advance(m, dt, factor) {
 
 // ---------- расчёты для интерфейса ----------
 const weatherSpeed = s => s.weather === 'rain' ? 0.92 : 1;
-function emergencyFactor(s, u) { return (u.focus === 'response' ? 1.1 : 1) * 1.6 * VEHICLES[u.type].speed * (s.upgrades.nav ? 1.1 : 1) * (u.player ? 1 + 0.05 * s.player.perks.drive : 1) * (GEAR.armor[u.gear?.armor]?.speed ?? 1) * weatherSpeed(s); }
+function emergencyFactor(s, u) { return (u.focus === 'response' ? 1.1 : 1) * (hasAbility([u], 'traffic') ? 1.05 : 1) * 1.6 * VEHICLES[u.type].speed * (s.upgrades.nav ? 1.1 : 1) * (u.player ? 1 + 0.05 * s.player.perks.drive : 1) * (GEAR.armor[u.gear?.armor]?.speed ?? 1) * weatherSpeed(s); }
 export function eta(s, u, target) {
   if (isHeli(u)) return dist(u, target) / (55 * VEHICLES[u.type].speed * 1.6);
   const start = u.path.length ? u.path[0] : u.node, path = route(start, target);
@@ -178,6 +195,9 @@ export function successChance(s, call, index, units = unitsOn(s, call)) {
     if (a.trait === 'force') p += Math.max(0, ...gear('weapon').map(w => GEAR.weapon[w]?.force ?? 0));
     if (call.reaction === 'fight' && a.trait === 'force') p += Math.max(0, ...gear('weapon').map(w => GEAR.weapon[w]?.fight ?? 0));
     if (gear('kit').includes('radar') && TRAFFIC.has(call.type)) p += 0.15;
+    if (a.trait === 'force' && hasPersona(units, 'hothead')) p += 0.04;
+    if (call.reaction === 'fight' && a.trait === 'force') p += (bestSkill(units, 'shoot') - 2) * 0.03;
+    if (type.armed) p += (bestSkill(units, 'tactics') - 2) * 0.02;
     if (s.op?.kind === 'sting' && s.op.district === call.district && ['drugs', 'gang'].includes(call.type)) p += 0.15;
     if (gear('kit').includes('medkit') && (a.med || call.type === 'injury')) p += 0.15;
     if (gear('kit').includes('forensics') && a.trait === 'invest') p += 0.15;
@@ -324,13 +344,36 @@ export function toggleUndercover(s, k) {
   if (districtsUsed(s.undercover) >= undercoverSlots(s)) return {ok: false, message: undercoverSlots(s) ? 'Все агенты уже внедрены. Отзовите одного.' : 'Агентов под прикрытием дают со звания «Сержант».'};
   s.undercover[k] = true; say(s, `Агент под прикрытием внедрён: ${DISTRICTS[k].name}.`, 'good'); return {ok: true};
 }
+// ордер: судья смотрит на улики; отказ — до следующей смены
+export const warrantChance = k => clamp((k.evidence - 30) / 60, 0.1, 0.97);
 export function arrestNow(s, caseId) {
   const k = s.cases.find(k => k.id === caseId);
   if (!k || k.state !== 'open') return {ok: false};
   if (s.rank < 2) return {ok: false, message: 'Ордер на арест подписывают со звания «Старший патрульный».'};
   if (k.evidence < 50) return {ok: false, message: 'Для ордера нужно хотя бы 50% улик.'};
   if (s.calls.some(c => c.caseId === k.id && c.state !== 'done')) return {ok: false, message: 'По делу уже идёт выезд.'};
-  spawnRaid(s, k); return {ok: true};
+  if (k.deniedShift === s.shift) return {ok: false, message: 'Судья уже отказал сегодня. Соберите больше улик и попробуйте в следующую смену.'};
+  if (rnd(s) >= warrantChance(k)) { k.deniedShift = s.shift; say(s, `Дело №${k.id}: судья отказал в ордере — улик недостаточно.`, 'bad'); return {ok: false, message: 'Судья отказал в ордере. Нужно больше улик.', denied: true}; }
+  say(s, `Дело №${k.id}: судья подписал ордер.`, 'good'); spawnRaid(s, k); return {ok: true};
+}
+// допрос подозреваемого: с 40% улик, раз в смену по делу; ведёт лучший переговорщик-следователь
+export function interrogate(s, caseId) {
+  const k = s.cases.find(k => k.id === caseId);
+  if (!k || k.state !== 'open') return {ok: false};
+  if (s.rank < 2) return {ok: false, message: 'Допросы ведут со звания «Старший патрульный».'};
+  if (k.evidence < 40) return {ok: false, message: 'Подозреваемый ещё не установлен: нужно хотя бы 40% улик.'};
+  if (k.askedShift === s.shift) return {ok: false, message: 'По этому делу сегодня уже допрашивали.'};
+  k.askedShift = s.shift;
+  const people = allOfficers(s).filter(o => !o.injured), lead = people.reduce((b, o) => (!b || (o.skills.talk + (o.skills.invest ?? 2) * 0.5) > (b.skills.talk + (b.skills.invest ?? 2) * 0.5) ? o : b), null);
+  const skill = lead ? lead.skills.talk + (lead.persona === 'empath' ? 0.5 : 0) + (lead.spec === 'detective' ? 0.5 : 0) : 2;
+  const r = rnd(s), p = clamp(0.3 + (skill - 2) * 0.1 - (k.lawyer ? 0.15 : 0), 0.1, 0.85);
+  let text;
+  if (r < p * 0.2) { k.evidence = 100; text = 'подозреваемый сознался!'; }
+  else if (r < p) { k.evidence = Math.min(100, k.evidence + 18 + rnd(s) * 8); text = `путается в показаниях, улик ${Math.round(k.evidence)}%.`; }
+  else { k.evidence = Math.max(0, k.evidence - 5); k.lawyer = true; text = 'молчит и вызвал адвоката. Следующие допросы будут тяжелее.'; }
+  if (lead) lead.skills.talk = Math.min(5, lead.skills.talk + 0.03);
+  say(s, `Дело №${k.id}: допрос ведёт ${lead ? lead.name : 'дежурный'} — ${text}`, r < p ? 'good' : 'bad');
+  return {ok: true, success: r < p, text};
 }
 
 // ---------- покупки и снаряжение (с лейтенанта) ----------
@@ -532,12 +575,15 @@ function credit(units, c = null, success = true) { // экипажи и люди
     const senior = Math.max(...u.crew.map(o => o.level ?? 0));
     for (const o of u.crew) {
       if (!o.skills || o.injured) continue;
-      const mentor = senior - (o.level ?? 0) >= 2 ? 1.5 : 1; // младший рядом со старшим учится быстрее
+      const mentor = senior - (o.level ?? 0) >= 2 ? (hasAbility([u], 'patrol') ? 2 : 1.5) : 1; // младший рядом со старшим учится быстрее
       o.skills[trait] = Math.min(5, o.skills[trait] + 0.05 * mentor * (success ? 1 : 0.5)); o.skills.fitness = Math.min(5, o.skills.fitness + 0.01);
       o.xp += ((type?.sev ?? 1) * 8 + (success ? 6 : 2)) * mentor;
       const lvl = Math.min(10, Math.floor(o.xp / 100)); if (lvl > o.level) { o.level = lvl; if (lvl >= 3 && !o.spec && !o.player) o.spec = SPEC_FOR[topSkill(o)]; }
       if (!o.player) o.trait = topSkill(o);
-      o.stress = clamp(o.stress + (violent ? 18 : type?.sev === 3 ? 8 : 2), 0, 100);
+      if (violent) { o.skills.shoot = Math.min(5, (o.skills.shoot ?? 2) + 0.04 * mentor); o.skills.tactics = Math.min(5, (o.skills.tactics ?? 2) + 0.02 * mentor); }
+      if (c?.hadStandoff) o.skills.tactics = Math.min(5, (o.skills.tactics ?? 2) + 0.04 * mentor);
+      const stressGain = (violent ? 18 : type?.sev === 3 ? 8 : 2) * Math.max(0.4, 1 - 0.1 * ((o.skills.calm ?? 2) - 2)) * (o.persona === 'steady' ? 0.7 : 1) * (hasAbility([u], 'medic') ? 0.85 : 1);
+      o.stress = clamp(o.stress + stressGain, 0, 100); if (stressGain > 5) o.skills.calm = Math.min(5, (o.skills.calm ?? 2) + 0.02);
       o.morale = clamp(o.morale + (success ? 1.5 : -2.5), 0, 100);
     }
   }
@@ -553,7 +599,8 @@ function injure(s, u, cause) {
 function shootout(s, c, on) {
   const medic = on.some(u => u.gear?.kit === 'medkit');
   for (const u of on) {
-    const p = 0.22 * (GEAR.armor[u.gear?.armor]?.injury ?? 1) * (roleOf(u) === 'swat' ? 0.5 : 1) * (s.policy.force === 'soft' ? 0.85 : 1) * (medic ? 0.6 : 1);
+    const p = 0.22 * (GEAR.armor[u.gear?.armor]?.injury ?? 1) * (roleOf(u) === 'swat' ? 0.5 : 1) * (s.policy.force === 'soft' ? 0.85 : 1) * (medic ? 0.6 : 1)
+      * Math.max(0.6, 1 - 0.06 * (bestSkill([u], 'shoot') - 2)) * (hasPersona([u], 'careful') ? 0.75 : 1) * (hasAbility([u], 'swat') ? 0.8 : 1) * (hasAbility([u], 'medic') ? 0.85 : 1);
     if (rnd(s) < p) injure(s, u, callType(c).name.toLowerCase());
   }
 }
@@ -597,6 +644,7 @@ const STANDOFF_TYPES = new Set(['domestic', 'suspicious', 'fight', 'drugs', 'ass
 export function negotiationSkill(s, u) {
   let n = Math.max(...u.crew.filter(o => !o.injured).map(o => o.skills?.talk ?? 2), 1) * 0.8 + Math.max(0, (u.skill - 0.55) * 3);
   if (roleOf(u) === 'detective') n += 0.5;
+  if (hasPersona([u], 'empath')) n += 0.5;
   if (u.player) n += 0.5 * s.player.perks.talk;
   if (s.upgrades.talk) n += 1;
   if (s.policy.force === 'soft') n += 0.5;
@@ -606,7 +654,7 @@ const negotiator = (s, c) => unitsOn(s, c).reduce((best, u) => (!best || negotia
 function startStandoff(s, c) {
   const type = callType(c), angry = c.reaction === 'fight' || rnd(s) < (type.armed ? 0.5 : 0.25);
   const willpower = Math.min(5, 1 + (type.armed ? 1 : 0) + (type.sev === 3 ? 1 : 0) + (c.type === 'hostage' ? 1 : 0) + Math.floor(rnd(s) * 2));
-  c.state = 'standoff'; c.standoff = {compliance: 0, stability: 100, willpower, agitation: 1 + (angry ? 1 : 0) + (type.armed ? 1 : 0), angry, strategy: 'negotiate', started: s.t};
+  c.hadStandoff = true; c.state = 'standoff'; c.standoff = {compliance: 0, stability: 100, willpower, agitation: 1 + (angry ? 1 : 0) + (type.armed ? 1 : 0), angry, strategy: 'negotiate', started: s.t};
   say(s, `${type.name}: подозреваемый не подчиняется${type.armed ? ' и вооружён' : ''}. Начинаем переговоры.`, 'alert');
 }
 export function setStrategy(s, callId, strategy, by = 'player') {
@@ -643,7 +691,7 @@ function tickStandoff(s, c, dt) {
     if (so.strategy === 'force') { forceEntry(s, c.id, 'ai'); return; }
   }
   const calming = so.strategy === 'time' ? 2 : 1, agitation = Math.max(0, so.agitation + (so.angry ? 1 : 0) - calming);
-  so.stability -= agitation * 0.05 * dt;
+  so.stability -= agitation * 0.05 * Math.max(0.55, 1 - 0.07 * (bestSkill(on, 'tactics') - 2)) * dt;
   if (so.strategy === 'negotiate') so.compliance += Math.max(0.04, 0.16 + (skill - so.willpower) * 0.05) * (0.7 + rnd(s) * 0.6) * dt;
   if (so.strategy === 'time') so.stability += 0.25 * dt;
   if (so.strategy === 'rapport') { so.willpower = Math.max(0.5, so.willpower - 0.0025 * dt); so.compliance += 0.03 * dt; if (so.angry && rnd(s) < perMinute(0.15, dt)) so.angry = false; }
@@ -679,24 +727,35 @@ function caseProgress(s, c, success) {
   if (!k || k.state !== 'open') return;
   const on = unitsFor(s, c).concat(unitsOn(s, c));
   if (c.type === 'raid') {
-    if (success && rnd(s) < (c.innocentRisk ?? 0)) {
-      k.state = 'cold'; trustLoss(s, 6); s.stats.wrongful++; note(s, 'wrongful', k.title);
-      say(s, `Дело №${k.id}: суд оправдал задержанного — улик не хватило. Доверие подорвано.`, 'bad'); emit(s, {type: 'wrongful'}); return;
-    }
-    if (success) {
-      k.state = 'solved'; trustGain(s, 4); if (canManage(s)) { s.money += 200; s.stats.income += 200; } s.stats.solved++; s.career.solved++;
-      crimeShift(s, k.district, -14); gainXp(s, c.own ? 40 : s.rank >= 3 ? 20 : 0); note(s, 'solved', k.title);
-      say(s, `Дело №${k.id} раскрыто! Преступность в районе ${DISTRICTS[k.district].name} заметно упала.`, 'good'); emit(s, {type: 'solved'}); return;
+    if (success) { // задержанный передан в суд
+      k.state = 'court'; k.conviction = 1 - (c.innocentRisk ?? 0); k.ownArrest = c.own;
+      say(s, `Дело №${k.id}: подозреваемый задержан и передан в суд. Приговор — в конце смены.`, 'good'); emit(s, {type: 'court'}); return;
     }
     if (++k.fails >= 3) { k.state = 'cold'; say(s, `Дело №${k.id} зашло в тупик и отправлено в архив.`, 'bad'); } else k.nextAt = s.t + 15 * MIN;
     return;
   }
   if (success) {
-    const gain = 22 + (on.some(u => roleOf(u) === 'detective') ? 14 : 0) + (on.some(u => u.gear?.kit === 'forensics') ? 8 : 0);
+    const gain = (22 + (on.some(u => roleOf(u) === 'detective') ? 14 : 0) + (on.some(u => u.gear?.kit === 'forensics') ? 8 : 0)) * (hasAbility(on, 'detective') ? 1.25 : 1);
     k.evidence = Math.min(100, k.evidence + gain); k.nextAt = s.t + (8 + rnd(s) * 10) * MIN;
     say(s, `Дело №${k.id}: зацепка подтвердилась, улик ${Math.round(k.evidence)}%.`, 'good');
   } else if (++k.fails >= 3) { k.state = 'cold'; trustLoss(s, 2); say(s, `Дело №${k.id} зашло в тупик и отправлено в архив.`, 'bad'); }
   else { k.nextAt = s.t + 15 * MIN; say(s, `Дело №${k.id}: след потерян, ищем новую зацепку.`, 'info'); }
+}
+// суд в конце смены: обвинительный приговор или оправдание
+function courtVerdicts(s) {
+  const out = [];
+  for (const k of s.cases) {
+    if (k.state !== 'court') continue;
+    if (rnd(s) < (k.conviction ?? 1)) {
+      k.state = 'solved'; trustGain(s, 4); if (canManage(s)) { s.money += 200; s.stats.income += 200; } s.stats.solved++; s.career.solved++;
+      crimeShift(s, k.district, -14); gainXp(s, k.ownArrest ? 40 : s.rank >= 3 ? 20 : 0); note(s, 'solved', k.title);
+      say(s, `Суд: по делу №${k.id} вынесен обвинительный приговор. Преступность в районе ${DISTRICTS[k.district].name} заметно упала.`, 'good'); out.push({id: k.id, title: k.title, guilty: true});
+    } else {
+      k.state = 'cold'; trustLoss(s, 6); s.stats.wrongful++; note(s, 'wrongful', k.title);
+      say(s, `Суд оправдал задержанного по делу №${k.id} — улик не хватило. Доверие подорвано.`, 'bad'); out.push({id: k.id, title: k.title, guilty: false});
+    }
+  }
+  return out;
 }
 function tickCases(s, dt) {
   for (const k of s.cases) {
@@ -705,7 +764,7 @@ function tickCases(s, dt) {
     let rate = s.informants[k.district] ? 3 : 0;
     for (const u of s.units) {
       if (!['patrol', 'hold'].includes(u.status) || isHeli(u) || Math.hypot(u.x - k.search.x, u.y - k.search.y) * METRES > k.search.r) continue;
-      rate += (roleOf(u) === 'detective' ? 4.5 : u.type === 'k9' ? 3 : 1.2) * (u.gear?.kit === 'forensics' ? 1.6 : 1);
+      rate += (roleOf(u) === 'detective' ? 4.5 : u.type === 'k9' ? 3 : 1.2) * (u.gear?.kit === 'forensics' ? 1.6 : 1) * (hasAbility([u], 'detective') ? 1.25 : 1) * (1 + 0.05 * (bestSkill([u], 'invest') - 2));
     }
     k.evidence = Math.min(100, k.evidence + rate * dt / 3600);
     if (s.calls.some(c => c.caseId === k.id && c.state !== 'done')) continue;
@@ -731,6 +790,7 @@ function tickHidden(s, dt) {
     for (const u of s.units) {
       if (['resting', 'injured', 'booking', 'transport', 'onscene'].includes(u.status)) continue;
       let r = SPOT[roleOf(u)] ?? 170; if (u.type === 'k9') r = 200;
+      r *= 1 + 0.08 * (bestSkill([u], 'observe') - 2) + (hasPersona([u], 'sharp') ? 0.15 : 0);
       if (u.gear?.kit === 'radar' && TRAFFIC.has(c.type)) r *= 2;
       if (u.focus === 'traffic' && TRAFFIC.has(c.type)) r *= 1.7;
       if (dist(u, c) <= r) { spotter = u; break; }
@@ -746,6 +806,7 @@ function tickHidden(s, dt) {
     if (spotter) {
       c.state = 'pending'; c.onView = true; c.created = s.t; c.deadline = s.t + c.wait; s.stats.spotted++;
       announce(s, c);
+      if (spotter !== 'intel') for (const o of spotter.crew) o.skills.observe = Math.min(5, (o.skills.observe ?? 2) + 0.05);
       if (spotter !== 'intel' && !spotter.player && isFree(spotter) && canTake(spotter, c) && (!canCommand(s, spotter) || s.auto)) dispatch(s, spotter.id, c.id, 'ai');
       if (spotter.player) emit(s, {type: 'spotted', id: c.id});
       continue;
@@ -777,7 +838,19 @@ export const CRISES = {
   scandal: {name: 'Коррупционный скандал', goal: 'Три смены подряд без подтверждённых жалоб и ошибочных арестов', need: 3, shifts: 4, clean: true},
 };
 export const crisisGoal = k => CRISES[k.kind].anywhere ? CRISES[k.kind].goal : `${CRISES[k.kind].goal} ${DISTRICTS[k.district].name}`;
-const newCity = () => ({mayor: 60, demand: null, cut: 0, complaints: [], nextComplaint: 1});
+const newCity = () => ({mayor: 60, demand: null, cut: 0, complaints: [], nextComplaint: 1, council: 1, budgetAt: 7});
+const newUnion = () => ({mood: 60, raise: 0, nextTalks: 5, pending: null, strike: 0});
+export const wageFactor = s => 1 + (s.union?.raise ?? 0) / 100;
+// профсоюз: раз в 5–6 смен требует прибавку; ответ — согласиться, компромисс или отказать
+export function answerUnion(s, choice) {
+  const u = s.union, ask = u?.pending?.ask; if (!ask) return {ok: false};
+  if (!canManage(s)) return {ok: false, message: 'С профсоюзом договаривается начальник отделения.'};
+  const all = allOfficers(s).filter(o => !o.player), morale = d => { for (const o of all) o.morale = clamp(o.morale + d, 0, 100); };
+  if (choice === 'accept') { u.raise += ask; morale(10); u.mood = clamp(u.mood + 15, 0, 100); say(s, `Профсоюз: прибавка ${ask}% согласована. Люди довольны.`, 'good'); }
+  else if (choice === 'half') { u.raise += Math.round(ask / 2); morale(4); u.mood = clamp(u.mood + 3, 0, 100); say(s, `Профсоюз: сошлись на ${Math.round(ask / 2)}%.`, 'info'); }
+  else { morale(-10); u.mood = clamp(u.mood - 20, 0, 100); say(s, 'Профсоюз: в прибавке отказано. Сотрудники недовольны.', 'bad'); if (u.mood < 35) { u.strike = 1; say(s, 'Профсоюз объявил забастовку на следующую смену!', 'alert'); } }
+  u.pending = null; u.nextTalks = s.shift + 5 + Math.floor(rnd(s) * 2); return {ok: true};
+}
 const liveDistricts = s => s.districts.map((d, k) => k).filter(k => districtNodes[k].length);
 function worstDistrict(s) { return liveDistricts(s).sort((a, b) => s.districts[b].crime - s.districts[a].crime)[0] ?? 0; }
 function newDemand(s) {
@@ -794,11 +867,11 @@ export function demandMet(s) {
   if (d.kind === 'clean') return (st.complaints ?? 0) === 0;
   return st.arrests >= (d.need ?? 6);
 }
-export const grantFactor = s => s.city.cut > 0 ? 0.7 : s.city.mayor >= 80 ? 1.15 : 1;
+export const grantFactor = s => (s.city.cut > 0 ? 0.7 : s.city.mayor >= 80 ? 1.15 : 1) * (s.city.council ?? 1);
 function maybeComplaint(s, c, on) {
   const a = callType(c).approaches[c.approach]; if (!a || (a.trait !== 'force' && c.reaction !== 'fight')) return;
   const op = s.op?.kind === 'crackdown' && s.op.district === c.district;
-  const p = 0.07 + (s.policy.force === 'hard' ? 0.08 : s.policy.force === 'soft' ? -0.04 : 0) + (op ? 0.12 : 0);
+  const p = 0.07 + (s.policy.force === 'hard' ? 0.08 : s.policy.force === 'soft' ? -0.04 : 0) + (op ? 0.12 : 0) + (hasPersona(on, 'hothead') ? 0.06 : 0);
   if (rnd(s) >= p) return;
   const people = on.flatMap(u => u.crew).filter(o => !o.player), o = people.length ? pick(s, people) : null;
   s.city.complaints.push({id: s.city.nextComplaint++, officer: o?.name ?? 'экипаж', officerId: o?.id ?? null, call: callType(c).name, shift: s.shift, state: 'open'});
@@ -934,6 +1007,7 @@ function tickUnit(s, u, dt) {
       advance(u, dt, 1.1 * sp); u.fatigue += 6 * tire;
       if (!u.path.length) { u.status = 'booking'; u.busyUntil = s.t + 6 * MIN; }
       break;
+    case 'strike': if (s.t >= u.busyUntil) { u.status = 'patrol'; say(s, `${u.callsign}: забастовка окончена, выходим на линию.`, 'unit'); } break;
     case 'booking': if (s.t >= u.busyUntil) { u.status = 'patrol'; say(s, `${u.callsign}: задержанный оформлен, снова на линии.`, 'unit'); } break;
     case 'returning': advance(u, dt, 1 * sp); if (!u.path.length) u.status = 'resting'; break;
     case 'resting': u.fatigue = Math.max(0, u.fatigue - 150 * dt / 3600); for (const o of u.crew) o.stress = Math.max(0, o.stress - 40 * dt / 3600); if (u.fatigue <= 8) { u.status = 'patrol'; say(s, `${u.callsign}: отдохнули, выходим на линию.`, 'unit'); } break;
@@ -1081,14 +1155,23 @@ function newspaper(s, grade, crime, mood) {
 }
 function endShift(s) {
   const grade = shiftGrade(s.stats), ch = s.challenge && CHALLENGES[s.challenge.id], crime = cityCrime(s);
-  const grant = Math.round((200 + s.trust * 5) * (ch?.grant ?? 1) * grantFactor(s)), salaries = Math.round(allOfficers(s).filter(o => !o.player).reduce((n, o) => n + officerSalary(o), 0)), upkeep = s.units.length * 60 + (s.units.some(isHeli) ? 400 : 0);
+  const court = courtVerdicts(s);
+  const grant = Math.round((200 + s.trust * 5) * (ch?.grant ?? 1) * grantFactor(s)), salaries = Math.round(allOfficers(s).filter(o => !o.player).reduce((n, o) => n + officerSalary(o), 0) * wageFactor(s)), upkeep = s.units.length * 60 + (s.units.some(isHeli) ? 400 : 0);
   const agents = districtsUsed(s.informants) * 150 + districtsUsed(s.undercover) * 250;
   const rawMood = Math.round((42 - crime) / 9) - (s.trust > 80 ? 1 : 0) - (s.trust > 92 ? 1 : 0), mood = s.trust > 70 ? Math.min(2, rawMood) : rawMood, point = ['A', 'B'].includes(grade.grade) && s.stats.own >= 3 ? 1 : 0, manage = canManage(s);
   s.summary = {shift: s.shift, stats: {...s.stats, events: [...s.stats.events]}, grade, grant, salaries, upkeep, agents: manage ? agents : 0, bonus: grade.bonus, before: s.money, crime, mood, point,
     response: s.stats.responseN ? s.stats.responseSum / s.stats.responseN : 0, weather: s.weather};
   if (manage) s.money = Math.max(0, s.money + grant + grade.bonus - salaries - upkeep - agents);
   s.trust = clamp(s.trust + mood + (grade.grade === 'A' ? 2 : 0), 0, 100); s.player.points += point;
-  s.summary.city = cityEndShift(s, manage);
+  s.summary.city = cityEndShift(s, manage); s.summary.court = court;
+  // бюджетный год: горсовет утверждает финансирование на следующие 7 смен
+  if (!s.challenge && s.career.shifts + 1 >= (s.city.budgetAt ?? 7)) {
+    const score = s.trust * 0.5 + s.city.mayor * 0.5, factor = score >= 65 ? 1.15 : score >= 45 ? 1 : 0.85;
+    s.city.council = factor; s.city.budgetAt = s.career.shifts + 1 + 7; s.summary.council = {factor, score: Math.round(score)};
+    note(s, 'council', String(factor)); say(s, `Горсовет утвердил бюджет полиции: ${factor > 1 ? 'увеличен на 15%' : factor < 1 ? 'урезан на 15%' : 'без изменений'}.`, factor < 1 ? 'bad' : 'good');
+  }
+  // профсоюз: неотвеченное требование — это отказ
+  if (s.union?.pending) answerUnion(s, 'refuse');
   // выгорание: недовольные и вымотанные сотрудники могут уйти
   const quits = [];
   for (const u of s.units) for (let i = 0; i < u.crew.length; i++) { const o = u.crew[i]; if (o.player || o.name === 'А. Морозов') continue; if (o.morale < 25 && rnd(s) < 0.4 + (o.stress > 70 ? 0.2 : 0)) { quits.push(o.name); const sub = s.reserve.shift() ?? makeOfficer(s, null, 0); u.crew[i] = sub; } }
@@ -1116,6 +1199,14 @@ export function startNextShift(s) {
   for (const k of s.cases) if (k.state === 'open') k.nextAt = s.t + (10 + rnd(s) * 20) * MIN;
   for (const u of s.units) Object.assign(u, {x: STATION.x, y: STATION.y, node: STATION, path: [], dest: null, speed: 0, status: 'patrol', callId: null, suspectId: null, fatigue: 5, injuredUntil: 0, wp: 0});
   const weather = {clear: 'ясно', cloudy: 'облачно', rain: 'дождь — на дорогах скользко'}[s.weather];
+  // забастовка: четверть экипажей (кроме вашего) не выходит на линию первые 3 часа
+  if (s.union?.strike) {
+    const out = s.units.filter(u => !u.player && !isHeli(u)), n = Math.max(1, Math.floor(out.length / 4)); for (let i = 0; i < n; i++) { out[i].status = 'strike'; out[i].busyUntil = s.t + 3 * 3600; }
+    s.union.strike = 0; say(s, `Забастовка: ${n} экипаж(а) не выйдут на линию первые 3 часа смены.`, 'alert'); emit(s, {type: 'strike'});
+  }
+  if (s.union && canManage(s) && !s.challenge && s.shift >= s.union.nextTalks && !s.union.pending) {
+    s.union.pending = {ask: 6 + Math.floor(rnd(s) * 7)}; say(s, `Профсоюз требует прибавку ${s.union.pending.ask}% к зарплатам.`, 'alert'); emit(s, {type: 'union'});
+  }
   say(s, `Смена ${s.shift} началась в ${clockText(s.t)}. Погода: ${weather}. Удачи, ${RANKS[s.rank].title.toLowerCase()} ${s.player.name}.`, 'info');
 }
 
@@ -1125,6 +1216,12 @@ export function serialize(s) {
   return JSON.stringify({...s, events: [], units: s.units.map(mover), suspects: s.suspects.map(mover)}, (k, v) => v === Infinity ? 1e15 : v);
 }
 function migrate(s) {
+  if (s?.v === 4) { // 4 новых навыка и черты характера
+    const fix = o => { if (!o?.skills) return; for (const k of Object.keys(SKILLS)) o.skills[k] ??= 2; if (o.persona === undefined) o.persona = o.player ? null : Object.keys(PERSONAS)[o.id % 5]; };
+    for (const u of s.units ?? []) u.crew.forEach(fix); (s.reserve ?? []).forEach(fix); (s.candidates ?? []).forEach(fix);
+    s.union ??= newUnion(); if (s.city) { s.city.council ??= 1; s.city.budgetAt ??= (s.career?.shifts ?? 0) + 7; }
+    s.v = 5;
+  }
   if (s?.v === 3) {
     s.nextOfficer ??= 1; s.reserve ??= []; s.candidates ??= [];
     const asOfficer = o => { const skills = {talk: 2, drive: 2, invest: 2, force: 2, fitness: 2}; if (skills[o.trait] !== undefined) skills[o.trait] = 3.5; return {id: s.nextOfficer++, name: o.name, skills, xp: 0, level: 0, spec: null, morale: 75, stress: 10, injured: false, trait: o.trait, ...(o.trait === 'you' ? {player: true} : {})}; };
@@ -1142,7 +1239,7 @@ function migrate(s) {
   return s;
 }
 export function deserialize(raw) {
-  const s = migrate(migrate(JSON.parse(raw)));
+  const s = migrate(migrate(migrate(JSON.parse(raw))));
   if (!s || s.v !== SAVE_VERSION || !Array.isArray(s.units) || !Array.isArray(s.calls) || !Number.isFinite(s.t) || !s.player || !Array.isArray(s.districts) || s.districts.length !== DISTRICTS.length) throw Error('Несовместимое сохранение');
   const mover = m => {
     m.node = nodeById(m.node) ?? nearestNode(m.x, m.y); m.path = [];

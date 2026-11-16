@@ -224,3 +224,9 @@ table.staff td small{color:var(--muted);font-size:10px}table.staff select{max-wi
 .slots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 4px}
 .slots button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:9px 12px;text-align:left}
 .slots button small{color:var(--muted);font-size:11px;font-weight:500}.slots button.on{border-color:#6ee7d8;background:rgba(110,231,216,.12)}
+
+/* пакет 4 */
+small.pers,b.pers{color:#c9b6ff}small.abil{color:#ffd166}
+.caseacts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.caseacts button{flex:1 1 auto;font-size:11px;padding:5px 8px}
+table.staff th{white-space:nowrap}table.staff .sk{width:34px}
+table.staff{font-size:11px}table.staff td{padding:5px 3px}table.staff td:first-child b{white-space:nowrap}table.staff .sk{width:26px}table.staff th{font-size:8.5px;letter-spacing:.4px;padding:5px 3px}table.staff td small{font-size:9.5px}
