@@ -1,0 +1,19 @@
+{
+  "name": "mercury-response-desktop",
+  "productName": "Mercury Response",
+  "version": "3.0.0",
+  "description": "Mercury Response — настольная версия полицейской стратегии",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "sync": "node sync-game.mjs",
+    "start": "node sync-game.mjs && electron .",
+    "build": "node sync-game.mjs && electron-packager . \"Mercury Response\" --platform=win32 --arch=x64 --out=out --overwrite --icon=icon.ico --app-version=3.0.0 --ignore=\"^/out\" --ignore=\"^/sync-game\\.mjs$\" --ignore=\"^/make-icon\\.py$\""
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "45.2.1",
+    "esbuild": "0.28.2",
+    "three": "0.187.0"
+  }
+}
